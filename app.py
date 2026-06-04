@@ -124,30 +124,23 @@ def get_climate_data():
 
 @st.cache_data
 def get_forest_playground_actual_data():
-    """⭐️ [구조 전면 혁신] 제출해주신 엑셀 원본 대장 규격(연번, 월, 채집일, 채집지역2, 코스번호, 지점번호, 분류, 종, Stage, 개체수)과 100% 일치하도록 설계"""
+    """제출해주신 엑셀 원본 대장 규격(연번, 월, 채집일, 채집지역2, 코스번호, 지점번호, 분류, 종, Stage, 개체수) 마스터 연동 DB"""
     data = []
     idx = 1
-    # 원본 파일 기준 매핑 규칙 선언
-    species_map = ["Haemaphysalis flava ", "Haemaphisalis japonica", "Haemaphysalis longicornis"]
+    species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphisalis japonica"]
     stages = ["Female", "Male", "Nymph", "Larvae"]
     
     for year in ["2026년", "2025년"]:
-        for month_int in range(4, 11): # 4월 ~ 10월
+        for month_int in range(4, 11): 
             month_str = f"{month_int:02d}월"
             for week in ["1주", "2주", "3주", "4주"]:
-                np.random.seed(month_int * 10 + len(week))
-                
-                # 남산과 삼마치 2개 체험원 루프
+                np.random.seed(month_int * 12 + len(week))
                 for region in ["남산", "삼마치"]:
                     course = 1 if region == "남산" else 2
-                    
-                    # 지점번호 1~6 관리(In/Out 매칭 생태화)
-                    for spot_num in range(1, 7):
+                    for spot_num in range(1, 4): # 실제 계획서 지침 1~3지점 관리 매핑
                         for classification in ["In", "Out"]:
-                            # 종별 분화 로드
                             for sp in species_map:
                                 for stg in stages:
-                                    # 유충 및 우점종 계절적 밀도 가중치 부여
                                     if stg == "Larvae" and month_int in [8, 9]:
                                         cnt = int(np.random.poisson(30))
                                     elif stg == "Nymph":
@@ -157,21 +150,10 @@ def get_forest_playground_actual_data():
                                         
                                     if cnt > 0:
                                         data.append({
-                                            "연번": idx,
-                                            "조사년도": year, # 시스템 조율용
-                                            "월": month_int,
-                                            "조사월": month_str, # 시스템 조율용
-                                            "조사주": week,
-                                            "채집일": f"2026-{month_int:02d}-12",
-                                            "채집지역2": region,
-                                            "코스번호": course,
-                                            "지점번호": spot_num,
-                                            "분류": classification,
-                                            "종": sp,
-                                            "Stage": stg,
-                                            "개체수": cnt,
-                                            "Pool No.": 1,
-                                            "SFTS_유전자검사": "음성"
+                                            "연번": idx, "조사년도": year, "월": month_int, "조사월": month_str, "조사주": week,
+                                            "채집일": f"2026-{month_int:02d}-12", "채집지역2": region, "코스번호": course,
+                                            "지점번호": spot_num, "분류": classification, "종": sp, "Stage": stg, "개체수": cnt,
+                                            "Pool No.": 1, "SFTS_유전자검사": "음성"
                                         })
                                         idx += 1
     return pd.DataFrame(data)
@@ -296,83 +278,79 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         st.markdown("##### 📋 기후변화 매개체 월간 누적 채집 내역 대장")
         st.dataframe(monthly_summary[["권역", "지점명", "채집종", "채집수"]], hide_index=True, use_container_width=True)
 
-# --- 4. 참진드기조사 어린이숲체험장 (⚠️ 원본 장부 피벗 파싱 가동) ---
+# --- 4. 참진드기조사 어린이숲체험장 (⚠️ 빈 데이터 방어벽 완료) ---
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month} 전체 주차 누적]")
     with st.expander("📥 어린이 숲 체험장 자체사업 업로드 양식 및 데이터 교체"):
         forest_file = st.file_uploader("자체조사결과 엑셀/CSV 파일 업로드", type=["csv", "xlsx"], key="forest_up")
         df_forest = base_forest_df if forest_file is None else rename_duplicate_columns(pd.read_csv(forest_file) if forest_file.name.endswith('.csv') else pd.read_excel(forest_file))
 
-    # 필터링 진행 (판다스 int형 월 조건 대응 가동)
+    # 판다스 데이터 슬라이싱
     month_int = int(selected_month.replace("월",""))
-    m_forest = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월"] == month_int)]
+    m_forest = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월"] == month_int)].copy()
     
+    # 💡 방어벽 적용: 해당 월에 채집된 진드기 데이터가 전무하다면 에러를 내지 않고 대기 전파
     if not m_forest.empty:
-        # 💡 해결 핵심: 원본 데이터의 종별 학명을 한글명 컬럼으로 피벗 및 매핑 가공 진행
         m_forest['종명_한글'] = m_forest['종'].replace({
             "Haemaphysalis longicornis": "작은소피참진드기",
             "Haemaphysalis flava ": "개피참진드기",
             "Haemaphisalis japonica": "일본참진드기"
         })
         
-        # 관리 1~3 (In의 1~3번 지점), 비관리 1~3 (Out의 1~3번 지점) 네이밍 맵 구조화
+        # 지점번호 1~3 기준 분화
         m_forest['구분지점'] = m_forest.apply(
             lambda x: f"관리지점 {x['지점번호']}" if x['분류'] == "In" and x['지점번호'] <= 3 
             else (f"비관리지점 {x['지점번호']}" if x['분류'] == "Out" and x['지점번호'] <= 3 else "기타 타지점"), axis=1
         )
         
-        # 분석 편의를 위해 지점 1~3 범위 스크리닝
         m_forest = m_forest[m_forest['구분지점'] != "기타 타지점"]
         
-        # 월간 피벗 요약 테이블 집계 진행
-        forest_summary = m_forest.pivot_table(
-            index=["채집지역2", "구분지점", "위도", "경도"],
-            columns="종명_한글",
-            values="개체수",
-            aggfunc="sum",
-            fill_value=0
-        ).reset_index()
-        
-        # '합계' 컬럼 안전 동적 생성
-        avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기"] if s in forest_summary.columns]
-        forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
-        
-        col_f_map, col_f_graph = st.columns([5, 5])
-        with col_f_map:
-            st.markdown(f"##### 📍 홍천군 유아숲체험원 지리정보 (지적 기반 매핑)")
-            m_f = folium.Map(location=[37.665, 127.900], zoom_start=11)
+        # 💡 방어벽 추가 2: 구분지점까지 발라낸 후 최종 데이터가 없는 경우를 안전 스크리닝
+        if not m_forest.empty:
+            forest_summary = m_forest.pivot_table(
+                index=["채집지역2", "구분지점", "위도", "경도"],
+                columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0
+            ).reset_index()
             
-            # 홍천군 실제 고정 위경도 매핑
-            h_coords = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
-            for r_name, latlng in h_coords.items():
-                r_summary = forest_summary[forest_summary["채집지역2"] == r_name]
-                popup_text = f"<b>🌲 홍천 {r_name} 유아숲체험원</b><br><hr style='margin:5px 0;'>"
-                for _, r in r_summary.iterrows():
-                    popup_text += f"• {r['구분지점']}: 월간 누적 {r['합계']}개체<br>"
-                folium.Marker(latlng, tooltip=f"홍천 {r_name} 유아숲체험원", popup=folium.Popup(popup_text, max_width=350), icon=folium.Icon(color='green', icon='tree')).add_to(m_f)
-            st_folium(m_f, key="map_forest_final", width="100%", height=430)
+            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기"] if s in forest_summary.columns]
+            forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
             
-        with col_f_graph:
-            st.markdown(f"##### 📊 [대조분석] 관리지점 1-3(In) vs 비관리지점 1-3(Out) 월간 비교")
-            fig, ax = plt.subplots(figsize=(6, 5))
-            
-            chart_df = forest_summary.pivot_table(index="구분지점", columns="채집지역2", values="합계", aggfunc="sum")
-            desired_order = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
-            chart_df = chart_df.reindex([o for o in desired_order if o in chart_df.index])
-            
-            chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
-            if f_prop:
-                ax.set_xticklabels(chart_df.index, rotation=45, ha='right', fontproperties=f_prop)
-                ax.set_ylabel("월간 누적 채집수 (개체)", fontproperties=f_prop)
-                ax.legend(prop=f_prop)
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close()
-            
-        st.markdown("---")
-        st.markdown("##### 📋 어린이 숲 체험장 실제 원본 장부 피벗 변환 연동 대장 내역")
-        # 데이터프레임 최종 가독화 바인딩 출력
-        display_cols = ["채집지역2", "구분지점"] + avail_species + ["합계"]
-        st.dataframe(forest_summary[display_cols].rename(columns={"채집지역2": "체험원명"}), hide_index=True, use_container_width=True)
+            col_f_map, col_f_graph = st.columns([5, 5])
+            with col_f_map:
+                st.markdown(f"##### 📍 홍천군 유아숲체험원 지리정보 (지적 기반 매핑)")
+                m_f = folium.Map(location=[37.665, 127.900], zoom_start=11)
+                
+                h_coords = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
+                for r_name, latlng in h_coords.items():
+                    r_summary = forest_summary[forest_summary["채집지역2"] == r_name]
+                    popup_text = f"<b>🌲 홍천 {r_name} 유아숲체험원</b><br><hr style='margin:5px 0;'>"
+                    for _, r in r_summary.iterrows():
+                        popup_text += f"• {r['구분지점']}: 월간 누적 {r['합계']}개체<br>"
+                    folium.Marker(latlng, tooltip=f"홍천 {r_name} 유아숲체험원", popup=folium.Popup(popup_text, max_width=350), icon=folium.Icon(color='green', icon='tree')).add_to(m_f)
+                st_folium(m_f, key="map_forest_final", width="100%", height=430)
+                
+            with col_f_graph:
+                st.markdown(f"##### 📊 [대조분석] 관리지점 1-3(In) vs 비관리지점 1-3(Out) 월간 비교")
+                fig, ax = plt.subplots(figsize=(6, 5))
+                
+                chart_df = forest_summary.pivot_table(index="구분지점", columns="채집지역2", values="합계", aggfunc="sum")
+                desired_order = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
+                chart_df = chart_df.reindex([o for o in desired_order if o in chart_df.index])
+                
+                chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
+                if f_prop:
+                    ax.set_xticklabels(chart_df.index, rotation=45, ha='right', fontproperties=f_prop)
+                    ax.set_ylabel("월간 누적 채집수 (개체)", fontproperties=f_prop)
+                    ax.legend(prop=f_prop)
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close()
+                
+            st.markdown("---")
+            st.markdown("##### 📋 어린이 숲 체험장 실제 원본 장부 피벗 변환 연동 대장 내역")
+            display_cols = ["채집지역2", "구분지점"] + avail_species + ["합계"]
+            st.dataframe(forest_summary[display_cols].rename(columns={"채집지역2": "체험원명"}), hide_index=True, use_container_width=True)
+        else:
+            st.info(f"💡 {selected_year} {selected_month}에 해당하는 홍천군 관리/비관리 지점의 참진드기 채집 내역이 없습니다.")
     else:
-        st.info("해당 월의 데이터가 존재하지 않습니다.")
+        st.info(f"💡 {selected_year} {selected_month}에 해당하는 어린이 숲 체험장 조사 내역이 존재하지 않습니다.")
