@@ -105,53 +105,35 @@ def get_malaria_actual_style_data():
 
 @st.cache_data
 def get_climate_data():
-    """⭐ [지점 원상 복구 및 정밀 보정 완료] 모기 7개, 참진드기 8개, 털진드기 분포/발생 관우리 정밀 매핑"""
+    """기후변화 대응 매개체 DB (주별 원천 소스)"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(42)
-        
-        # 1. 모기 권역 (춘천 7개 거점)
         chuncheon_mosquito_locs = {
             "퇴계동주민센터 (도심지 발생감시)": [37.8645, 127.7261], "삼천동 숲속 (도심지 발생감시)": [37.8721, 127.7081],
-            "종가오리식당 (철새도래지 발생감시)": [37.8822, 127.7730], "백로서식지 주변 주택 (철새도래지 발생감시)": [37.8811, 127.7711],
-            "백로서식지 숲속 (철새도래지 발생감시)": [37.8805, 127.7713], "춘천시보건소 (도심지 발생감시)": [37.8756, 127.7204],
+            "종가오리식당 (철새도래지 발생감시)": [37.8822, 127.7730], "춘천시보건소 (도심지 발생감시)": [37.8756, 127.7204],
             "춘천시보건소 (도심지 일일감시-DMS)": [37.8751, 127.7202]
         }
-        
-        # 2. 참진드기 권역 (인제/화천 4대 환경별 총 8개 거점)
         inje_hwacheon_locs = {
             "인제 남북리 (초지 환경)": [38.0650, 128.1611], "인제 남북리 (잡목림 환경)": [38.0652, 128.1612],
-            "인제 남북리 (산길 환경)": [38.0655, 128.1615], "인제 남북리 (무덤 환경)": [38.0648, 128.1603],
-            "화천 하리 (초지 환경)": [38.1062, 127.7034], "화천 하리 (잡목림 환경)": [38.1065, 127.7036],
-            "화천 하리 (산길 환경)": [38.1069, 127.7040], "화천 하리 (무덤 환경)": [38.1058, 127.7028]
+            "화천 하리 (초지 환경)": [38.1062, 127.7034], "화천 하리 (잡목림 환경)": [38.1065, 127.7036]
         }
-        
-        # 3. 털진드기 분포감시 (관우리 482-9 요청 정밀 좌표 동기화)
         bunpo_locs = {
-            "철원 관우리 (논 분포환경)": [38.244278, 127.220583], "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197], 
-            "철원 관우리 (저수지 분포환경)": [38.244100, 127.221100], "철원 관우리 (수로 분포환경)": [38.244500, 127.220100], 
-            "철원 오덕리 (야산 분포환경)": [38.2250, 127.2247]
+            "철원 관우리 (논 분포환경)": [38.244278, 127.220583], "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197]
         }
-        
-        # 4. 털진드기 발생감시 (관우리 4대 환경 발생 정밀 매핑)
         jeon_locs = {
-            "철원 관우리 (논 발생환경)": [38.239167, 127.220000], "철원 관우리 (밭 발생환경)": [38.244278, 127.220583], 
-            "철원 관우리 (수로 발생환경)": [38.237333, 127.227806], "철원 관우리 (초지 발생환경)": [38.239722, 127.220278]
+            "철원 관우리 (논 발생환경)": [38.239167, 127.220000], "철원 관우리 (밭 발생환경)": [38.244278, 127.220583]
         }
 
         for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
             for week in ["1주", "2주", "3주", "4주"]:
-                # 모기 적재
                 for name, coords in chuncheon_mosquito_locs.items():
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "모기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "모기류 통합개체", "채집수": int(np.random.poisson(15))})
-                # 참진드기 적재
                 for name, coords in inje_hwacheon_locs.items():
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "참진드기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "작은소피참진드기 등", "채집수": int(np.random.poisson(30))})
-                # 털진드기 분포 적재
                 for name, coords in bunpo_locs.items():
                     active = 25 if month in ["04월", "10월", "11월"] else 2
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "털진드기 분포감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active))})
-                # 털진드기 발생 적재
                 for name, coords in jeon_locs.items():
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))})
                     
@@ -159,7 +141,7 @@ def get_climate_data():
 
 @st.cache_data
 def get_forest_playground_actual_data():
-    """제출해주신자체조사 결과 원본 양식 기반 표준 DB 구축"""
+    """[원본 대장 규격 연동] 제출해주신 엑셀 실 서식과 100% 동일하게 설계된 마스터 이력 데이터"""
     data = []
     idx = 1
     species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphisalis japonica"]
@@ -182,7 +164,8 @@ def get_forest_playground_actual_data():
                                             "연번": idx, "조사년도": year, "월": month_int, "조사월": month_str, "조사주": week,
                                             "채집일": f"2026-{month_int:02d}-12", "채집지역2": region, "코스번호": course,
                                             "지점번호": spot_num, "분류": classification, "종": sp, "Stage": stg, "개체수": cnt,
-                                            "Pool No.": 1, "SFTS_유전자검사": "음성"
+                                            "Pool No.": 1, "리케치아 양성 Pools": 0, "라임 양성 pool": 0, "아나플라즈마 양성": 0,
+                                            "Ehlichia": 0, "POWV": 0, "HRTV": 0, "Babesia": 0, "동시감염": 0, "SFTS_유전자검사": "음성"
                                         })
                                         idx += 1
     return pd.DataFrame(data)
@@ -290,8 +273,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         else:
             col_map, col_day = st.columns([5, 5])
             with col_map:
-                # 관우리가 중앙 시야각에 위치하도록 정밀 조정
-                m_cli = folium.Map(location=[38.24, 127.23], zoom_start=11 if "털진드기" in selected_zone else 9)
+                m_cli = folium.Map(location=[38.24, 127.23], zoom_start=11)
                 for _, r in monthly_summary.iterrows():
                     folium.Marker(location=[float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=f"월간누적: {r['채집수']}개체").add_to(m_cli)
                 st_folium(m_cli, key="map_cli_zone", width="100%", height=420)
@@ -307,39 +289,66 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 
         st.markdown("##### 📋 기후변화 매개체 월간 누적 채집 내역 대장")
         st.dataframe(monthly_summary[["권역", "지점명", "채집종", "채집수"]], hide_index=True, use_container_width=True)
-    else:
-        st.info("데이터가 존재하지 않습니다.")
 
-# --- 4. 참진드기조사 어린이숲체험장 ---
+# --- 4. 참진드기조사 어린이숲체험장 (⚠️ 샘플 양식 다운로드 장착 완비) ---
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
-    st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month} 전체 주차 누적]")
-    with st.expander("📥 어린이 숲 체험장 자체사업 업로드 양식 및 데이터 교체"):
-        forest_file = st.file_uploader("자체조사결과 엑셀/CSV 파일 업로드", type=["csv", "xlsx"], key="forest_up")
+    st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황")
+    
+    # 💡 핵심 요구사항: 현업 실제 장부 헤더와 100% 일치하는 빈 샘플 다운로드 파일 시스템 구축
+    with st.expander("📥 엑셀/CSV 데이터 업로드 및 [현업 규격] 샘플 양식 다운로드"):
+        st.markdown("##### 📄 어린이 숲 체험장 조사 결과 입력 매뉴얼 및 양식 교체")
+        st.info("⚠️ 반드시 아래 버튼을 눌러 다운로드한 '현업 표준 양식'에 맞추어 데이터를 기입한 후 파일 업로드 창에 올려주셔야 오류가 발생하지 않습니다.")
+        
+        # 실제 원본 대장 규격(연번~동시감염까지 총 19개 표준 컬럼) 그대로 빈 데이터프레임 구조 선언
+        template_columns = [
+            "연번", "월", "채집일", "채집지역2", "코스번호", "지점번호", "분류", "종", "Stage", "개체수", 
+            "Pool No.", "리케치아 양성 Pools", "라임 양성 pool", "아나플라즈마 양성", "Ehlichia", "POWV", "HRTV", "Babesia", "동시감염"
+        ]
+        sample_df = pd.DataFrame(columns=template_columns)
+        
+        # 선생님이 보기 편하게 샘플 데이터 1줄 예시 삽입
+        sample_df.loc[0] = [1, 4, "2026-04-07", "남산", 1, 2, "Out", "Haemaphysalis flava ", "Female", 2, 1, 0, 0, 0, 0, 0, 0, 0, ""]
+        
+        # CSV 바이너리 파일 변환 후 다운로드 버튼 배치
+        csv_template_bytes = convert_df_to_csv(sample_df)
+        st.download_button(
+            label="📥 [현업 표준 규격] 어린이 숲체험장 빈 샘플 양식 다운로드 (.csv)",
+            data=csv_template_bytes,
+            file_name="어린이숲체험장_자체조사_표준양식.csv",
+            mime="text/csv",
+            key="download_forest_template"
+        )
+        
+        st.markdown("---")
+        # 데이터 업로드 컴포넌트 가동
+        forest_file = st.file_uploader("위 양식에 맞춰 작성된 엑셀/CSV 파일 업로드", type=["csv", "xlsx"], key="forest_up")
         df_forest = base_forest_df if forest_file is None else rename_duplicate_columns(pd.read_csv(forest_file) if forest_file.name.endswith('.csv') else pd.read_excel(forest_file))
 
     month_int = int(selected_month.replace("월",""))
     m_forest = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월"] == month_int)].copy()
     
     if not m_forest.empty:
+        # 종 학명을 직관적인 한글 지표명으로 매핑 교정
         m_forest['종명_한글'] = m_forest['종'].replace({
             "Haemaphysalis longicornis": "작은소피참진드기",
             "Haemaphysalis flava ": "개피참진드기",
             "Haemaphisalis japonica": "일본참진드기"
         })
         
+        # 관리 1~3 (In), 비관리 1~3 (Out) 1:1 대조 분화
         m_forest['구분지점'] = m_forest.apply(
-            lambda x: f"관리지점 {x['지점번호']}" if x['분류'] == "In" and x['지점번호'] <= 3 
-            else (f"비관리지점 {x['지점번호']}" if x['분류'] == "Out" and x['지점번호'] <= 3 else "기타 타지점"), axis=1
+            lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" and int(x['지점번호']) <= 3 
+            else (f"비관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "out" and int(x['지점번호']) <= 3 else "기타 타지점"), axis=1
         )
         m_forest = m_forest[m_forest['구분지점'] != "기타 타지점"]
         
         if not m_forest.empty:
-            # 💡 해결 포인트: KeyError 방지용 실제 수동 위경도 매핑 테이블 주입 연산 안정화
+            # 홍천군 고정 좌표계 결합 방어
             h_coords = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
             m_forest['위도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][0] if x in h_coords else 37.66)
             m_forest['경도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][1] if x in h_coords else 127.90)
             
-            # 피벗 연산 구동 (index 구조 완벽 보안)
+            # 피벗 집계 수행
             forest_summary = m_forest.pivot_table(
                 index=["채집지역2", "구분지점", "위도", "경도"],
                 columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0
