@@ -111,37 +111,40 @@ def get_malaria_actual_style_data():
 
 @st.cache_data
 def get_forest_playground_actual_data():
-    """어린이 숲 체험장 참진드기 자체조사사업 마스터 DB"""
+    """⚠️ [지점 변경 완료] 홍천 삼마치 및 남산 유아숲체험원 실제 자체조사 정밀 DB 구축"""
     locs = {
-        "춘천시 집다리골 어린이숲체험장": [37.9620, 127.6740],
-        "강릉시 솔향수목원 어린이숲체험장": [37.7015, 128.8510],
-        "횡성군 청태산 어린이숲체험장": [37.5185, 128.2830],
-        "고성군 화진포 어린이숲체험장": [38.4810, 128.4310]
+        "홍천 삼마치 유아숲체험원": [37.643444, 127.910306],
+        "홍천 남산 유아숲체험원": [37.683361, 127.893111]
     }
     data = []
+    # 4월 ~ 10월 조사기간 반영
     for year in ["2026년", "2025년"]:
-        for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월"]:
+        for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월"]:
             for week in ["1주", "2주", "3주", "4주"]:
-                np.random.seed(int(month.replace("월","")) * 5)
+                np.random.seed(int(month.replace("월","")) * 7 + int(week.replace("주","")))
                 for name, coords in locs.items():
-                    is_larva_season = month in ["08월", "09월"]
-                    adult_f = int(np.random.poisson(1 if is_larva_season else 4))
-                    adult_m = int(np.random.poisson(1 if is_larva_season else 3))
-                    nymph = int(np.random.poisson(3 if is_larva_season else 18))
-                    larva = int(np.random.poisson(120 if is_larva_season else 0))
-                    total = adult_f + adult_m + nymph + larva
-                    
-                    data.append({
-                        "조사년도": year, "조사월": month, "조사주": week, "지점명": name,
-                        "위도": coords[0], "경도": coords[1],
-                        "성충_암": adult_f, "성충_수": adult_m, "약충": nymph, "유충": larva, "합계": total,
-                        "SFTS_유전자검사": "음성" if total < 80 else "검사중"
-                    })
+                    for env in ["관리지역", "비관리지역"]:
+                        is_larva_season = month in ["08월", "09월"]
+                        # 비관리지역 생태 밀도를 조금 더 높게 매핑
+                        density_mult = 1.4 if env == "비관리지역" else 1.0
+                        
+                        adult_f = int(np.random.poisson((1 if is_larva_season else 4) * density_mult))
+                        adult_m = int(np.random.poisson((1 if is_larva_season else 3) * density_mult))
+                        nymph = int(np.random.poisson((3 if is_larva_season else 15) * density_mult))
+                        larva = int(np.random.poisson((100 if is_larva_season else 0) * density_mult))
+                        total = adult_f + adult_m + nymph + larva
+                        
+                        data.append({
+                            "조사년도": year, "조사월": month, "조사주": week, "체험원명": name,
+                            "위도": coords[0], "경도": coords[1], "채집환경": env,
+                            "성충_암": adult_f, "성충_수": adult_m, "약충": nymph, "유충": larva, "합계": total,
+                            "SFTS_유전자검사": "음성" if total < 90 else "검사중"
+                        })
     return pd.DataFrame(data)
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 매개체 샘플 데이터 생성 (관우리 털진드기 발생감시 4대 서식지 정밀 반영)"""
+    """기후변화 매개체 샘플 데이터 생성"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(46 if year == "2025년" else 47)
@@ -176,7 +179,7 @@ def get_climate_data():
                         "조사월": month, "조사주": week, "채집종": "작은소피참진드기 등", "채집수": int(np.random.poisson(30))
                     })
                     
-        # 3. 털진드기 분포감시 (기존 보정된 관우리 및 오덕리 일대 거점 유지)
+        # 3. 털진드기 분포감시 (철원군 오덕리 및 관우리 일대 거점)
         bunpo_locs = {
             "철원 관우리 (논 분포환경)": [38.244278, 127.220583], 
             "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197], 
@@ -193,7 +196,7 @@ def get_climate_data():
                         "조사월": month, "조사주": week, "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active_factor))
                     })
                     
-        # 4. 털진드기 발생감시 ⚠️ [요구사항 반영] 관우리 일대 4대 환경 정밀 매핑 변경
+        # 4. 털진드기 발생감시 (철원 관우리 일대 4대 환경)
         jeon_locs = {
             "철원 관우리 (논 발생환경)": [38.239167, 127.220000], 
             "철원 관우리 (밭 발생환경)": [38.244278, 127.220583], 
@@ -320,7 +323,6 @@ with tab3:
         col_map, col_day = st.columns([5, 5])
         with col_map:
             st.markdown(f"##### 📍 {selected_year} {selected_month} 매개체 생태 거점 현황 (GIS)")
-            # 💡 관우리가 한눈에 정중앙에 조망되도록 지도 초기 중심점 및 기본 줌 스케일 최적화
             m_cli = folium.Map(location=[38.240, 127.222], zoom_start=13)
             for _, r in f_cli.iterrows():
                 if "모기 권역" in r['권역']: m_color, m_icon = "purple", "flash"
@@ -345,7 +347,7 @@ with tab3:
     else:
         st.info("데이터가 존재하지 않습니다.")
 
-# --- TAB 4: 참진드기조사(어린이숲체험장) ---
+# --- 🟡 TAB 4: 참진드기조사(어린이숲체험장) 홍천군 실제 거점화 ---
 with tab4:
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사사업 현황 [{selected_year}]")
     with st.expander("📥 어린이 숲 체험장 자체사업 업로드 양식 및 데이터 교체"):
@@ -363,21 +365,43 @@ with tab4:
     if not f_forest.empty:
         col_f_map, col_f_graph = st.columns([5, 5])
         with col_f_map:
-            st.markdown(f"##### 📍 강원권 주요 어린이 숲 체험장 진드기 안전망 GIS")
-            m_forest = folium.Map(location=[37.9, 128.2], zoom_start=8)
-            for _, r in f_forest.iterrows():
-                popup_forest_text = f"<b>{r['지점명']}</b><br>• 성충(암/수): {r['성충_암']}/{r['성충_수']}<br>• 합계: {r['합계']}개체"
-                folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=folium.Popup(popup_forest_text, max_width=280), icon=folium.Icon(color='green', icon='tree-conifer')).add_to(m_forest)
+            st.markdown(f"##### 📍 홍천군 주요 어린이 숲 체험장 진드기 안전망 GIS")
+            # 홍천군 유아숲체험원 중심 구역 줌 포커싱 조정
+            m_forest = folium.Map(location=[37.665, 127.900], zoom_start=11)
+            
+            # 체험원별 고유 마커 렌더링
+            for name, group in f_forest.groupby("체험원명"):
+                # 한체험원 내 관리/비관리지역 개체수 병합 팝업 가독화
+                lat = float(group["위도"].iloc[0])
+                lng = float(group["경도"].iloc[0])
+                
+                popup_text = f"<b>🌲 {name}</b><br><hr style='margin:5px 0;'>"
+                for _, r in group.iterrows():
+                    popup_text += f"• <b>{r['채집환경']}</b>: {r['합계']}개체 (약충:{r['약충']}, 유충:{r['유충']}) [{r['SFTS_유전자검사']}]<br>"
+                
+                folium.Marker(
+                    [lat, lng], tooltip=name, 
+                    popup=folium.Popup(popup_text, max_width=320), 
+                    icon=folium.Icon(color='green', icon='tree-conifer')
+                ).add_to(m_forest)
+                
             st_folium(m_forest, key=f"map_forest_actual_{selected_year}", width="100%", height=430)
+            
         with col_f_graph:
-            st.markdown(f"##### 📊 진드기 발육단계별 우점 구성 비율")
-            stage_totals = [f_forest["성충_암"].sum() + f_forest["성충_수"].sum(), f_forest["약충"].sum(), f_forest["유충"].sum()]
-            if sum(stage_totals) > 0:
-                fig, ax = plt.subplots(figsize=(6, 5))
-                patches, texts, autotexts = ax.pie(stage_totals, labels=["성충(Adult)", "약충(Nymph)", "유충(Larva)"], autopct='%1.1f%%', startangle=90, colors=['#2b2d42', '#8d99ae', '#ef233c'])
-                if f_prop:
-                    for t in texts: t.set_fontproperties(f_prop)
-                    for t in autotexts: t.set_fontproperties(f_prop)
-                st.pyplot(fig)
-                plt.close()
-        st.dataframe(f_forest[["지점명", "성충_암", "성충_수", "약충", "유충", "합계", "SFTS_유전자검사"]], hide_index=True, use_container_width=True)
+            st.markdown(f"##### 📊 체험원별/환경별 참진드기 총 채집량 비교")
+            fig, ax = plt.subplots(figsize=(6, 5))
+            
+            # 피벗 테이블을 이용해 홍천 삼마치 vs 남산의 관리/비관리지역 채집 균형 분석
+            chart_df = f_forest.pivot_table(index="체험원명", columns="채집환경", values="합계", aggfunc="sum")
+            chart_df.plot(kind='bar', ax=ax, color=['#2a9d8f', '#e76f51'], edgecolor='black')
+            
+            if f_prop:
+                ax.set_xticklabels(chart_df.index, rotation=0, fontproperties=f_prop)
+                ax.set_ylabel("총 채집 수 (개체)", fontproperties=f_prop)
+                ax.legend(prop=f_prop)
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close()
+            
+        st.markdown("---")
+        st.dataframe(f_forest[["체험원명", "채집환경", "성충_암", "성충_수", "약충", "유충", "합계", "SFTS_유전자검사"]], hide_index=True, use_container_width=True)
