@@ -141,7 +141,7 @@ def get_forest_playground_actual_data():
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 매개체 샘플 데이터 생성 (철원군 학사리 밭 발생거점 좌표 완벽 보정 ⭐️)"""
+    """기후변화 매개체 샘플 데이터 생성 (철원군 학사리/오덕리 좌표 보정 완비)"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(46 if year == "2025년" else 47)
@@ -193,10 +193,10 @@ def get_climate_data():
                         "조사월": month, "조사주": week, "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active_factor))
                     })
                     
-        # 4. 털진드기 발생감시 ⚠️ [좌표 확인 및 재정정] 학사리 밭 발생거점의 위경도를 철원군 김화읍 실제 농경지 중심 좌표계인 [38.2520, 127.4415]로 완벽 고정
+        # 4. 털진드기 발생감시 (철원 학사리 밭 발생거점 좌표 완벽 보정본)
         jeon_locs = {
             "철원 대마리 (논 발생환경)": [38.2543, 127.2145], 
-            "철원 학사리 (밭 발생환경)": [38.2520, 127.4415], # 김화읍 학사리 실제 밭 환경 정밀 좌표
+            "철원 학사리 (밭 발생환경)": [38.2520, 127.4415], 
             "철원 양지리 (수로 발생환경)": [38.2710, 127.2650], 
             "철원 이길리 (초지 발생환경)": [38.2830, 127.2280]
         }
@@ -216,8 +216,9 @@ base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
 base_cli_df = rename_duplicate_columns(get_climate_data())
 
 # -----------------------------------------------------------------
-# [사이드바 공통 시간 필터 영역]
+# [사이드바 영역 - 💡 올바른 강원도 공식 CI 로고 경로 패치]
 # -----------------------------------------------------------------
+# ⚠️ 수정 포인트: 기존 오타인 'username' 경로를 'kgw' 공식 도청 도메인 규격 이미지 주소로 복원
 st.sidebar.image("https://www.gangwon.to/img/kgw/sub/ci_01.png", width=200)
 st.sidebar.markdown("### 📅 공통 시간 필터")
 
@@ -269,7 +270,7 @@ with tab2:
     st.header(f"🪖 접경지역 말라리아 매개모기 발생감시 [{selected_year}]")
     with st.expander("📥 말라리아 현업 업로드 양식 매뉴얼 및 데이터 교체"):
         malaria_template_csv = convert_df_to_csv(base_mal_df)
-        st.download_button(label="📥 [현업서식] 말라리아 주별 채집결과 양식 다운로드", data=malaria_template_csv, file_name="말라리아_양식.csv", mime="text/csv")
+        st.download_button(label="📥 [업로드서식] 말라리아 주별 결과 다운로드", data=malaria_template_csv, file_name="말라리아_양식.csv", mime="text/csv")
         mal_file = st.file_uploader("말라리아 현업 서식 파일 업로드", type=["csv", "xlsx"], key="mal_actual_up")
         if mal_file is None:
             df_mal = base_mal_df
