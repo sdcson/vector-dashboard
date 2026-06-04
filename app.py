@@ -55,7 +55,7 @@ def convert_df_to_csv(df):
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
-    """일본뇌염 마스터 DB 생성 (주별 데이터 제공 포맷)"""
+    """일본뇌염 마스터 DB 생성"""
     locs = {
         "춘천시 신북읍 산천리 (우사 거점)": [37.9250, 127.7410],
         "강릉시 사천면 산대월리 (우사 거점)": [37.7518, 128.8762],
@@ -80,7 +80,7 @@ def get_je_actual_style_data():
 
 @st.cache_data
 def get_malaria_actual_style_data():
-    """말라리아 마스터 DB 생성 (주별 데이터 제공 포맷)"""
+    """말라리아 마스터 DB 생성"""
     locs = {
         "춘천시 중앙로 (우사 거점)": [37.8813, 127.7298], "춘천시 지내리 (우사 거점)": [37.9250, 127.7410],
         "철원군 대마리 (우사 거점)": [38.2543, 127.2145], "철원군 학사리 (우사 거점)": [38.2520, 127.4415],
@@ -105,7 +105,7 @@ def get_malaria_actual_style_data():
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 대응 매개체 DB 마스터 소스 (철원 관우리 정밀 좌표 동기화)"""
+    """기후변화 대응 매개체 DB 마스터 소스"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(42)
@@ -201,11 +201,10 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# --- 1. 일본뇌염 매개모기 감시 (주별 양식 다운로드 장착) ---
+# --- 1. 일본뇌염 매개모기 감시 ---
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
-        # 💡 요구사항 반영: 일본뇌염 표준 규격 빈 서식 바인딩
         je_tmpl = pd.DataFrame(columns=["조사년도", "조사월", "조사주", "지점명", "위도", "경도", "작은빨간집모기", "빨간집모기", "금빛숲모기", "합계", "병원체검사"])
         je_tmpl.loc[0] = ["2026년", "05월", "1주", "춘천시 신북읍 산천리 (우사 거점)", 37.9250, 127.7410, 0, 15, 2, 17, "음성"]
         st.download_button("📥 일본뇌염 주별 전용 샘플양식 다운로드 (.csv)", convert_df_to_csv(je_tmpl), "일본뇌염_표준양식.csv", "text/csv", key="dl_je")
@@ -217,6 +216,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
     if not f_je.empty:
         c1, c2 = st.columns([5, 5])
         with c1:
+            st.markdown(f"##### 📍 {selected_year} {selected_month} 주요 거점 우사 지리정보 (GIS)")
             m_je = folium.Map(location=[37.75, 128.3], zoom_start=8)
             for _, r in f_je.iterrows():
                 folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], icon=folium.Icon(color='red')).add_to(m_je)
@@ -232,11 +232,10 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             plt.close()
         st.dataframe(f_je[["지점명", "조사주", "작은빨간집모기", "빨간집모기", "금빛숲모기", "합계", "병원체검사"]], hide_index=True, use_container_width=True)
 
-# --- 2. 말라리아 매개모기 감시 (주별 양식 다운로드 장착) ---
+# --- 2. 말라리아 매개모기 감시 ---
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
-        # 💡 요구사항 반영: 말라리아 표준 규격 빈 서식 바인딩
         mal_tmpl = pd.DataFrame(columns=["조사년도", "조사월", "조사주", "지점명", "위도", "경도", "얼룩날개모기류", "빨간집모기", "합계", "말라리아원충감염조사"])
         mal_tmpl.loc[0] = ["2026년", "05월", "1주", "철원군 대마리 (우사 거점)", 38.2543, 127.2145, 45, 12, 57, "음성"]
         st.download_button("📥 말라리아 주별 전용 샘플양식 다운로드 (.csv)", convert_df_to_csv(mal_tmpl), "말라리아_표준양식.csv", "text/csv", key="dl_mal")
@@ -260,22 +259,55 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             plt.close()
         st.dataframe(f_mal[["지점명", "조사주", "얼룩날개모기류", "빨간집모기", "합계", "말라리아원충감염조사"]], hide_index=True, use_container_width=True)
 
-# --- 3. 기후변화 대응 매개체 감시 (4대 전용 양식 장착 완료) ---
+# --- 3. 기후변화 대응 매개체 감시 (⚠️ 4대 전용 샘플 분리 매칭 완료) ---
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황")
-    with st.expander("📥 [기후변화 대응] 표준 입력 파일 업로드 및 4대 권역 통합 샘플 양식 다운로드"):
-        # 💡 요구사항 반영: 기후변화 대응 양식(모기, 참진드기, 털진드기 분포/발생) 공통 헤더 바인딩 가동
-        cli_tmpl = pd.DataFrame(columns=["조사년도", "조사월", "조사주", "권역", "지점명", "위도", "경도", "채집종", "채집수"])
-        cli_tmpl.loc[0] = ["2026년", "05월", "1주", "모기 권역", "춘천시보건소 (도심지 발생감시)", 37.8756, 127.7204, "모기류 통합개체", 14]
-        cli_tmpl.loc[1] = ["2026년", "05월", "1주", "참진드기 권역", "인제 남북리 (초지 환경)", 38.0650, 128.1611, "작은소피참진드기 등", 25]
-        cli_tmpl.loc[2] = ["2026년", "05월", "1주", "털진드기 분포감시", "철원 관우리 (논 분포환경)", 38.244278, 127.220583, "야생설치류 기생 털진드기", 4]
-        cli_tmpl.loc[3] = ["2026년", "05월", "1주", "털진드기 발생감시", "철원 관우리 (논 발생환경)", 38.239167, 127.220000, "둥근혀털진드기 등", 38]
-        st.download_button("📥 기후변화 통합 샘플양식 다운로드 (.csv)", convert_df_to_csv(cli_tmpl), "기후변화_통합_표준양식.csv", "text/csv", key="dl_cli")
+    
+    # 📡 권역선택 필터를 가장 상단으로 올려 이 조건에 맞춰 업로드 양식이 다르게 나오도록 유도
+    selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["전체 권역 보기", "모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
+    
+    # 💡 해결 포인트: 선택한 권역에 최적화된 서식 헤더 다운로드 및 별도 업로드 창 동적 가동
+    with st.expander(f"📥 [{selected_zone}] 전용 파일 업로드 및 샘플 양식 다운로드 Hub"):
+        st.markdown(f"##### 📄 {selected_zone} 입력 규격 매뉴얼 및 가이드")
         
-        cli_file = st.file_uploader("작성된 기후변화 파일 업로드", type=["csv", "xlsx"], key="cli_up")
+        # 기본 공통 헤더 선언
+        base_cols = ["조사년도", "조사월", "조사주", "권역", "지점명", "위도", "경도"]
+        
+        if selected_zone == "모기 권역":
+            st.info("📊 모기 권역 양식: 채집종 필드가 '모기류 통합개체' 등으로 한정 관리됩니다.")
+            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
+            spec_tmpl.loc[0] = ["2026년", "05월", "1주", "모기 권역", "춘천시보건소 (도심지 발생감시)", 37.8756, 127.7204, "모기류 통합개체", 18]
+            st.download_button("📥 [모기 권역] 전용 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_모기권역_양식.csv", "text/csv")
+            
+        elif selected_zone == "참진드기 권역":
+            st.info("🌲 참진드기 권역 양식: 인제/화천 서식환경 지점 및 '작은소피참진드기 등' 종명에 대응합니다.")
+            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
+            spec_tmpl.loc[0] = ["2026년", "05월", "1주", "참진드기 권역", "인제 남북리 (초지 환경)", 38.0650, 128.1611, "작은소피참진드기 등", 45]
+            st.download_button("📥 [참진드기 권역] 전용 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_참진드기권역_양식.csv", "text/csv")
+            
+        elif selected_zone == "털진드기 분포감시":
+            st.info("🌾 털진드기 분포감시 양식: 철원 야생설치류 포획 기반 '야생설치류 기생 털진드기' 양식입니다.")
+            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
+            spec_tmpl.loc[0] = ["2026년", "05월", "1주", "털진드기 분포감시", "철원 관우리 (논 분포환경)", 38.244278, 127.220583, "야생설치류 기생 털진드기", 2]
+            st.download_button("📥 [털진드기 분포감시] 전용 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_털진드기_분포감시_양식.csv", "text/csv")
+            
+        elif selected_zone == "털진드기 발생감시":
+            st.info("🚩 털진드기 발생감시 양식: 관우리 4대 환경 채집기 기반 '둥근혀털진드기 등' 전용 서식입니다.")
+            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
+            spec_tmpl.loc[0] = ["2026년", "05월", "1주", "털진드기 발생감시", "철원 관우리 (논 발생환경)", 38.239167, 127.220000, "둥근혀털진드기 등", 52]
+            st.download_button("📥 [털진드기 발생감시] 전용 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_털진드기_발생감시_양식.csv", "text/csv")
+            
+        else: # 전체 권역 보기인 경우 교차 가이드 출력
+            st.info("📡 전체 권역 통합 양식: 4개 권역을 한 파일로 묶어서 백업/일괄 업로드할 때 사용합니다.")
+            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
+            spec_tmpl.loc[0] = ["2026년", "05월", "1주", "모기 권역", "춘천시보건소 (도심지 발생감시)", 37.8756, 127.7204, "모기류 통합개체", 14]
+            spec_tmpl.loc[1] = ["2026년", "05월", "1주", "털진드기 발생감시", "철원 관우리 (논 발생환경)", 38.239167, 127.220000, "둥근혀털진드기 등", 35]
+            st.download_button("📥 [전체 권역 통합] 일괄 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_전체통합_양식.csv", "text/csv")
+
+        st.markdown("---")
+        cli_file = st.file_uploader(f"작성된 [{selected_zone}] 파일 업로드", type=["csv", "xlsx"], key="cli_up")
         df_cli = base_cli_df if cli_file is None else rename_duplicate_columns(pd.read_csv(cli_file) if cli_file.name.endswith('.csv') else pd.read_excel(cli_file))
 
-    selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["전체 권역 보기", "모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     m_data = df_cli[(df_cli["조사년도"] == selected_year) & (df_cli["조사월"] == selected_month)]
     if selected_zone != "전체 권역 보기":
         m_data = m_data[m_data["권역"] == selected_zone]
@@ -309,13 +341,14 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 
         st.markdown("##### 📋 기후변화 매개체 월간 누적 채집 내역 대장")
         st.dataframe(monthly_summary[["권역", "지점명", "채집종", "채집수"]], hide_index=True, use_container_width=True)
+    else:
+        st.info("데이터가 존재하지 않습니다.")
 
-# --- 4. 참진드기조사 어린이숲체험장 (현업 장부 100% 매칭 서식 탑재) ---
+# --- 4. 참진드기조사 어린이숲체험장 ---
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황")
     
     with st.expander("📥 [어린이 숲체험장] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
-        # 실제 원본 대장 규격(연번~동시감염까지 총 19개 표준 컬럼 명칭 하드코딩 싱크로)
         template_columns = [
             "연번", "월", "채집일", "채집지역2", "코스번호", "지점번호", "분류", "종", "Stage", "개체수", 
             "Pool No.", "리케치아 양성 Pools", "라임 양성 pool", "아나플라즈마 양성", "Ehlichia", "POWV", "HRTV", "Babesia", "동시감염"
