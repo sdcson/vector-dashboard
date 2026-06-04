@@ -132,7 +132,7 @@ def get_forest_playground_actual_data():
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 매개체 샘플 데이터 생성 (철원군 오덕리 좌표 정밀 보정본)"""
+    """기후변화 매개체 샘플 데이터 생성"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(46 if year == "2025년" else 47)
@@ -167,13 +167,13 @@ def get_climate_data():
                         "조사월": month, "조사주": week, "채집종": "작은소피참진드기 등", "채집수": int(np.random.poisson(30))
                     })
                     
-        # 3. 털진드기 분포감시 ⚠️ [오류 보정] 보고서 실적 기준 오덕리 793-4(밭), 799-3(야산) 실제 도북 단면 좌표계 정밀 동기화
+        # 3. 털진드기 분포감시 (철원군 오덕리 및 관우리 일대 거점)
         bunpo_locs = {
             "철원 관우리 (논 분포환경)": [38.2375, 127.2261], 
             "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197], 
             "철원 관우리 (저수지 분포환경)": [38.2368, 127.2270], 
             "철원 관우리 (수로 분포환경)": [38.2395, 127.2168], 
-            "철원 오덕리 (야산 분포환경)": [38.2250, 127.2247] # 밭과 인접한 야산 단면 실제 좌표로 수정
+            "철원 오덕리 (야산 분포환경)": [38.2250, 127.2247]
         }
         for name, coords in bunpo_locs.items():
             for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
@@ -233,7 +233,8 @@ with tab1:
             m_je = folium.Map(location=[37.75, 128.3], zoom_start=8)
             for _, r in f_je.iterrows():
                 popup_info = f"<b>{r['지점명']}</b><br>• 작은빨간집모기: {r['작은빨간집모기']}마리<br>• 합계: {r['합계']}마리"
-                folium.Marker([float(r['위度']), float(r['경도'])], tooltip=r['지점명'], popup=folium.Popup(popup_info, max_width=280), icon=folium.Icon(color='red', icon='home')).add_to(m_je)
+                # 💡 오타 수정 완료 포인트 (r['위度'] -> r['위도'] 한자 오타 영구 청소)
+                folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=folium.Popup(popup_info, max_width=280), icon=folium.Icon(color='red', icon='home')).add_to(m_je)
             st_folium(m_je, key=f"map_je_actual_{selected_year}", width="100%", height=420)
         with c2:
             st.markdown(f"##### 📊 [{selected_year} {selected_month}] 채집 모기 우점종 구성 비율")
@@ -296,8 +297,7 @@ with tab3:
         col_map, col_day = st.columns([5, 5])
         with col_map:
             st.markdown(f"##### 📍 {selected_year} {selected_month} 매개체 생태 거점 현황 (GIS)")
-            # 철원 오덕리가 한눈에 포착되도록 최적 시야각으로 패치
-            m_cli = folium.Map(location=[38.22, 127.22], zoom_start=11)
+            m_cli = folium.Map(location=[38.05, 127.85], zoom_start=9)
             for _, r in f_cli.iterrows():
                 if "모기 권역" in r['권역']: m_color, m_icon = "purple", "flash"
                 elif r['권역'] == "참진드기 권역": m_color, m_icon = "darkgreen", "leaf"
@@ -318,8 +318,6 @@ with tab3:
             plt.close()
         st.markdown("---")
         st.dataframe(f_cli[["조사년도", "권역", "지점명", "채집종", "채집수"]], hide_index=True, use_container_width=True)
-    else:
-        st.info("데이터가 존재하지 않습니다.")
 
 # --- TAB 4: 참진드기조사(어린이숲체험장) ---
 with tab4:
