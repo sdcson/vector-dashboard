@@ -55,7 +55,7 @@ def convert_df_to_csv(df):
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
-    """일본뇌염 마스터 DB 생성"""
+    """일본뇌염 마스터 DB 생성 (주별 데이터 제공 포맷)"""
     locs = {
         "춘천시 신북읍 산천리 (우사 거점)": [37.9250, 127.7410],
         "강릉시 사천면 산대월리 (우사 거점)": [37.7518, 128.8762],
@@ -80,7 +80,7 @@ def get_je_actual_style_data():
 
 @st.cache_data
 def get_malaria_actual_style_data():
-    """말라리아 마스터 DB 생성"""
+    """말라리아 마스터 DB 생성 (주별 데이터 제공 포맷)"""
     locs = {
         "춘천시 중앙로 (우사 거점)": [37.8813, 127.7298], "춘천시 지내리 (우사 거점)": [37.9250, 127.7410],
         "철원군 대마리 (우사 거점)": [38.2543, 127.2145], "철원군 학사리 (우사 거점)": [38.2520, 127.4415],
@@ -105,37 +105,55 @@ def get_malaria_actual_style_data():
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 대응 매개체 DB 마스터 소스"""
+    """⭐ [요청 지점 100% 원상 복구] 모기 7개, 참진드기 인제4/화천4, 털진드기 분포5대환경(논,밭,저수지,수로,야산), 발생4대환경 매핑"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(42)
         
+        # 1. 모기 권역 (춘천 7개 거점)
         chuncheon_mosquito_locs = {
             "퇴계동주민센터 (도심지 발생감시)": [37.8645, 127.7261], "삼천동 숲속 (도심지 발생감시)": [37.8721, 127.7081],
-            "종가오리식당 (철새도래지 발생감시)": [37.8822, 127.7730], "춘천시보건소 (도심지 발생감시)": [37.8756, 127.7204],
+            "종가오리식당 (철새도래지 발생감시)": [37.8822, 127.7730], "백로서식지 주변 주택 (철새도래지 발생감시)": [37.8811, 127.7711],
+            "백로서식지 숲속 (철새도래지 발생감시)": [37.8805, 127.7713], "춘천시보건소 (도심지 발생감시)": [37.8756, 127.7204],
             "춘천시보건소 (도심지 일일감시-DMS)": [37.8751, 127.7202]
         }
+        
+        # 2. 참진드기 권역 (인제 4대 서식환경 + 화천 4대 서식환경 = 총 8개 지점 완벽 복원 ⭐)
         inje_hwacheon_locs = {
             "인제 남북리 (초지 환경)": [38.0650, 128.1611], "인제 남북리 (잡목림 환경)": [38.0652, 128.1612],
-            "화천 하리 (초지 환경)": [38.1062, 127.7034], "화천 하리 (잡목림 환경)": [38.1065, 127.7036]
+            "인제 남북리 (산길 환경)": [38.0655, 128.1615], "인제 남북리 (무덤 환경)": [38.0648, 128.1603],
+            "화천 하리 (초지 환경)": [38.1062, 127.7034], "화천 하리 (잡목림 환경)": [38.1065, 127.7036],
+            "화천 하리 (산길 환경)": [38.1069, 127.7040], "화천 하리 (무덤 환경)": [38.1058, 127.7028]
         }
+        
+        # 3. 털진드기 분포감시 (요청하신 철원군 관우리 482-9번지 기반 5대 환경 완벽 복원 ⭐)
         bunpo_locs = {
-            "철원 관우리 (논 분포환경)": [38.244278, 127.220583], "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197]
+            "철원 관우리 (논 분포환경)": [38.244278, 127.220583], 
+            "철원 오덕리 (밭 분포환경)": [38.227800, 127.219700], 
+            "철원 관우리 (저수지 분포환경)": [38.244100, 127.221100], 
+            "철원 관우리 (수로 분포환경)": [38.244500, 127.220100], 
+            "철원 오덕리 (야산 분포환경)": [38.225000, 127.224700]
         }
+        
+        # 4. 털진드기 발생감시 (관우리 채집기 기반 4대 발생환경 고정)
         jeon_locs = {
-            "철원 관우리 (논 발생환경)": [38.239167, 127.220000], "철원 관우리 (밭 발생환경)": [38.244278, 127.220583],
+            "철원 관우리 (논 발생환경)": [38.239167, 127.220000], "철원 관우리 (밭 발생환경)": [38.244278, 127.220583], 
             "철원 관우리 (수로 발생환경)": [38.237333, 127.227806], "철원 관우리 (초지 발생환경)": [38.239722, 127.220278]
         }
 
         for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
             for week in ["1주", "2주", "3주", "4주"]:
+                # 춘천 모기 7개 루프
                 for name, coords in chuncheon_mosquito_locs.items():
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "모기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "모기류 통합개체", "채집수": int(np.random.poisson(15))})
+                # 인제/화천 참진드기 8개 루프
                 for name, coords in inje_hwacheon_locs.items():
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "참진드기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "작은소피참진드기 등", "채집수": int(np.random.poisson(30))})
+                # 철원 털진드기 분포 5대 환경 루프
                 for name, coords in bunpo_locs.items():
                     active = 25 if month in ["04월", "10월", "11월"] else 2
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "털진드기 분포감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active))})
+                # 철원 털진드기 발생 4대 환경 루프
                 for name, coords in jeon_locs.items():
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))})
                     
@@ -259,50 +277,47 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             plt.close()
         st.dataframe(f_mal[["지점명", "조사주", "얼룩날개모기류", "빨간집모기", "합계", "말라리아원충감염조사"]], hide_index=True, use_container_width=True)
 
-# --- 3. 기후변화 대응 매개체 감시 (⚠️ 4대 전용 샘플 분리 매칭 완료) ---
+# --- 3. 기후변화 대응 매개체 감시 (4대 전용 샘플 지점 완전 수선 및 고정 ⭐️) ---
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황")
     
-    # 📡 권역선택 필터를 가장 상단으로 올려 이 조건에 맞춰 업로드 양식이 다르게 나오도록 유도
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["전체 권역 보기", "모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     
-    # 💡 해결 포인트: 선택한 권역에 최적화된 서식 헤더 다운로드 및 별도 업로드 창 동적 가동
     with st.expander(f"📥 [{selected_zone}] 전용 파일 업로드 및 샘플 양식 다운로드 Hub"):
         st.markdown(f"##### 📄 {selected_zone} 입력 규격 매뉴얼 및 가이드")
-        
-        # 기본 공통 헤더 선언
-        base_cols = ["조사년도", "조사월", "조사주", "권역", "지점명", "위도", "경도"]
+        base_cols = ["조사년도", "조사월", "조사주", "권역", "지점명", "위도", "경도", "채집종", "채집수"]
         
         if selected_zone == "모기 권역":
-            st.info("📊 모기 권역 양식: 채집종 필드가 '모기류 통합개체' 등으로 한정 관리됩니다.")
-            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
+            st.info("📊 모기 권역 양식: 춘천 거점 7개 지점 표준 데이터셋입니다.")
+            spec_tmpl = pd.DataFrame(columns=base_cols)
             spec_tmpl.loc[0] = ["2026년", "05월", "1주", "모기 권역", "춘천시보건소 (도심지 발생감시)", 37.8756, 127.7204, "모기류 통합개체", 18]
             st.download_button("📥 [모기 권역] 전용 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_모기권역_양식.csv", "text/csv")
             
         elif selected_zone == "참진드기 권역":
-            st.info("🌲 참진드기 권역 양식: 인제/화천 서식환경 지점 및 '작은소피참진드기 등' 종명에 대응합니다.")
-            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
-            spec_tmpl.loc[0] = ["2026년", "05월", "1주", "참진드기 권역", "인제 남북리 (초지 환경)", 38.0650, 128.1611, "작은소피참진드기 등", 45]
+            st.info("🌲 참진드기 권역 양식: 인제 남북리 4개 지점 및 화천 하리 4개 지점을 개별 포함합니다.")
+            spec_tmpl = pd.DataFrame(columns=base_cols)
+            spec_tmpl.loc[0] = ["2026년", "05월", "1주", "참진드기 권역", "인제 남북리 (초지 환경)", 38.0650, 128.1611, "작은소피참진드기 등", 32]
+            spec_tmpl.loc[1] = ["2026년", "05월", "1주", "참진드기 권역", "화천 하리 (잡목림 환경)", 38.1065, 127.7036, "작은소피참진드기 등", 21]
             st.download_button("📥 [참진드기 권역] 전용 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_참진드기권역_양식.csv", "text/csv")
             
         elif selected_zone == "털진드기 분포감시":
-            st.info("🌾 털진드기 분포감시 양식: 철원 야생설치류 포획 기반 '야생설치류 기생 털진드기' 양식입니다.")
-            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
+            st.info("🌾 털진드기 분포감시 양식: 철원 관우리 및 오덕리의 5대 환경(논,밭,저수지,수로,야산) 전용 포맷입니다.")
+            spec_tmpl = pd.DataFrame(columns=base_cols)
             spec_tmpl.loc[0] = ["2026년", "05월", "1주", "털진드기 분포감시", "철원 관우리 (논 분포환경)", 38.244278, 127.220583, "야생설치류 기생 털진드기", 2]
+            spec_tmpl.loc[1] = ["2026년", "05월", "1주", "털진드기 분포감시", "철원 오덕리 (야산 분포환경)", 38.225000, 127.224700, "야생설치류 기생 털진드기", 6]
             st.download_button("📥 [털진드기 분포감시] 전용 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_털진드기_분포감시_양식.csv", "text/csv")
             
         elif selected_zone == "털진드기 발생감시":
-            st.info("🚩 털진드기 발생감시 양식: 관우리 4대 환경 채집기 기반 '둥근혀털진드기 등' 전용 서식입니다.")
-            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
-            spec_tmpl.loc[0] = ["2026년", "05월", "1주", "털진드기 발생감시", "철원 관우리 (논 발생환경)", 38.239167, 127.220000, "둥근혀털진드기 등", 52]
+            st.info("🚩 털진드기 발생감시 양식: 철원 관우리 4대 발생환경(논,밭,수로,초지) 전용 서식입니다.")
+            spec_tmpl = pd.DataFrame(columns=base_cols)
+            spec_tmpl.loc[0] = ["2026년", "05월", "1주", "털진드기 발생감시", "철원 관우리 (논 발생환경)", 38.239167, 127.220000, "둥근혀털진드기 등", 41]
             st.download_button("📥 [털진드기 발생감시] 전용 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_털진드기_발생감시_양식.csv", "text/csv")
             
-        else: # 전체 권역 보기인 경우 교차 가이드 출력
-            st.info("📡 전체 권역 통합 양식: 4개 권역을 한 파일로 묶어서 백업/일괄 업로드할 때 사용합니다.")
-            spec_tmpl = pd.DataFrame(columns=base_cols + ["채집종", "채집수"])
+        else:
+            spec_tmpl = pd.DataFrame(columns=base_cols)
             spec_tmpl.loc[0] = ["2026년", "05월", "1주", "모기 권역", "춘천시보건소 (도심지 발생감시)", 37.8756, 127.7204, "모기류 통합개체", 14]
-            spec_tmpl.loc[1] = ["2026년", "05월", "1주", "털진드기 발생감시", "철원 관우리 (논 발생환경)", 38.239167, 127.220000, "둥근혀털진드기 등", 35]
-            st.download_button("📥 [전체 권역 통합] 일괄 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_전체통합_양식.csv", "text/csv")
+            spec_tmpl.loc[1] = ["2026년", "05월", "1주", "참진드기 권역", "인제 남북리 (초지 환경)", 38.0650, 128.1611, "작은소피참진드기 등", 30]
+            st.download_button("📥 [전체 권역 통합] 일괄 백업용 샘플 양식 다운로드 (.csv)", convert_df_to_csv(spec_tmpl), "기후변화_전체통합_양식.csv", "text/csv")
 
         st.markdown("---")
         cli_file = st.file_uploader(f"작성된 [{selected_zone}] 파일 업로드", type=["csv", "xlsx"], key="cli_up")
@@ -313,6 +328,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         m_data = m_data[m_data["권역"] == selected_zone]
 
     if not m_data.empty:
+        # 월간 누적 집계 연산
         monthly_summary = m_data.groupby(["권역", "지점명", "위도", "경도", "채집종"], as_index=False)["채집수"].sum()
         
         if selected_zone == "전체 권역 보기":
@@ -325,12 +341,13 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         else:
             col_map, col_day = st.columns([5, 5])
             with col_map:
-                m_cli = folium.Map(location=[38.24, 127.23], zoom_start=11)
+                # 털진드기일 경우 철원 관우리 집중 시야 확보
+                m_cli = folium.Map(location=[38.24, 127.23] if "털진드기" in selected_zone else [38.05, 127.85], zoom_start=12 if "털진드기" in selected_zone else 9)
                 for _, r in monthly_summary.iterrows():
                     folium.Marker(location=[float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=f"월간누적: {r['채집수']}개체").add_to(m_cli)
-                st_folium(m_cli, key="map_cli_zone", width="100%", height=420)
+                st_folium(m_cli, key="map_cli_zone", width="100%", height=450)
             with col_day:
-                fig, ax = plt.subplots(figsize=(6, 5))
+                fig, ax = plt.subplots(figsize=(6, 5.2))
                 monthly_summary.set_index("지점명")["채집수"].plot(kind='bar', ax=ax, color='#2a9d8f')
                 if f_prop:
                     ax.set_xticklabels(monthly_summary["지점명"], rotation=45, ha='right', fontsize=9, fontproperties=f_prop)
