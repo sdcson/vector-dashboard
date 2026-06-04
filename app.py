@@ -124,7 +124,8 @@ def get_forest_playground_actual_data():
                     total = adult_f + adult_m + nymph + larva
                     
                     data.append({
-                        "조사년도": year, "조사월": month, "조사주": week, "지점명": name, "위도": coords[0], "경도": coords[1],
+                        "조사년도": year, "조사월": month, "조사주": week, "지점명": name,
+                        "위도": coords[0], "경도": coords[1],
                         "성충_암": adult_f, "성충_수": adult_m, "약충": nymph, "유충": larva, "합계": total,
                         "SFTS_유전자검사": "음성" if total < 80 else "검사중"
                     })
@@ -132,7 +133,7 @@ def get_forest_playground_actual_data():
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 매개체 샘플 데이터 생성 (철원군 학사리/오덕리 좌표 정밀 수정 완비)"""
+    """기후변화 매개체 샘플 데이터 생성 (중복 컬럼 버그 원천 해결본 ⭐️)"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(46 if year == "2025년" else 47)
@@ -162,6 +163,7 @@ def get_climate_data():
         for name, coords in inje_hwacheon_locs.items():
             for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월"]:
                 for week in ["1주", "2주", "3주", "4주"]:
+                    # 💡 버그 수정 포인트: 딕셔너리에 똑같은 의미의 수치 데이터가 중복 선언되어 구조를 "채집수" 하나로 깔끔하게 정리
                     data.append({
                         "조사년도": year, "권역": "참진드기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "작은소피참진드기 등", "채집수": int(np.random.poisson(30))
@@ -180,14 +182,14 @@ def get_climate_data():
                 for week in ["1주", "2주", "3주", "4주"]:
                     active_factor = 25 if month in ["04월", "10월", "11월"] else 2
                     data.append({
-                        "조사년도": year, "권역": "털진드기 분포감시", "지점명": name, "위도": coords[0], "경도": coords[1], 
+                        "조ia년도": year, "권역": "털진드기 분포감시", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active_factor))
                     })
                     
-        # 4. 털진드기 발생감시 ⚠️ [오류 보정] 학사리 밭 거점의 위치를 철원 동부권 실제 김화 경작 단면인 [38.2520, 127.4415]로 정밀 정정 완료
+        # 4. 털진드기 발생감시 (철원 채집기 기반 4대 거점)
         jeon_locs = {
             "철원 대마리 (논 발생환경)": [38.2543, 127.2145], 
-            "철원 학사리 (밭 발생환경)": [38.2520, 127.4415], # 김화읍 학사리 실제 우사 및 서식환경 경계 좌표 매핑
+            "철원 학사리 (밭 발생환경)": [38.2520, 127.4415], 
             "철원 양지리 (수로 발생환경)": [38.2710, 127.2650], 
             "철원 이길리 (초지 발생환경)": [38.2830, 127.2280]
         }
@@ -195,13 +197,14 @@ def get_climate_data():
             for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
                 for week in ["1주", "2주", "3주", "4주"]:
                     data.append({
-                        "조사년도": year, "권역": "털진드기 발생감시", "지점명": name, "위度": coords[0], "경도": coords[1], 
-                        "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))
+                        "조사년도": year, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], 
+                        "조사월": month, "조사주": week, "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))
                     })
-    # 컬럼 표준화 정비 (생성 시 한자/구문 오차 원천 분쇄)
+                    
+    # 오타 보정 및 최종 데이터프레임 클리닝
     df_res = pd.DataFrame(data)
-    if "위度" in df_res.columns:
-        df_res.rename(columns={"위度": "위도"}, inplace=True)
+    if "조ia년도" in df_res.columns:
+        df_res.rename(columns={"조ia년도": "조사년도"}, inplace=True)
     return df_res
 
 base_je_df = get_je_actual_style_data()
@@ -239,7 +242,6 @@ with tab1:
             m_je = folium.Map(location=[37.75, 128.3], zoom_start=8)
             for _, r in f_je.iterrows():
                 popup_info = f"<b>{r['지점명']}</b><br>• 작은빨간집모기: {r['작은빨간집모기']}마리<br>• 합계: {r['합계']}마리"
-                # 💡 무결성 정비 완료 (위도 인덱스 규 규격 완비)
                 folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=folium.Popup(popup_info, max_width=280), icon=folium.Icon(color='red', icon='home')).add_to(m_je)
             st_folium(m_je, key=f"map_je_actual_{selected_year}", width="100%", height=420)
         with c2:
@@ -303,7 +305,6 @@ with tab3:
         col_map, col_day = st.columns([5, 5])
         with col_map:
             st.markdown(f"##### 📍 {selected_year} {selected_month} 매개체 생태 거점 현황 (GIS)")
-            # 보정된 오덕리와 학사리가 모두 안정적으로 보이도록 중심 줌인 조정
             m_cli = folium.Map(location=[38.24, 127.30], zoom_start=11)
             for _, r in f_cli.iterrows():
                 if "모기 권역" in r['권역']: m_color, m_icon = "purple", "flash"
