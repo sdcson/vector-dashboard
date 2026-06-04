@@ -27,10 +27,9 @@ def get_korean_font_prop():
         except Exception as e:
             return None
             
-    # 💡 해결 포인트: font_manager 속성에 직접 insert하지 않고, FontProperties 객체로 안전하게 변환하여 반환
     return fm.FontProperties(fname=font_path)
 
-# 안전한 한글 폰트 속성 획득
+# 한글 폰트 속성 획득
 f_prop = get_korean_font_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드")
@@ -134,10 +133,12 @@ def get_forest_playground_actual_data():
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 매개체 샘플 데이터 생성"""
+    """기후변화 매개체 샘플 데이터 생성 (춘천 7개 거점, 인제/화천 8개 지점, 철원 분포/발생 지점)"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(46 if year == "2025년" else 47)
+        
+        # 1. 모기 권역 (춘천 7개 거점)
         chuncheon_mosquito_locs = {
             "퇴계동주민센터 (도심지 발생감시)": [37.8645, 127.7261], "삼천동 숲속 (도심지 발생감시)": [37.8721, 127.7081],
             "종가오리식당 (철새도래지 발생감시)": [37.8822, 127.7730], "백로서식지 주변 주택 (철새도래지 발생감시)": [37.8811, 127.7711],
@@ -151,6 +152,8 @@ def get_climate_data():
                         "조사년도": year, "권역": "모기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "모기류 통합개체", "채집수": int(np.random.poisson(15))
                     })
+                    
+        # 2. 참진드기 권역 (인제/화천 4대 서식환경)
         inje_hwacheon_locs = {
             "인제 남북리 (초지 환경)": [38.0650, 128.1611], "인제 남북리 (잡목림 환경)": [38.0652, 128.1612],
             "인제 남북리 (산길 환경)": [38.0655, 128.1615], "인제 남북리 (무덤 환경)": [38.0648, 128.1603],
@@ -163,6 +166,34 @@ def get_climate_data():
                     data.append({
                         "조사년도": year, "권역": "참진드기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "작은소피참진드기 등", "채집수": int(np.random.poisson(30))
+                    })
+                    
+        # 3. 털진드기 분포감시 (철원 야생설치류 포획 환경 5대 거점) [cite: 52, 56, 314]
+        bunpo_locs = {
+            "철원 관우리 (논 분포환경)": [38.210, 127.230], "철원 오덕리 (밭 분포환경)": [38.230, 127.250],
+            "철원 관우리 (저수지 분포환경)": [38.2368, 127.2270], "철원 관우리 (수로 분포환경)": [38.2395, 127.2168],
+            "철원 오덕리 (야산 분포환경)": [38.3833, 127.2247]
+        }
+        for name, coords in bunpo_locs.items():
+            for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
+                for week in ["1주", "2주", "3주", "4주"]:
+                    active_factor = 25 if month in ["04월", "10월", "11월"] else 2
+                    data.append({
+                        "조사년도": year, "권역": "털진드기 분포감시", "지점명": name, "위도": coords[0], "경도": coords[1], 
+                        "조사월": month, "조사주": week, "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active_factor))
+                    })
+                    
+        # 4. 털진드기 발생감시 (철원 채집기 기반 4대 거점) [cite: 52, 311]
+        jeon_locs = {
+            "철원 대마리 (논 발생환경)": [38.254, 127.214], "철원 학사리 (밭 발생환경)": [38.252, 127.441],
+            "철원 양지리 (수로 발생환경)": [38.271, 127.265], "철원 이길리 (초지 발생환경)": [38.283, 127.228]
+        }
+        for name, coords in jeon_locs.items():
+            for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
+                for week in ["1주", "2주", "3주", "4주"]:
+                    data.append({
+                        "조사년도": year, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], 
+                        "조사월": month, "조사주": week, "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))
                     })
     return pd.DataFrame(data)
 
@@ -178,7 +209,7 @@ st.sidebar.image("https://www.gangwon.to/img/kgw/sub/ci_01.png", width=200)
 st.sidebar.markdown("### 📅 공통 시간 필터")
 
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년"])
-selected_month = st.sidebar.selectbox("조사월 선택", ["05월", "04월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"])
+selected_month = st.sidebar.selectbox("조사월 선택", ["06월", "04월", "05월", "07월", "08월", "09월", "10월", "11월", "12월"])
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주"])
 
 tab1, tab2, tab3, tab4 = st.tabs(["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)"])
@@ -208,7 +239,6 @@ with tab1:
             sizes = [f_je["작은빨간집모기"].sum(), f_je["빨간집모기"].sum(), f_je["금빛숲모기"].sum(), f_je["흰줄숲모기"].sum(), f_je["얼룩날개모기류"].sum(), f_je["기타"].sum()]
             if sum(sizes) > 0:
                 fig, ax = plt.subplots(figsize=(6, 5))
-                # 💡 안전성 개선: f_prop 속성을 파이차트 텍스트 폰트로 주입
                 patches, texts, autotexts = ax.pie(sizes, labels=["작은빨간집모기", "빨간집모기", "금빛숲모기", "흰줄숲모기", "얼룩날개모기류", "기타"], autopct='%1.1f%%', startangle=90, colors=['#e63946', '#f4a261', '#2a9d8f', '#e76f51', '#457b9d', '#9a8c98'])
                 if f_prop:
                     for t in texts: t.set_fontproperties(f_prop)
@@ -246,7 +276,7 @@ with tab2:
             plt.close()
         st.dataframe(f_mal[["지점명", "얼룩날개모기류", "빨간집모기", "금빛숲모기", "흰줄숲모기", "기타모기류", "합계", "말라리아원충감염조사"]], hide_index=True, use_container_width=True)
 
-# --- TAB 3: 기후변화 대응 매개체 감시 ---
+# --- TAB 3: 기후변화 대응 매개체 감시 (버그 수정 수선 본 ⭐) ---
 with tab3:
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 거점 [{selected_year}]")
     with st.expander("📥 기후변화 매개체 데이터 파일 입력 및 검증"):
@@ -257,13 +287,18 @@ with tab3:
         st.dataframe(df_cli.head(3), use_container_width=True)
 
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["전체 권역 보기", "모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
+    
+    # 시간 및 권역 필터 데이터 슬라이싱
     f_cli = df_cli[(df_cli["조사년도"] == selected_year) & (df_cli["조사월"] == selected_month) & (df_cli["조사주"] == selected_week)]
+    
+    # 💡 해결 포인트: 판다스 인덱스 에러 방지를 위해 완전히 일치(==) 하거나 부분 일치를 안전한 동등 비교 연산자로 교정
     if selected_zone != "전체 권역 보기":
-        f_cli = f_cli[f_cli["권역"].str.contains(selected_zone)]
+        f_cli = f_cli[f_cli["권역"] == selected_zone]
 
     if not f_cli.empty:
         col_map, col_day = st.columns([5, 5])
         with col_map:
+            st.markdown(f"##### 📍 {selected_year} {selected_month} 매개체 생태 거점 현황 (GIS)")
             m_cli = folium.Map(location=[38.05, 127.85], zoom_start=9)
             for _, r in f_cli.iterrows():
                 if "모기 권역" in r['권역']: m_color, m_icon = "purple", "flash"
@@ -274,6 +309,7 @@ with tab3:
                 folium.Marker(location=[float(r['위도']), float(r['경도'])], tooltip=f"[{r['권역']}] {r['지점명']}", popup=f"년도: {r['조사년도']}<br>{r['채집종']}: {r['채집수']}개체", icon=folium.Icon(color=m_color, icon=m_icon)).add_to(m_cli)
             st_folium(m_cli, key=f"map_cli_actual_{selected_year}_{selected_zone}", width="100%", height=450)
         with col_day:
+            st.markdown(f"##### 📊 [{selected_year} {selected_month}] 지점별 채집 세부 분포량")
             fig, ax = plt.subplots(figsize=(6, 5.2))
             f_cli.set_index("지점명")["채집수"].plot(kind='bar', ax=ax, color='#2a9d8f')
             if f_prop:
@@ -282,7 +318,10 @@ with tab3:
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
+        st.markdown("---")
         st.dataframe(f_cli[["조사년도", "권역", "지점명", "채집종", "채집수"]], hide_index=True, use_container_width=True)
+    else:
+        st.info(f"선택한 조건의 기후변화 감시 데이터가 {selected_year} {selected_month} 해당 주차에 존재하지 않습니다.")
 
 # --- TAB 4: 참진드기조사(어린이숲체험장) ---
 with tab4:
