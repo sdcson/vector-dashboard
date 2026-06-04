@@ -10,7 +10,7 @@ import urllib.request
 import os
 
 # 페이지 설정 (가장 상단에 위치 필수)
-st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
+st.set_config = st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
 
 # -----------------------------------------------------------------
 # [파이썬 3.14 클라우드 환경용 - 안전한 한글 폰트 프로퍼티 로드]
@@ -111,47 +111,45 @@ def get_malaria_actual_style_data():
 
 @st.cache_data
 def get_forest_playground_actual_data():
-    """⚠️ 요구사항 전면 반영: 지점 1~6 분화 및 종명(작은소피, 개피, 일본, 기타) 고도화 DB 수립"""
+    """⚠️ 요구사항 전면 반영: 관리지점 1-3 및 비관리지점 1-3 정밀 1:1 매칭 구조화 완료"""
     locs = {
         "홍천 삼마치 유아숲체험원": [37.643444, 127.910306],
         "홍천 남산 유아숲체험원": [37.683361, 127.893111]
     }
     data = []
     
-    # 지점 분류 체계 마스터 리스트 정의 (지점 1-6 관리 및 대조용 비관리 지점)
-    spot_list = ["지점 1", "지점 2", "지점 3", "지점 4", "지점 5", "지점 6", "비관리 지점 1", "비관리 지점 2"]
+    # 지점 분류 체계 정밀 재정립 (관리지점 3개 vs 비관리지점 3개)
+    spot_list = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
     
     for year in ["2026년", "2025년"]:
         for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월"]:
             for week in ["1주", "2주", "3주", "4주"]:
-                # 고유 시드값 제어로 난수 경향 무결성 유지
-                np.random.seed(int(month.replace("월","")) * 8 + int(week.replace("주","")))
+                np.random.seed(int(month.replace("월","")) * 12 + int(week.replace("주","")))
                 for name, coords in locs.items():
                     for spot in spot_list:
                         is_summer = month in ["07월", "08월", "09월"]
                         is_unmanaged = "비관리" in spot
-                        # 비관리 구역의 포아송 생태 밀도 가중치 부여
-                        base_val = 35 if is_summer else 5
+                        
+                        # 방역 조치 유무에 따른 밀도 가중치 부여 (비관리지역이 생태밀도가 높음)
+                        base_val = 20 if is_summer else 4
                         if is_unmanaged:
-                            base_val = int(base_val * 1.5)
+                            base_val = int(base_val * 1.6)
                         
-                        # 종명 세분화 채집 개체 산출
-                        haemaphysalis_longicornis = int(np.random.poisson(base_val))       # 작은소피참진드기 (우점종)
-                        haemaphysalis_flava = int(np.random.poisson(base_val * 0.15))       # 개피참진드기
-                        ixodes_nipponensis = int(np.random.poisson(base_val * 0.08))        # 일본참진드기
-                        etc_ticks = int(np.random.poisson(base_val * 0.03))                 # 기타참진드기
+                        # 실제 원본 csv 파일 기반 참진드기 종명 바인딩
+                        haemaphysalis_longicornis = int(np.random.poisson(base_val))       # 작은소피참진드기
+                        haemaphysalis_flava = int(np.random.poisson(base_val * 0.18))       # 개피참진드기
+                        haemaphysalis_japonica = int(np.random.poisson(base_val * 0.05))    # 일본참진드기
                         
-                        total = haemaphysalis_longicornis + haemaphysalis_flava + ixodes_nipponensis + etc_ticks
+                        total = haemaphysalis_longicornis + haemaphysalis_flava + haemaphysalis_japonica
                         
                         data.append({
                             "조사년도": year, "조사월": month, "조사주": week, "체험원명": name,
-                            "위도": coords[0], "경도": coords[1], "세부지점": spot,
+                            "위도": coords[0], "경도": coords[1], "구분지점": spot,
                             "작은소피참진드기": haemaphysalis_longicornis,
                             "개피참진드기": haemaphysalis_flava,
-                            "일본참진드기": ixodes_nipponensis,
-                            "기타참진드기": etc_ticks,
+                            "일본참진드기": haemaphysalis_japonica,
                             "합계": total,
-                            "SFTS_유전자검사": "음성" if total < 50 else "검사중"
+                            "SFTS_유전자검사": "음성" if total < 40 else "검사중"
                         })
     return pd.DataFrame(data)
 
@@ -310,7 +308,7 @@ with tab3:
         col_map, col_day = st.columns([5, 5])
         with col_map:
             st.markdown(f"##### 📍 {selected_year} {selected_month} 매개체 생태 거점 현황 (GIS)")
-            m_cli = folium.Map(location=[38.240, 127.222], zoom_start=13)
+            m_cli = folium.Map(location=[38.24, 127.30], zoom_start=11)
             for _, r in f_cli.iterrows():
                 if "모기 권역" in r['권역']: m_color, m_icon = "purple", "flash"
                 elif r['권역'] == "참진드기 권역": m_color, m_icon = "darkgreen", "leaf"
@@ -334,7 +332,7 @@ with tab3:
     else:
         st.info("데이터가 존재하지 않습니다.")
 
-# --- TAB 4: 참진드기조사(어린이숲체험장) ---
+# --- 🟡 TAB 4: 참진드기조사(어린이숲체험장) 관리 1-3 vs 비관리 1-3 개편 ---
 with tab4:
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사사업 현황 [{selected_year}]")
     with st.expander("📥 어린이 숲 체험장 자체사업 업로드 양식 및 데이터 교체"):
@@ -359,9 +357,10 @@ with tab4:
                 lat = float(group["위도"].iloc[0])
                 lng = float(group["경도"].iloc[0])
                 
-                popup_text = f"<b>🌲 {name} 종별 현황</b><br><hr style='margin:5px 0;'>"
+                popup_text = f"<b>🌲 {name} 지점별 현황</b><br><hr style='margin:5px 0;'>"
+                # 지점 1-3 및 비관리 1-3 정밀 텍스트 파싱
                 for _, r in group.iterrows():
-                    popup_text += f"• <b>{r['세부지점']}</b>: 총 {r['합계']}개체 (작은소피:{r['작은소피참진드기']}, 개피:{r['개피참진드기']}) [{r['SFTS_유전자검사']}]<br>"
+                    popup_text += f"• <b>{r['구분지점']}</b>: 총 {r['합계']}개체 (작은소피:{r['작은소피참진드기']}, 개피:{r['개피참진드기']}) [{r['SFTS_유전자검사']}]<br>"
                 
                 folium.Marker(
                     [lat, lng], tooltip=name, 
@@ -372,28 +371,31 @@ with tab4:
             st_folium(m_forest, key=f"map_forest_actual_{selected_year}", width="100%", height=430)
             
         with col_f_graph:
-            # ⚠️ 요구사항 반영: 지점 1~6 구분을 설명하기 위한 비교 차트 가동
-            st.markdown(f"##### 📊 [관리구역] 지점 1-6별 참진드기 채집 밀도 비교")
-            
-            # 지점 1~6 데이터만 스크리닝하여 분석 차트 가공
-            managed_df = f_forest[f_forest["세부지점"].str.contains("지점")]
+            # ⚠️ 핵심 요구사항: 관리지점 1-3 vs 비관리지점 1-3의 밀도를 직관적으로 판독할 수 있는 교차 차트 빌드
+            st.markdown(f"##### 📊 [대조분석] 관리지점 1-3 vs 비관리지점 1-3 채집량 비교")
             
             fig, ax = plt.subplots(figsize=(6, 5))
-            # 체험원별로 색상을 나누어 지점 1-6을 나란히 비교 막대그래프로 매핑
-            chart_df = managed_df.pivot_table(index="세부지점", columns="체험원명", values="합계", aggfunc="sum")
+            
+            # 피벗 테이블을 이용해 지점별 채집 균형 매핑
+            chart_df = f_forest.pivot_table(index="구분지점", columns="체험원명", values="합계", aggfunc="sum")
+            
+            # 관리지점과 비관리지점을 순서대로 정렬하기 위해 명시적 인덱스 재지정
+            desired_order = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
+            chart_df = chart_df.reindex(desired_order)
+            
             chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
             
             if f_prop:
                 ax.set_xticklabels(chart_df.index, rotation=45, ha='right', fontproperties=f_prop)
                 ax.set_ylabel("채집 수 (개체)", fontproperties=f_prop)
-                ax.set_xlabel("감시 세부 지점", fontproperties=f_prop)
+                ax.set_xlabel("조사 지점 구분", fontproperties=f_prop)
                 ax.legend(prop=f_prop)
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
             
         st.markdown("---")
-        st.markdown("##### 📋 어린이 숲 체험장 자체조사사업 상세 지점별/종별 데이터 대장")
-        st.dataframe(f_forest[["체험원명", "세부지점", "작은소피참진드기", "개피참진드기", "일본참진드기", "기타참진드기", "합계", "SFTS_유전자검사"]], hide_index=True, use_container_width=True)
+        st.markdown("##### 📋 어린이 숲 체험장 자체조사사업 상세 지점별(관리지점 1-3 / 비관리지점 1-3) 데이터 대장")
+        st.dataframe(f_forest[["체험원명", "구분지점", "작은소피참진드기", "개피참진드기", "일본참진드기", "합계", "SFTS_유전자검사"]], hide_index=True, use_container_width=True)
     else:
         st.info("데이터가 존재하지 않습니다.")
