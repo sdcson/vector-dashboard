@@ -5,10 +5,37 @@ import folium
 from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
 from io import BytesIO
+import matplotlib.font_manager as fm
+import urllib.request
+import os
 
-# 윈도우 환경 한글 폰트 (맑은 고딕) 설정
-plt.rc('font', family='Malgun Gothic')
-plt.rc('axes', unicode_minus=False)
+# -----------------------------------------------------------------
+# [리눅스 클라우드 환경용 - 실시간 한글 폰트 다운로드 및 적용 영역]
+# -----------------------------------------------------------------
+@st.cache_resource
+def load_korean_font():
+    """스트림릿 클라우드(리눅스) 환경에서도 한글이 깨지지 않도록 나눔고딕 폰트를 실시간 다운로드"""
+    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+    font_path = "NanumGothic.ttf"
+    
+    # 서버 환경에 폰트 파일이 없을 경우 다운로드 진행
+    if not os.path.exists(font_path):
+        try:
+            urllib.request.urlretrieve(font_url, font_path)
+        except Exception as e:
+            # 다운로드 실패 시 기본 시스템 폰트 사용 우회
+            st.sidebar.warning("한글 폰트 로드 중 일시적 오류가 발생했습니다. 시스템 기본 폰트를 사용합니다.")
+            return None
+            
+    # 다운로드된 폰트를 matplotlib에 등록
+    fe = fm.FontEntry(fname=font_path, name='NanumGothic')
+    fm.font_manager.ttflist.insert(0, fe)
+    plt.rc('font', family='NanumGothic')
+    plt.rc('axes', unicode_minus=False)
+    return "NanumGothic"
+
+# 폰트 로드 함수 실행
+loaded_font = load_korean_font()
 
 # 페이지 설정
 st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
@@ -181,7 +208,6 @@ with tab1:
             m_je = folium.Map(location=[37.75, 128.3], zoom_start=8)
             for _, r in f_je.iterrows():
                 popup_info = f"<b>{r['지점명']}</b><br>• 작은빨간집모기: {r['작은빨간집모기']}마리<br>• 합계: {r['합계']}마리"
-                # ⚠️ 오류 교정 포인트: 체이닝 문법 수정 완료 (.open_popup() 제거하여 folium 원천 구문 규격 유지)
                 folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=folium.Popup(popup_info, max_width=280), icon=folium.Icon(color='red', icon='home')).add_to(m_je)
             st_folium(m_je, key=f"map_je_actual_{selected_year}", width="100%", height=420)
         with c2:
@@ -268,14 +294,13 @@ with tab4:
 
     f_forest = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["조사월"] == selected_month) & (df_forest["조사주"] == selected_week)]
     if not f_forest.empty:
-        # ⚠️ 레이아웃 변수 선언 매칭 오타 패치 (col_map -> col_f_map)
         col_f_map, col_f_graph = st.columns([5, 5])
         with col_f_map:
             st.markdown(f"##### 📍 강원권 주요 어린이 숲 체험장 진드기 안전망 GIS")
             m_forest = folium.Map(location=[37.9, 128.2], zoom_start=8)
             for _, r in f_forest.iterrows():
                 popup_forest_text = f"<b>{r['지점명']}</b><br>• 성충(암/수): {r['성충_암']}/{r['성충_수']}<br>• 합계: {r['합계']}개체"
-                folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=folium.Popup(popup_forest_text, max_width=280), icon=folium.Icon(color='green', icon='tree-conifer')).add_to(m_forest)
+                folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=folium.Popup(popup_forest_text, max_width=280), icon=fm.font_manager and folium.Icon(color='green', icon='tree-conifer')).add_to(m_forest)
             st_folium(m_forest, key=f"map_forest_actual_{selected_year}", width="100%", height=430)
         with col_f_graph:
             st.markdown(f"##### 📊 진드기 발육단계별 우점 구성 비율")
