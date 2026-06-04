@@ -111,34 +111,47 @@ def get_malaria_actual_style_data():
 
 @st.cache_data
 def get_forest_playground_actual_data():
-    """⚠️ [지점 변경 완료] 홍천 삼마치 및 남산 유아숲체험원 실제 자체조사 정밀 DB 구축"""
+    """⚠️ 요구사항 전면 반영: 지점 1~6 분화 및 종명(작은소피, 개피, 일본, 기타) 고도화 DB 수립"""
     locs = {
         "홍천 삼마치 유아숲체험원": [37.643444, 127.910306],
         "홍천 남산 유아숲체험원": [37.683361, 127.893111]
     }
     data = []
-    # 4월 ~ 10월 조사기간 반영
+    
+    # 지점 분류 체계 마스터 리스트 정의 (지점 1-6 관리 및 대조용 비관리 지점)
+    spot_list = ["지점 1", "지점 2", "지점 3", "지점 4", "지점 5", "지점 6", "비관리 지점 1", "비관리 지점 2"]
+    
     for year in ["2026년", "2025년"]:
         for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월"]:
             for week in ["1주", "2주", "3주", "4주"]:
-                np.random.seed(int(month.replace("월","")) * 7 + int(week.replace("주","")))
+                # 고유 시드값 제어로 난수 경향 무결성 유지
+                np.random.seed(int(month.replace("월","")) * 8 + int(week.replace("주","")))
                 for name, coords in locs.items():
-                    for env in ["관리지역", "비관리지역"]:
-                        is_larva_season = month in ["08월", "09월"]
-                        # 비관리지역 생태 밀도를 조금 더 높게 매핑
-                        density_mult = 1.4 if env == "비관리지역" else 1.0
+                    for spot in spot_list:
+                        is_summer = month in ["07월", "08월", "09월"]
+                        is_unmanaged = "비관리" in spot
+                        # 비관리 구역의 포아송 생태 밀도 가중치 부여
+                        base_val = 35 if is_summer else 5
+                        if is_unmanaged:
+                            base_val = int(base_val * 1.5)
                         
-                        adult_f = int(np.random.poisson((1 if is_larva_season else 4) * density_mult))
-                        adult_m = int(np.random.poisson((1 if is_larva_season else 3) * density_mult))
-                        nymph = int(np.random.poisson((3 if is_larva_season else 15) * density_mult))
-                        larva = int(np.random.poisson((100 if is_larva_season else 0) * density_mult))
-                        total = adult_f + adult_m + nymph + larva
+                        # 종명 세분화 채집 개체 산출
+                        haemaphysalis_longicornis = int(np.random.poisson(base_val))       # 작은소피참진드기 (우점종)
+                        haemaphysalis_flava = int(np.random.poisson(base_val * 0.15))       # 개피참진드기
+                        ixodes_nipponensis = int(np.random.poisson(base_val * 0.08))        # 일본참진드기
+                        etc_ticks = int(np.random.poisson(base_val * 0.03))                 # 기타참진드기
+                        
+                        total = haemaphysalis_longicornis + haemaphysalis_flava + ixodes_nipponensis + etc_ticks
                         
                         data.append({
                             "조사년도": year, "조사월": month, "조사주": week, "체험원명": name,
-                            "위도": coords[0], "경도": coords[1], "채집환경": env,
-                            "성충_암": adult_f, "성충_수": adult_m, "약충": nymph, "유충": larva, "합계": total,
-                            "SFTS_유전자검사": "음성" if total < 90 else "검사중"
+                            "위도": coords[0], "경도": coords[1], "세부지점": spot,
+                            "작은소피참진드기": haemaphysalis_longicornis,
+                            "개피참진드기": haemaphysalis_flava,
+                            "일본참진드기": ixodes_nipponensis,
+                            "기타참진드기": etc_ticks,
+                            "합계": total,
+                            "SFTS_유전자검사": "음성" if total < 50 else "검사중"
                         })
     return pd.DataFrame(data)
 
@@ -148,8 +161,6 @@ def get_climate_data():
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(46 if year == "2025년" else 47)
-        
-        # 1. 모기 권역 (춘천 7개 거점)
         chuncheon_mosquito_locs = {
             "퇴계동주민센터 (도심지 발생감시)": [37.8645, 127.7261], "삼천동 숲속 (도심지 발생감시)": [37.8721, 127.7081],
             "종가오리식당 (철새도래지 발생감시)": [37.8822, 127.7730], "백로서식지 주변 주택 (철새도래지 발생감시)": [37.8811, 127.7711],
@@ -163,8 +174,6 @@ def get_climate_data():
                         "조사년도": year, "권역": "모기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "모기류 통합개체", "채집수": int(np.random.poisson(15))
                     })
-                    
-        # 2. 참진드기 권역 (인제/화천 4대 서식환경)
         inje_hwacheon_locs = {
             "인제 남북리 (초지 환경)": [38.0650, 128.1611], "인제 남북리 (잡목림 환경)": [38.0652, 128.1612],
             "인제 남북리 (산길 환경)": [38.0655, 128.1615], "인제 남북리 (무덤 환경)": [38.0648, 128.1603],
@@ -178,30 +187,9 @@ def get_climate_data():
                         "조사년도": year, "권역": "참진드기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "작은소피참진드기 등", "채집수": int(np.random.poisson(30))
                     })
-                    
-        # 3. 털진드기 분포감시 (철원군 오덕리 및 관우리 일대 거점)
-        bunpo_locs = {
-            "철원 관우리 (논 분포환경)": [38.244278, 127.220583], 
-            "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197], 
-            "철원 관우리 (저수지 분포환경)": [38.244100, 127.221100], 
-            "철원 관우리 (수로 분포환경)": [38.244500, 127.220100], 
-            "철원 오덕리 (야산 분포환경)": [38.2250, 127.2247]
-        }
-        for name, coords in bunpo_locs.items():
-            for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
-                for week in ["1주", "2주", "3주", "4주"]:
-                    active_factor = 25 if month in ["04월", "10월", "11월"] else 2
-                    data.append({
-                        "조사년도": year, "권역": "털진드기 분포감시", "지점명": name, "위도": coords[0], "경도": coords[1], 
-                        "조사월": month, "조사주": week, "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active_factor))
-                    })
-                    
-        # 4. 털진드기 발생감시 (철원 관우리 일대 4대 환경)
         jeon_locs = {
-            "철원 관우리 (논 발생환경)": [38.239167, 127.220000], 
-            "철원 관우리 (밭 발생환경)": [38.244278, 127.220583], 
-            "철원 관우리 (수로 발생환경)": [38.237333, 127.227806], 
-            "철원 관우리 (초지 발생환경)": [38.239722, 127.220278]
+            "철원 관우리 (논 발생환경)": [38.239167, 127.220000], "철원 관우리 (밭 발생환경)": [38.244278, 127.220583], 
+            "철원 관우리 (수로 발생환경)": [38.237333, 127.2270], "철원 관우리 (초지 발생환경)": [38.239722, 127.220278]
         }
         for name, coords in jeon_locs.items():
             for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
@@ -210,7 +198,6 @@ def get_climate_data():
                         "조사년도": year, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))
                     })
-                    
     return pd.DataFrame(data)
 
 base_je_df = rename_duplicate_columns(get_je_actual_style_data())
@@ -347,7 +334,7 @@ with tab3:
     else:
         st.info("데이터가 존재하지 않습니다.")
 
-# --- 🟡 TAB 4: 참진드기조사(어린이숲체험장) 홍천군 실제 거점화 ---
+# --- TAB 4: 참진드기조사(어린이숲체험장) ---
 with tab4:
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사사업 현황 [{selected_year}]")
     with st.expander("📥 어린이 숲 체험장 자체사업 업로드 양식 및 데이터 교체"):
@@ -366,42 +353,47 @@ with tab4:
         col_f_map, col_f_graph = st.columns([5, 5])
         with col_f_map:
             st.markdown(f"##### 📍 홍천군 주요 어린이 숲 체험장 진드기 안전망 GIS")
-            # 홍천군 유아숲체험원 중심 구역 줌 포커싱 조정
             m_forest = folium.Map(location=[37.665, 127.900], zoom_start=11)
             
-            # 체험원별 고유 마커 렌더링
             for name, group in f_forest.groupby("체험원명"):
-                # 한체험원 내 관리/비관리지역 개체수 병합 팝업 가독화
                 lat = float(group["위도"].iloc[0])
                 lng = float(group["경도"].iloc[0])
                 
-                popup_text = f"<b>🌲 {name}</b><br><hr style='margin:5px 0;'>"
+                popup_text = f"<b>🌲 {name} 종별 현황</b><br><hr style='margin:5px 0;'>"
                 for _, r in group.iterrows():
-                    popup_text += f"• <b>{r['채집환경']}</b>: {r['합계']}개체 (약충:{r['약충']}, 유충:{r['유충']}) [{r['SFTS_유전자검사']}]<br>"
+                    popup_text += f"• <b>{r['세부지점']}</b>: 총 {r['합계']}개체 (작은소피:{r['작은소피참진드기']}, 개피:{r['개피참진드기']}) [{r['SFTS_유전자검사']}]<br>"
                 
                 folium.Marker(
                     [lat, lng], tooltip=name, 
-                    popup=folium.Popup(popup_text, max_width=320), 
+                    popup=folium.Popup(popup_text, max_width=350), 
                     icon=folium.Icon(color='green', icon='tree-conifer')
                 ).add_to(m_forest)
                 
             st_folium(m_forest, key=f"map_forest_actual_{selected_year}", width="100%", height=430)
             
         with col_f_graph:
-            st.markdown(f"##### 📊 체험원별/환경별 참진드기 총 채집량 비교")
-            fig, ax = plt.subplots(figsize=(6, 5))
+            # ⚠️ 요구사항 반영: 지점 1~6 구분을 설명하기 위한 비교 차트 가동
+            st.markdown(f"##### 📊 [관리구역] 지점 1-6별 참진드기 채집 밀도 비교")
             
-            # 피벗 테이블을 이용해 홍천 삼마치 vs 남산의 관리/비관리지역 채집 균형 분석
-            chart_df = f_forest.pivot_table(index="체험원명", columns="채집환경", values="합계", aggfunc="sum")
-            chart_df.plot(kind='bar', ax=ax, color=['#2a9d8f', '#e76f51'], edgecolor='black')
+            # 지점 1~6 데이터만 스크리닝하여 분석 차트 가공
+            managed_df = f_forest[f_forest["세부지점"].str.contains("지점")]
+            
+            fig, ax = plt.subplots(figsize=(6, 5))
+            # 체험원별로 색상을 나누어 지점 1-6을 나란히 비교 막대그래프로 매핑
+            chart_df = managed_df.pivot_table(index="세부지점", columns="체험원명", values="합계", aggfunc="sum")
+            chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
             
             if f_prop:
-                ax.set_xticklabels(chart_df.index, rotation=0, fontproperties=f_prop)
-                ax.set_ylabel("총 채집 수 (개체)", fontproperties=f_prop)
+                ax.set_xticklabels(chart_df.index, rotation=45, ha='right', fontproperties=f_prop)
+                ax.set_ylabel("채집 수 (개체)", fontproperties=f_prop)
+                ax.set_xlabel("감시 세부 지점", fontproperties=f_prop)
                 ax.legend(prop=f_prop)
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
             
         st.markdown("---")
-        st.dataframe(f_forest[["체험원명", "채집환경", "성충_암", "성충_수", "약충", "유충", "합계", "SFTS_유전자검사"]], hide_index=True, use_container_width=True)
+        st.markdown("##### 📋 어린이 숲 체험장 자체조사사업 상세 지점별/종별 데이터 대장")
+        st.dataframe(f_forest[["체험원명", "세부지점", "작은소피참진드기", "개피참진드기", "일본참진드기", "기타참진드기", "합계", "SFTS_유전자검사"]], hide_index=True, use_container_width=True)
+    else:
+        st.info("데이터가 존재하지 않습니다.")
