@@ -9,36 +9,29 @@ import matplotlib.font_manager as fm
 import urllib.request
 import os
 
+# 페이지 설정 (가장 상단에 위치)
+st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
+
 # -----------------------------------------------------------------
-# [리눅스 클라우드 환경용 - 실시간 한글 폰트 다운로드 및 적용 영역]
+# [파이썬 3.14 클라우드 환경용 - 안전한 한글 폰트 프로퍼티 로드]
 # -----------------------------------------------------------------
 @st.cache_resource
-def load_korean_font():
-    """스트림릿 클라우드(리눅스) 환경에서도 한글이 깨지지 않도록 나눔고딕 폰트를 실시간 다운로드"""
+def get_korean_font_prop():
+    """파이썬 3.14 최신 환경에서도 에러가 없도록 나눔고딕 폰트 속성을 안전하게 로드"""
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
     font_path = "NanumGothic.ttf"
     
-    # 서버 환경에 폰트 파일이 없을 경우 다운로드 진행
     if not os.path.exists(font_path):
         try:
             urllib.request.urlretrieve(font_url, font_path)
         except Exception as e:
-            # 다운로드 실패 시 기본 시스템 폰트 사용 우회
-            st.sidebar.warning("한글 폰트 로드 중 일시적 오류가 발생했습니다. 시스템 기본 폰트를 사용합니다.")
             return None
             
-    # 다운로드된 폰트를 matplotlib에 등록
-    fe = fm.FontEntry(fname=font_path, name='NanumGothic')
-    fm.font_manager.ttflist.insert(0, fe)
-    plt.rc('font', family='NanumGothic')
-    plt.rc('axes', unicode_minus=False)
-    return "NanumGothic"
+    # 💡 해결 포인트: font_manager 속성에 직접 insert하지 않고, FontProperties 객체로 안전하게 변환하여 반환
+    return fm.FontProperties(fname=font_path)
 
-# 폰트 로드 함수 실행
-loaded_font = load_korean_font()
-
-# 페이지 설정
-st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
+# 안전한 한글 폰트 속성 획득
+f_prop = get_korean_font_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드")
 st.markdown("질병조사과 주요 감시사업별 년도별, 월별, 주별 채집 현황을 모니터링하고 데이터를 입력할 수 있는 시스템입니다.")
@@ -215,7 +208,11 @@ with tab1:
             sizes = [f_je["작은빨간집모기"].sum(), f_je["빨간집모기"].sum(), f_je["금빛숲모기"].sum(), f_je["흰줄숲모기"].sum(), f_je["얼룩날개모기류"].sum(), f_je["기타"].sum()]
             if sum(sizes) > 0:
                 fig, ax = plt.subplots(figsize=(6, 5))
-                ax.pie(sizes, labels=["작은빨간집모기", "빨간집모기", "금빛숲모기", "흰줄숲모기", "얼룩날개모기류", "기타"], autopct='%1.1f%%', startangle=90, colors=['#e63946', '#f4a261', '#2a9d8f', '#e76f51', '#457b9d', '#9a8c98'])
+                # 💡 안전성 개선: f_prop 속성을 파이차트 텍스트 폰트로 주입
+                patches, texts, autotexts = ax.pie(sizes, labels=["작은빨간집모기", "빨간집모기", "금빛숲모기", "흰줄숲모기", "얼룩날개모기류", "기타"], autopct='%1.1f%%', startangle=90, colors=['#e63946', '#f4a261', '#2a9d8f', '#e76f51', '#457b9d', '#9a8c98'])
+                if f_prop:
+                    for t in texts: t.set_fontproperties(f_prop)
+                    for t in autotexts: t.set_fontproperties(f_prop)
                 st.pyplot(fig)
                 plt.close()
         st.dataframe(f_je[["지점명", "작은빨간집모기", "빨간집모기", "금빛숲모기", "흰줄숲모기", "얼룩날개모기류", "기타", "합계", "병원체검사"]], hide_index=True, use_container_width=True)
@@ -242,6 +239,9 @@ with tab2:
         with c2:
             fig, ax = plt.subplots(figsize=(6, 5))
             f_mal.set_index("지점명")["얼룩날개모기류"].plot(kind='barh', ax=ax, color='#1d3557')
+            if f_prop:
+                ax.set_title("거점별 채집내역", fontproperties=f_prop)
+                ax.set_yticklabels(f_mal["지점명"], fontproperties=f_prop)
             st.pyplot(fig)
             plt.close()
         st.dataframe(f_mal[["지점명", "얼룩날개모기류", "빨간집모기", "금빛숲모기", "흰줄숲모기", "기타모기류", "합계", "말라리아원충감염조사"]], hide_index=True, use_container_width=True)
@@ -276,7 +276,9 @@ with tab3:
         with col_day:
             fig, ax = plt.subplots(figsize=(6, 5.2))
             f_cli.set_index("지점명")["채집수"].plot(kind='bar', ax=ax, color='#2a9d8f')
-            plt.xticks(rotation=45, ha='right', fontsize=9)
+            if f_prop:
+                ax.set_xticklabels(f_cli["지점명"], rotation=45, ha='right', fontsize=9, fontproperties=f_prop)
+                ax.set_ylabel("채집 개체 수 (개체)", fontproperties=f_prop)
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
@@ -300,14 +302,17 @@ with tab4:
             m_forest = folium.Map(location=[37.9, 128.2], zoom_start=8)
             for _, r in f_forest.iterrows():
                 popup_forest_text = f"<b>{r['지점명']}</b><br>• 성충(암/수): {r['성충_암']}/{r['성충_수']}<br>• 합계: {r['합계']}개체"
-                folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=folium.Popup(popup_forest_text, max_width=280), icon=fm.font_manager and folium.Icon(color='green', icon='tree-conifer')).add_to(m_forest)
+                folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=folium.Popup(popup_forest_text, max_width=280), icon=folium.Icon(color='green', icon='tree-conifer')).add_to(m_forest)
             st_folium(m_forest, key=f"map_forest_actual_{selected_year}", width="100%", height=430)
         with col_f_graph:
             st.markdown(f"##### 📊 진드기 발육단계별 우점 구성 비율")
             stage_totals = [f_forest["성충_암"].sum() + f_forest["성충_수"].sum(), f_forest["약충"].sum(), f_forest["유충"].sum()]
             if sum(stage_totals) > 0:
                 fig, ax = plt.subplots(figsize=(6, 5))
-                ax.pie(stage_totals, labels=["성충(Adult)", "약충(Nymph)", "유충(Larva)"], autopct='%1.1f%%', startangle=90, colors=['#2b2d42', '#8d99ae', '#ef233c'])
+                patches, texts, autotexts = ax.pie(stage_totals, labels=["성충(Adult)", "약충(Nymph)", "유충(Larva)"], autopct='%1.1f%%', startangle=90, colors=['#2b2d42', '#8d99ae', '#ef233c'])
+                if f_prop:
+                    for t in texts: t.set_fontproperties(f_prop)
+                    for t in autotexts: t.set_fontproperties(f_prop)
                 st.pyplot(fig)
                 plt.close()
         st.dataframe(f_forest[["지점명", "성충_암", "성충_수", "약충", "유충", "합계", "SFTS_유전자검사"]], hide_index=True, use_container_width=True)
