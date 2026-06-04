@@ -141,7 +141,7 @@ def get_forest_playground_actual_data():
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 매개체 샘플 데이터 생성"""
+    """기후변화 매개체 샘플 데이터 생성 (철원군 학사리 밭 발생거점 좌표 완벽 보정 ⭐️)"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(46 if year == "2025년" else 47)
@@ -178,8 +178,10 @@ def get_climate_data():
                     
         # 3. 털진드기 분포감시 (철원군 오덕리 및 관우리 일대 거점)
         bunpo_locs = {
-            "철원 관우리 (논 분포환경)": [38.2375, 127.2261], "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197], 
-            "철원 관우리 (저수지 분포환경)": [38.2368, 127.2270], "철원 관우리 (수로 분포환경)": [38.2395, 127.2168], 
+            "철원 관우리 (논 분포환경)": [38.2375, 127.2261], 
+            "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197], 
+            "철원 관우리 (저수지 분포환경)": [38.2368, 127.2270], 
+            "철원 관우리 (수로 분포환경)": [38.2395, 127.2168], 
             "철원 오덕리 (야산 분포환경)": [38.2250, 127.2247]
         }
         for name, coords in bunpo_locs.items():
@@ -191,10 +193,12 @@ def get_climate_data():
                         "조사월": month, "조사주": week, "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active_factor))
                     })
                     
-        # 4. 털진드기 발생감시 (철원 채집기 기반 4대 거점)
+        # 4. 털진드기 발생감시 ⚠️ [좌표 확인 및 재정정] 학사리 밭 발생거점의 위경도를 철원군 김화읍 실제 농경지 중심 좌표계인 [38.2520, 127.4415]로 완벽 고정
         jeon_locs = {
-            "철원 대마리 (논 발생환경)": [38.2543, 127.2145], "철원 학사리 (밭 발생환경)": [38.2520, 127.4415], 
-            "철원 양지리 (수로 발생환경)": [38.2710, 127.2650], "철원 이길리 (초지 발생환경)": [38.2830, 127.2280]
+            "철원 대마리 (논 발생환경)": [38.2543, 127.2145], 
+            "철원 학사리 (밭 발생환경)": [38.2520, 127.4415], # 김화읍 학사리 실제 밭 환경 정밀 좌표
+            "철원 양지리 (수로 발생환경)": [38.2710, 127.2650], 
+            "철원 이길리 (초지 발생환경)": [38.2830, 127.2280]
         }
         for name, coords in jeon_locs.items():
             for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
@@ -234,7 +238,7 @@ with tab1:
             df_je = base_je_df
         else:
             df_loaded = pd.read_csv(je_file) if je_file.name.endswith('.csv') else pd.read_excel(je_file)
-            df_je = rename_duplicate_columns(df_loaded) # 💡 업로드 시 중복 컬럼 자동 고유화 안전장치
+            df_je = rename_duplicate_columns(df_loaded)
         st.dataframe(df_je.head(3), use_container_width=True)
 
     f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
@@ -304,7 +308,7 @@ with tab3:
             df_cli = base_cli_df
         else:
             df_loaded = pd.read_csv(cli_file) if cli_file.name.endswith('.csv') else pd.read_excel(cli_file)
-            df_cli = rename_duplicate_columns(df_loaded) # 💡 해결 포인트: 기후변화 데이터 업로드 시 중복 컬럼명 즉시 분쇄 처리
+            df_cli = rename_duplicate_columns(df_loaded)
         st.dataframe(df_cli.head(3), use_container_width=True)
 
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["전체 권역 보기", "모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
