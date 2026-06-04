@@ -10,7 +10,7 @@ import urllib.request
 import os
 
 # 페이지 설정 (가장 상단에 위치 필수)
-st.set_config = st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
+st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
 
 # -----------------------------------------------------------------
 # [파이썬 3.14 클라우드 환경용 - 안전한 한글 폰트 프로퍼티 로드]
@@ -111,14 +111,12 @@ def get_malaria_actual_style_data():
 
 @st.cache_data
 def get_forest_playground_actual_data():
-    """⚠️ 요구사항 전면 반영: 관리지점 1-3 및 비관리지점 1-3 정밀 1:1 매칭 구조화 완료"""
+    """어린이 숲 체험장 참진드기 자체조사사업 마스터 DB"""
     locs = {
         "홍천 삼마치 유아숲체험원": [37.643444, 127.910306],
         "홍천 남산 유아숲체험원": [37.683361, 127.893111]
     }
     data = []
-    
-    # 지점 분류 체계 정밀 재정립 (관리지점 3개 vs 비관리지점 3개)
     spot_list = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
     
     for year in ["2026년", "2025년"]:
@@ -129,16 +127,13 @@ def get_forest_playground_actual_data():
                     for spot in spot_list:
                         is_summer = month in ["07월", "08월", "09월"]
                         is_unmanaged = "비관리" in spot
-                        
-                        # 방역 조치 유무에 따른 밀도 가중치 부여 (비관리지역이 생태밀도가 높음)
                         base_val = 20 if is_summer else 4
                         if is_unmanaged:
                             base_val = int(base_val * 1.6)
                         
-                        # 실제 원본 csv 파일 기반 참진드기 종명 바인딩
-                        haemaphysalis_longicornis = int(np.random.poisson(base_val))       # 작은소피참진드기
-                        haemaphysalis_flava = int(np.random.poisson(base_val * 0.18))       # 개피참진드기
-                        haemaphysalis_japonica = int(np.random.poisson(base_val * 0.05))    # 일본참진드기
+                        haemaphysalis_longicornis = int(np.random.poisson(base_val))
+                        haemaphysalis_flava = int(np.random.poisson(base_val * 0.18))
+                        haemaphysalis_japonica = int(np.random.poisson(base_val * 0.05))
                         
                         total = haemaphysalis_longicornis + haemaphysalis_flava + haemaphysalis_japonica
                         
@@ -159,6 +154,8 @@ def get_climate_data():
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(46 if year == "2025년" else 47)
+        
+        # 1. 모기 권역 (춘천 7개 거점)
         chuncheon_mosquito_locs = {
             "퇴계동주민센터 (도심지 발생감시)": [37.8645, 127.7261], "삼천동 숲속 (도심지 발생감시)": [37.8721, 127.7081],
             "종가오리식당 (철새도래지 발생감시)": [37.8822, 127.7730], "백로서식지 주변 주택 (철새도래지 발생감시)": [37.8811, 127.7711],
@@ -172,6 +169,8 @@ def get_climate_data():
                         "조사년도": year, "권역": "모기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "모기류 통합개체", "채집수": int(np.random.poisson(15))
                     })
+                    
+        # 2. 참진드기 권역 (인제/화천 4대 서식환경)
         inje_hwacheon_locs = {
             "인제 남북리 (초지 환경)": [38.0650, 128.1611], "인제 남북리 (잡목림 환경)": [38.0652, 128.1612],
             "인제 남북리 (산길 환경)": [38.0655, 128.1615], "인제 남북리 (무덤 환경)": [38.0648, 128.1603],
@@ -185,9 +184,26 @@ def get_climate_data():
                         "조사년도": year, "권역": "참진드기 권역", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "작은소피참진드기 등", "채집수": int(np.random.poisson(30))
                     })
+                    
+        # 3. 털진드기 분포감시 (철원군 관우리 482-9번지 일대)
+        bunpo_locs = {
+            "철원 관우리 (논 분포환경)": [38.244278, 127.220583], "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197], 
+            "철원 관우리 (저수지 분포환경)": [38.244100, 127.221100], "철원 관우리 (수로 분포환경)": [38.244500, 127.220100], 
+            "철원 오덕리 (야산 분포환경)": [38.2250, 127.2247]
+        }
+        for name, coords in bunpo_locs.items():
+            for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
+                for week in ["1주", "2주", "3주", "4주"]:
+                    active_factor = 25 if month in ["04월", "10월", "11월"] else 2
+                    data.append({
+                        "조사년도": year, "권역": "털진드기 분포감시", "지점명": name, "위도": coords[0], "경도": coords[1], 
+                        "조사월": month, "조사주": week, "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active_factor))
+                    })
+                    
+        # 4. 털진드기 발생감시 (철원 관우리 4대 발생거점)
         jeon_locs = {
             "철원 관우리 (논 발생환경)": [38.239167, 127.220000], "철원 관우리 (밭 발생환경)": [38.244278, 127.220583], 
-            "철원 관우리 (수로 발생환경)": [38.237333, 127.2270], "철원 관우리 (초지 발생환경)": [38.239722, 127.220278]
+            "철원 관우리 (수로 발생환경)": [38.237333, 127.227806], "철원 관우리 (초지 발생환경)": [38.239722, 127.220278]
         }
         for name, coords in jeon_locs.items():
             for month in ["04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"]:
@@ -196,6 +212,7 @@ def get_climate_data():
                         "조사년도": year, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], 
                         "조사월": month, "조사주": week, "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))
                     })
+                    
     return pd.DataFrame(data)
 
 base_je_df = rename_duplicate_columns(get_je_actual_style_data())
@@ -305,10 +322,10 @@ with tab3:
         f_cli = f_cli[f_cli["권역"] == selected_zone]
 
     if not f_cli.empty:
-        col_map, col_day = st.columns([5, 5])
-        with col_map:
-            st.markdown(f"##### 📍 {selected_year} {selected_month} 매개체 생태 거점 현황 (GIS)")
-            m_cli = folium.Map(location=[38.24, 127.30], zoom_start=11)
+        # ⚠️ 패치 포인트: 전체 권역 보기일 경우 레이아웃을 쪼개지 않고 지도를 넓게 출력하고 그래프 차단
+        if selected_zone == "전체 권역 보기":
+            st.markdown(f"##### 📍 {selected_year} {selected_month} 매개체 통합 생태 거점 현황 (GIS)")
+            m_cli = folium.Map(location=[38.05, 127.85], zoom_start=9) # 강원 전역 시야각 확보
             for _, r in f_cli.iterrows():
                 if "모기 권역" in r['권역']: m_color, m_icon = "purple", "flash"
                 elif r['권역'] == "참진드기 권역": m_color, m_icon = "darkgreen", "leaf"
@@ -316,23 +333,38 @@ with tab3:
                 elif r['권역'] == "털진드기 발생감시": m_color, m_icon = "blue", "flag"
                 else: m_color, m_icon = "gray", "info-sign"
                 folium.Marker(location=[float(r['위도']), float(r['경도'])], tooltip=f"[{r['권역']}] {r['지점명']}", popup=f"년도: {r['조사년도']}<br>{r['채집종']}: {r['채집수']}개체", icon=folium.Icon(color=m_color, icon=m_icon)).add_to(m_cli)
-            st_folium(m_cli, key=f"map_cli_actual_{selected_year}_{selected_zone}", width="100%", height=450)
-        with col_day:
-            st.markdown(f"##### 📊 [{selected_year} {selected_month}] 지점별 채집 세부 분포량")
-            fig, ax = plt.subplots(figsize=(6, 5.2))
-            f_cli.set_index("지점명")["채집수"].plot(kind='bar', ax=ax, color='#2a9d8f')
-            if f_prop:
-                ax.set_xticklabels(f_cli["지점명"], rotation=45, ha='right', fontsize=9, fontproperties=f_prop)
-                ax.set_ylabel("채집 개체 수 (개체)", fontproperties=f_prop)
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close()
+            st_folium(m_cli, key=f"map_cli_actual_{selected_year}_{selected_zone}_full", width="100%", height=500)
+        else:
+            # 개별 권역 필터일 경우에만 그래프와 반반씩 레이아웃 분할 노출
+            col_map, col_day = st.columns([5, 5])
+            with col_map:
+                st.markdown(f"##### 📍 {selected_year} {selected_month} 매개체 생태 거점 현황 (GIS)")
+                m_cli = folium.Map(location=[38.24, 127.30], zoom_start=11)
+                for _, r in f_cli.iterrows():
+                    if "모기 권역" in r['권역']: m_color, m_icon = "purple", "flash"
+                    elif r['권역'] == "참진드기 권역": m_color, m_icon = "darkgreen", "leaf"
+                    elif r['권역'] == "털진드기 분포감시": m_color, m_icon = "orange", "home"
+                    elif r['권역'] == "털진드기 발생감시": m_color, m_icon = "blue", "flag"
+                    else: m_color, m_icon = "gray", "info-sign"
+                    folium.Marker(location=[float(r['위도']), float(r['경도'])], tooltip=f"[{r['권역']}] {r['지점명']}", popup=f"년도: {r['조사년도']}<br>{r['채집종']}: {r['채집수']}개체", icon=folium.Icon(color=m_color, icon=m_icon)).add_to(m_cli)
+                st_folium(m_cli, key=f"map_cli_actual_{selected_year}_{selected_zone}", width="100%", height=450)
+            with col_day:
+                st.markdown(f"##### 📊 [{selected_year} {selected_month}] 지점별 채집 세부 분포량")
+                fig, ax = plt.subplots(figsize=(6, 5.2))
+                f_cli.set_index("지점명")["채집수"].plot(kind='bar', ax=ax, color='#2a9d8f')
+                if f_prop:
+                    ax.set_xticklabels(f_cli["지점명"], rotation=45, ha='right', fontsize=9, fontproperties=f_prop)
+                    ax.set_ylabel("채집 개체 수 (개체)", fontproperties=f_prop)
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close()
+                
         st.markdown("---")
         st.dataframe(f_cli[["조사년도", "권역", "지점명", "채집종", "채집수"]], hide_index=True, use_container_width=True)
     else:
         st.info("데이터가 존재하지 않습니다.")
 
-# --- 🟡 TAB 4: 참진드기조사(어린이숲체험장) 관리 1-3 vs 비관리 1-3 개편 ---
+# --- TAB 4: 참진드기조사(어린이숲체험장) ---
 with tab4:
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사사업 현황 [{selected_year}]")
     with st.expander("📥 어린이 숲 체험장 자체사업 업로드 양식 및 데이터 교체"):
@@ -352,39 +384,21 @@ with tab4:
         with col_f_map:
             st.markdown(f"##### 📍 홍천군 주요 어린이 숲 체험장 진드기 안전망 GIS")
             m_forest = folium.Map(location=[37.665, 127.900], zoom_start=11)
-            
             for name, group in f_forest.groupby("체험원명"):
                 lat = float(group["위도"].iloc[0])
                 lng = float(group["경도"].iloc[0])
-                
                 popup_text = f"<b>🌲 {name} 지점별 현황</b><br><hr style='margin:5px 0;'>"
-                # 지점 1-3 및 비관리 1-3 정밀 텍스트 파싱
                 for _, r in group.iterrows():
                     popup_text += f"• <b>{r['구분지점']}</b>: 총 {r['합계']}개체 (작은소피:{r['작은소피참진드기']}, 개피:{r['개피참진드기']}) [{r['SFTS_유전자검사']}]<br>"
-                
-                folium.Marker(
-                    [lat, lng], tooltip=name, 
-                    popup=folium.Popup(popup_text, max_width=350), 
-                    icon=folium.Icon(color='green', icon='tree-conifer')
-                ).add_to(m_forest)
-                
+                folium.Marker([lat, lng], tooltip=name, popup=folium.Popup(popup_text, max_width=350), icon=folium.Icon(color='green', icon='tree-conifer')).add_to(m_forest)
             st_folium(m_forest, key=f"map_forest_actual_{selected_year}", width="100%", height=430)
-            
         with col_f_graph:
-            # ⚠️ 핵심 요구사항: 관리지점 1-3 vs 비관리지점 1-3의 밀도를 직관적으로 판독할 수 있는 교차 차트 빌드
             st.markdown(f"##### 📊 [대조분석] 관리지점 1-3 vs 비관리지점 1-3 채집량 비교")
-            
             fig, ax = plt.subplots(figsize=(6, 5))
-            
-            # 피벗 테이블을 이용해 지점별 채집 균형 매핑
             chart_df = f_forest.pivot_table(index="구분지점", columns="체험원명", values="합계", aggfunc="sum")
-            
-            # 관리지점과 비관리지점을 순서대로 정렬하기 위해 명시적 인덱스 재지정
             desired_order = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
             chart_df = chart_df.reindex(desired_order)
-            
             chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
-            
             if f_prop:
                 ax.set_xticklabels(chart_df.index, rotation=45, ha='right', fontproperties=f_prop)
                 ax.set_ylabel("채집 수 (개체)", fontproperties=f_prop)
@@ -393,7 +407,6 @@ with tab4:
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
-            
         st.markdown("---")
         st.markdown("##### 📋 어린이 숲 체험장 자체조사사업 상세 지점별(관리지점 1-3 / 비관리지점 1-3) 데이터 대장")
         st.dataframe(f_forest[["체험원명", "구분지점", "작은소피참진드기", "개피참진드기", "일본참진드기", "합계", "SFTS_유전자검사"]], hide_index=True, use_container_width=True)
