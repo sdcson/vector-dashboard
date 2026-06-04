@@ -141,7 +141,7 @@ def get_forest_playground_actual_data():
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 매개체 샘플 데이터 생성 (철원군 학사리/오덕리 좌표 보정 완비)"""
+    """기후변화 매개체 샘플 데이터 생성 (관우리 482-9 지번 정밀 보정본 ⭐️)"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(46 if year == "2025년" else 47)
@@ -176,12 +176,12 @@ def get_climate_data():
                         "조사월": month, "조사주": week, "채집종": "작은소피참진드기 등", "채집수": int(np.random.poisson(30))
                     })
                     
-        # 3. 털진드기 분포감시 (철원군 오덕리 및 관우리 일대 거점)
+        # 3. 털진드기 분포감시 ⚠️ [요구사항 반영] 관우리 482-9번지 실제 요청하신 초정밀 도각 좌표계(38.244278, 127.220583) 전면 보정 도입 
         bunpo_locs = {
-            "철원 관우리 (논 분포환경)": [38.2375, 127.2261], 
+            "철원 관우리 (논 분포환경)": [38.244278, 127.220583], 
             "철원 오덕리 (밭 분포환경)": [38.2278, 127.2197], 
-            "철원 관우리 (저수지 분포환경)": [38.2368, 127.2270], 
-            "철원 관우리 (수로 분포환경)": [38.2395, 127.2168], 
+            "철원 관우리 (저수지 분포환경)": [38.244100, 127.221100], # 관우리 인근 저수지 연동
+            "철원 관우리 (수로 분포환경)": [38.244500, 127.220100], # 관우리 인근 수로 연동
             "철원 오덕리 (야산 분포환경)": [38.2250, 127.2247]
         }
         for name, coords in bunpo_locs.items():
@@ -193,7 +193,7 @@ def get_climate_data():
                         "조사월": month, "조사주": week, "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active_factor))
                     })
                     
-        # 4. 털진드기 발생감시 (철원 학사리 밭 발생거점 좌표 완벽 보정본)
+        # 4. 털진드기 발생감시 (철원 채집기 기반 4대 거점)
         jeon_locs = {
             "철원 대마리 (논 발생환경)": [38.2543, 127.2145], 
             "철원 학사리 (밭 발생환경)": [38.2520, 127.4415], 
@@ -216,9 +216,8 @@ base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
 base_cli_df = rename_duplicate_columns(get_climate_data())
 
 # -----------------------------------------------------------------
-# [사이드바 영역 - 💡 올바른 강원도 공식 CI 로고 경로 패치]
+# [사이드바 공통 시간 필터 영역]
 # -----------------------------------------------------------------
-# ⚠️ 수정 포인트: 기존 오타인 'username' 경로를 'kgw' 공식 도청 도메인 규격 이미지 주소로 복원
 st.sidebar.image("https://www.gangwon.to/img/kgw/sub/ci_01.png", width=200)
 st.sidebar.markdown("### 📅 공통 시간 필터")
 
@@ -270,7 +269,7 @@ with tab2:
     st.header(f"🪖 접경지역 말라리아 매개모기 발생감시 [{selected_year}]")
     with st.expander("📥 말라리아 현업 업로드 양식 매뉴얼 및 데이터 교체"):
         malaria_template_csv = convert_df_to_csv(base_mal_df)
-        st.download_button(label="📥 [업로드서식] 말라리아 주별 결과 다운로드", data=malaria_template_csv, file_name="말라리아_양식.csv", mime="text/csv")
+        st.download_button(label="📥 [현업서식] 말라리아 주별 채집결과 양식 다운로드", data=malaria_template_csv, file_name="말라리아_양식.csv", mime="text/csv")
         mal_file = st.file_uploader("말라리아 현업 서식 파일 업로드", type=["csv", "xlsx"], key="mal_actual_up")
         if mal_file is None:
             df_mal = base_mal_df
@@ -321,7 +320,8 @@ with tab3:
         col_map, col_day = st.columns([5, 5])
         with col_map:
             st.markdown(f"##### 📍 {selected_year} {selected_month} 매개체 생태 거점 현황 (GIS)")
-            m_cli = folium.Map(location=[38.24, 127.30], zoom_start=11)
+            # 정밀 보정된 관우리 482-9번지가 포커싱의 정중앙에 잡히도록 중심좌표 패치
+            m_cli = folium.Map(location=[38.244, 127.220], zoom_start=12)
             for _, r in f_cli.iterrows():
                 if "모기 권역" in r['권역']: m_color, m_icon = "purple", "flash"
                 elif r['권역'] == "참진드기 권역": m_color, m_icon = "darkgreen", "leaf"
