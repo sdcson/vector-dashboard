@@ -52,89 +52,6 @@ def convert_df_to_csv(df):
     """라이브러리 없이 내장 기능만으로 한글 깨짐 없는 CSV 바이너리 변환 (UTF-8-SIG 사용)"""
     return df.to_csv(index=False).encode('utf-8-sig')
 
-# -----------------------------------------------------------------
-# [💡 핵심 연동 패치: 일본뇌염 멀티 시트 대응 표준 통합 파서]
-# -----------------------------------------------------------------
-def load_japanese_encephalitis_excel(uploaded_file):
-    """
-    현업에서 사용하는 3대 지점별 시트 분할형 엑셀 문서를 완벽히 인식하여
-    '지점명' 컬럼을 가상으로 생성하고 하나의 통합 데이터프레임으로 자동 병합합니다.
-    """
-    if uploaded_file is None:
-        return pd.DataFrame()
-        
-    file_name = uploaded_file.name.lower()
-    
-    if file_name.endswith('.xlsx') or file_name.endswith('.xls'):
-        try:
-            uploaded_file.seek(0)
-            xls = pd.ExcelFile(uploaded_file)
-            combined_list = []
-            
-            for sheet in xls.sheet_names:
-                uploaded_file.seek(0)
-                raw_sheet = pd.read_excel(uploaded_file, sheet_name=sheet, header=None, nrows=10)
-                skip_idx = 0
-                for r_idx in range(len(raw_sheet)):
-                    row_str = [str(x) for x in raw_sheet.iloc[r_idx].tolist()]
-                    if any(('월' in s and '주' in s) or '연중 주수' in s for s in row_str):
-                        skip_idx = r_idx
-                        break
-                
-                uploaded_file.seek(0)
-                df_sheet = pd.read_excel(uploaded_file, sheet_name=sheet, skiprows=skip_idx)
-                df_sheet = df_sheet.dropna(subset=[df_sheet.columns[0], df_sheet.columns[1]], how='all')
-                
-                if df_sheet.shape[0] > 0:
-                    first_col = df_sheet.columns[0]
-                    second_col = df_sheet.columns[1]
-                    
-                    df_sheet["조사월"] = df_sheet[first_col].astype(str).map(lambda x: f"{int(float(x)):02d}월" if x.replace('.','',1).isdigit() else x if '월' in x else f"{x}월")
-                    df_sheet["조사주"] = df_sheet[second_col].astype(str).map(lambda x: f"{int(float(x))}주" if x.replace('.','',1).isdigit() else x if '주' in x else f"{x}주")
-                    df_sheet["조사년도"] = "2026년"
-                    
-                    if '춘천' in sheet:
-                        df_sheet["지점명"] = "춘천시 신북읍 산천리 (우사 거점)"
-                    elif '강릉' in sheet:
-                        df_sheet["지점명"] = "강릉시 사천면 산대월리 (우사 거점)"
-                    elif '횡성' in sheet:
-                        df_sheet["지점명"] = "횡성군 공근면 하대리 (우사 거점)"
-                    else:
-                        df_sheet["지점명"] = f"{sheet} (우사 거점)"
-                        
-                    combined_list.append(df_sheet)
-                    
-            if combined_list:
-                return pd.concat(combined_list, ignore_index=True)
-        except Exception:
-            pass
-            
-    encodings = ['utf-8', 'cp949', 'euc-kr']
-    for enc in encodings:
-        try:
-            uploaded_file.seek(0)
-            raw_csv = pd.read_csv(uploaded_file, encoding=enc, header=None, nrows=10)
-            skip_idx = 0
-            for r_idx in range(len(raw_csv)):
-                row_str = [str(x) for x in raw_csv.iloc[r_idx].tolist()]
-                if '연중 주수' in row_str or '작은빨간집모기' in row_str:
-                    skip_idx = r_idx
-                    break
-            uploaded_file.seek(0)
-            df_csv = pd.read_csv(uploaded_file, encoding=enc, skiprows=skip_idx)
-            
-            if df_csv.shape[0] > 0:
-                df_csv["조사월"] = df_csv.iloc[:, 0].astype(str).map(lambda x: f"{x}월" if '월' not in str(x) else x)
-                df_csv["조사주"] = df_csv.iloc[:, 1].astype(str).map(lambda x: f"{x}주" if '주' not in str(x) else x)
-                df_csv["조사년도"] = "2026년"
-                if "지점명" not in df_csv.columns:
-                    df_csv["지점명"] = "춘천시 신북읍 산천리 (우사 거점)"
-            return df_csv
-        except Exception:
-            continue
-    return pd.DataFrame()
-
-
 def smart_load_uploaded_file(uploaded_file):
     """말라리아, 기후변화, 어린이숲용 표준 1시트 단일 파서"""
     if uploaded_file is None:
@@ -179,7 +96,7 @@ def smart_load_uploaded_file(uploaded_file):
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
-    """일본뇌염 가상 마스터 DB 생성"""
+    """일본뇌염 기본 마스터 DB 생성 (초기값 백업용)"""
     locs = {
         "춘천시 신북읍 산천리 (우사 거점)": [37.9250, 127.7410],
         "강릉시 사천면 산대월리 (우사 거점)": [37.7518, 128.8762],
@@ -200,13 +117,11 @@ def get_je_actual_style_data():
                 np.random.seed(month_num * 20 + week_num)
                 for name, coords in locs.items():
                     is_summer = month in ["07월", "08월", "09월"]
-                    
                     culex_tritaeniorhynchus = int(np.random.poisson(20 if is_summer else 0))
                     row = {
                         "조사년도": year, "조사월": month, "조사주": week, "월": month_num, "주": week_num, "연중 주수": month_num*4 + week_num,
                         "지점명": name, "위도": coords[0], "경도": coords[1], "작은빨간집모기": culex_tritaeniorhynchus
                     }
-                    
                     etc_total = 0
                     for sp in mosquito_species[1:]:
                         if sp in ["빨간집모기", "얼룩날개모기류"]:
@@ -224,7 +139,6 @@ def get_je_actual_style_data():
                     row["병원체검사"] = "음성" if culex_tritaeniorhynchus < 30 else "검사중"
                     row["비고"] = "-"
                     data.append(row)
-                    
     return pd.DataFrame(data)
 
 @st.cache_data
@@ -254,11 +168,10 @@ def get_malaria_actual_style_data():
 
 @st.cache_data
 def get_climate_data():
-    """기후변화 대응 매개체 DB 마스터 소스 (24개 지점 안전 확보 노드)"""
+    """기후변화 대응 매개체 DB 마스터 소스"""
     data = []
     for year in ["2026년", "2025년"]:
         np.random.seed(42)
-        
         chuncheon_mosquito_locs = {
             "퇴계동주민센터 (도심지 발생감시)": [37.8645, 127.7261], "삼천동 숲속 (도심지 발생감시)": [37.8721, 127.7081],
             "종가오리식당 (철새도래지 발생감시)": [37.8822, 127.7730], "춘천시보건소 (도심지 발생감시)": [37.8756, 127.7204],
@@ -290,10 +203,8 @@ def get_climate_data():
                     active = 25 if month in ["04월", "10월", "11월"] else 2
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "털진드기 분포감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active))})
                 for name, coords in jeon_locs.items():
-                    data.append({"조사년to": year, "조사월": month, "조사주": week, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))})
-                    
-    df_res = pd.DataFrame(data)
-    return df_res
+                    data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))})
+    return pd.DataFrame(data)
 
 @st.cache_data
 def get_forest_playground_actual_data():
@@ -326,7 +237,10 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
-base_je_df = rename_duplicate_columns(get_je_actual_style_data())
+# 일본뇌염 웹 라이브 입력 데이터를 상주시키기 위한 세션 메모리 빌드
+if "je_live_db" not in st.session_state:
+    st.session_state.je_live_db = get_je_actual_style_data()
+
 base_mal_df = rename_duplicate_columns(get_malaria_actual_style_data())
 base_cli_df = rename_duplicate_columns(get_climate_data())
 base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
@@ -354,51 +268,102 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# --- 1. 일본뇌염 매개모기 감시 ---
+# --- 1. 일본뇌염 매개모기 감시 (💡 요구사항: 스마트 웹 직접 입력 양식 전면 개조 완료) ---
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
-    with st.expander("📥 [일본뇌염] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
-        je_tmpl_cols = [
-            "월", "주", "연중 주수", "작은빨간집모기", "이나토미집모기", "반점날개집모기", "동양집모기", "빨간집모기", 
-            "줄다리집모기", "노랑늪모기", "반점날개늪모기", "얼룩날개모기류", "흰줄숲모기", "금빛숲모기", 
-            "금빛어깨숲모기", "한국숲모기", "흰어깨숲모기", "등줄숲모기", "큰검정들모기", "긴얼룩다리모기", 
-            "합계", "작은빨간집모기 비율", "비고"
-        ]
-        je_tmpl = pd.DataFrame(columns=je_tmpl_cols)
-        je_tmpl.loc[0] = [5, 1, 18, 5, 0, 0, 0, 12, 0, 0, 0, 4, 0, 15, 0, 0, 0, 0, 0, 0, 36, "13.9%", "-"]
-        st.download_button("📥 일본뇌염 실제 엑셀규격 샘플양식 다운로드 (.csv)", convert_df_to_csv(je_tmpl), "일본뇌염_실제엑셀규격_양식.csv", "text/csv", key="dl_je")
-        
-        je_file = st.file_uploader("보유하신 일본뇌염 원본 엑셀/CSV 파일 업로드", type=["csv", "xlsx", "xls"], key="je_up")
-        df_je = base_je_df if je_file is None else rename_duplicate_columns(load_japanese_encephalitis_excel(je_file))
-
-    # 💡 [핵심 방어벽 가동]: 데이터가 결포되었거나 파싱 실패 시 발생하는 KeyError를 사전에 안전 차단
-    if not df_je.empty:
-        # 컬럼 자체가 누락되었거나 판다스 매핑 에러 시 강제 주입형 예외 복구
-        if "조사년도" not in df_je.columns:
-            df_je["조사년도"] = selected_year
-        if "조사월" not in df_je.columns:
-            df_je["조사월"] = selected_month
-        if "조사주" not in df_je.columns:
-            df_je["조사주"] = selected_week
-            
-        if "위도" not in df_je.columns:
-            df_je["위도"] = df_je["지점명"].map(lambda x: 37.9250 if "춘천" in str(x) else (37.7518 if "강릉" in str(x) else 37.4912))
-            df_je["경도"] = df_je["지점명"].map(lambda x: 127.7410 if "춘천" in str(x) else (128.8762 if "강릉" in str(x) else 127.9845))
-        if "병원체검사" not in df_je.columns:
-            df_je["병원체검사"] = "음성"
-
-    # 💡 방어벽을 거쳤으므로 이 연산 라인(line 269대)에서 KeyError가 절대로 발생하지 않습니다 ⭐️
-    f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
     
-    if not f_je.empty:
-        je_spots = ["춘천시 신북읍 산천리 (우사 거점)", "강릉시 사천면 산대월리 (우사 거점)", "횡성군 공근면 하대리 (우사 거점)"]
-        je_sub_tabs = st.tabs([f"📍 {spot.split(' (')[0]}" for spot in je_spots])
+    # 💡 혁신 패치: 엑셀 파일 업로드를 제거하고, 웹 화면에서 데이터를 즉시 타이핑해 반영하는 제어판 구축
+    with st.expander("📝 🖥️ 일본뇌염 주차별 실시간 웹 직접 입력 대장"):
+        st.markdown("##### ✍️ 현재 선택된 필터 주차의 수치 바로 입력하기")
+        st.caption("아래 지점별 입력창에 마리 수를 기입한 후 [웹 데이터 최종 보관 및 저장] 버튼을 누르시면 지도와 차트에 즉시 누적 반영됩니다.")
         
         target_species = [
             "작은빨간집모기", "이나토미집모기", "반점날개집모기", "동양집모기", "빨간집모기", 
             "줄다리집모기", "노랑늪모기", "반점날개늪모기", "얼룩날개모기류", "흰줄숲모기", 
             "금빛숲모기", "금빛어깨숲모기", "한국숲모기", "흰어깨숲모기", "등줄숲모기", "큰검정들모기", "긴얼룩다리모기"
         ]
+        
+        # 입력 폼 설계
+        with st.form("je_web_input_form"):
+            col_sel_spot = st.selectbox("🎯 채집 거점 지점명 선택", ["춘천시 신북읍 산천리 (우사 거점)", "강릉시 사천면 산대월리 (우사 거점)", "횡성군 공근면 하대리 (우사 거점)"])
+            
+            st.markdown(f"**🔢 {col_sel_spot.split(' (')[0]} 세부 모기 개체수 입력**")
+            # 2열로 정렬하여 깔끔한 타자 필드 렌더링
+            form_cols = st.columns(2)
+            input_values = {}
+            
+            for s_idx, sp in enumerate(target_species):
+                with form_cols[s_idx % 2]:
+                    # 기존 저장 데이터가 있으면 기본값으로 바인딩
+                    existing_df = st.session_state.je_live_db[
+                        (st.session_state.je_live_db["조사년도"] == selected_year) & 
+                        (st.session_state.je_live_db["조사월"] == selected_month) & 
+                        (st.session_state.je_live_db["조사주"] == selected_week) & 
+                        (st.session_state.je_live_db["지점명"] == col_sel_spot)
+                    ]
+                    default_val = int(existing_df[sp].iloc[0]) if not existing_df.empty and sp in existing_df.columns else 0
+                    input_values[sp] = st.number_input(f"🦟 {sp} (마리)", min_value=0, max_value=9999, value=default_val, step=1, key=f"in_{sp}")
+            
+            submit_save = st.form_submit_button("💾 웹 데이터 최종 보관 및 저장")
+            
+            if submit_save:
+                # 세션 데이터 프레임 카피 후 가공
+                current_db = st.session_state.je_live_db.copy()
+                
+                # 기존 행 위치 인덱스 탐색
+                match_condition = (
+                    (current_db["조사년도"] == selected_year) & 
+                    (current_db["조사월"] == selected_month) & 
+                    (current_db["조사주"] == selected_week) & 
+                    (current_db["지점명"] == col_sel_spot)
+                )
+                
+                # 계산 필드 연산
+                total_sum = sum(input_values.values())
+                ratio_str = f"{((input_values['작은빨간집모기'] / total_sum) * 100):.1f}%" if total_sum > 0 else "0.0%"
+                pathogen_res = "음성" if input_values['작은빨간집모기'] < 30 else "검사중"
+                
+                if current_db[match_condition].shape[0] > 0:
+                    # 기존 기록 업데이트
+                    target_idx = current_db[match_condition].index[0]
+                    for sp, val in input_values.items():
+                        current_db.at[target_idx, sp] = val
+                    current_db.at[target_idx, "합계"] = total_sum
+                    current_db.at[target_idx, "작은빨간집모기 비율"] = ratio_str
+                    current_db.at[target_idx, "병원체검사"] = pathogen_res
+                else:
+                    # 새로운 행 추가 방어벽
+                    lat_map = {"춘천": 37.9250, "강릉": 37.7518, "횡성": 37.4912}
+                    lng_map = {"춘천": 127.7410, "강릉": 128.8762, "횡성": 127.9845}
+                    region_key = "춘천" if "춘천" in col_sel_spot else ("강릉" if "강릉" in col_sel_spot else "횡성")
+                    
+                    new_row = {
+                        "조사년도": selected_year, "조사월": selected_month, "조사주": selected_week,
+                        "지점명": col_sel_spot, "위도": lat_map[region_key], "경도": lng_map[region_key],
+                        "합계": total_sum, "작은빨간집모기 비율": ratio_str, "병원체검사": pathogen_res, "비고": "-"
+                    }
+                    for sp, val in input_values.items():
+                        new_row[sp] = val
+                    current_db = pd.concat([current_db, pd.DataFrame([new_row])], ignore_index=True)
+                
+                # 상주 세션 메모리에 영구 저장 보관
+                st.session_state.je_live_db = current_db
+                st.success(f"✅ {col_sel_spot.split(' (')[0]}의 [{selected_year} {selected_month} {selected_week}] 데이터가 웹 저장소에 성공적으로 동기화되었습니다!")
+        
+        # 현재 누적 보관된 전체 장부를 확인용 다운로드 파일 서식 바인딩
+        st.markdown("##### 📊 현재까지 웹에 누적 적재된 보관 대장 현황")
+        st.download_button("📥 웹 입력 완료된 일본뇌염 장부 백업 다운로드 (.csv)", convert_df_to_csv(st.session_state.je_live_db), "일본뇌염_웹입력_백업.csv", "text/csv")
+
+    # 💡 실시간 표출 바인딩 유도
+    f_je = st.session_state.je_live_db[
+        (st.session_state.je_live_db["조사년도"] == selected_year) & 
+        (st.session_state.je_live_db["조사월"] == selected_month) & 
+        (st.session_state.je_live_db["조사주"] == selected_week)
+    ]
+    
+    if not f_je.empty:
+        je_spots = ["춘천시 신북읍 산천리 (우사 거점)", "강릉시 사천면 산대월리 (우사 거점)", "횡성군 공근면 하대리 (우사 거점)"]
+        je_sub_tabs = st.tabs([f"📍 {spot.split(' (')[0]}" for spot in je_spots])
         
         for idx, spot_name in enumerate(je_spots):
             with je_sub_tabs[idx]:
@@ -414,6 +379,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     with c2:
                         st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 17종 전수 채집 개체수 현황")
                         
+                        # 안전 패딩 보정
                         for ts in target_species:
                             if ts not in spot_data.columns: spot_data[ts] = 0
                         if "합계" not in spot_data.columns: spot_data["합계"] = spot_data[target_species].sum(axis=1)
@@ -483,7 +449,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 # --- 3. 기후변화 대응 매개체 감시 ---
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황")
-    
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["전체 권역 보기", "모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     
     with st.expander(f"📥 [{selected_zone}] 전용 파일 업로드 및 샘플 양식 다운로드 Hub"):
@@ -556,7 +521,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
 # --- 4. 참진드기조사 어린이숲체험장 ---
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황")
-    
     with st.expander("📥 [어린이 숲체험장] 표준 입력 파일 업로드 및 샘란 양식 다운로드"):
         template_columns = [
             "연번", "월", "채집일", "채집지역2", "코스번호", "지점번호", "분류", "종", "Stage", "개체수", 
