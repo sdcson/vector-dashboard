@@ -59,7 +59,7 @@ def convert_df_to_csv(df):
 def get_je_actual_style_data():
     """일본뇌염 마스터 DB 생성 (주별 데이터 제공 포맷)"""
     locs = {
-        "춘천시 신북읍 산천리 (우사 거점)": [37.9250, 127.7410],
+        "춘천시 신북읍 산천리 (우사 거점)": [37.9250, 12.7410],
         "강릉시 사천면 산대월리 (우사 거점)": [37.7518, 128.8762],
         "횡성군 공근면 하대리 (우사 거점)": [37.4912, 127.9845]
     }
@@ -115,7 +115,7 @@ def get_climate_data():
         chuncheon_mosquito_locs = {
             "퇴계동주민센터 (도심지 발생감시)": [37.8645, 127.7261], "삼천동 숲속 (도심지 발생감시)": [37.8721, 127.7081],
             "종가오리식당 (철새도래지 발생감시)": [37.8822, 127.7730], "춘천시보건소 (도심지 발생감시)": [37.8756, 127.7204],
-            "춘천시보sn소 (도심지 일일감시-DMS)": [37.8751, 127.7202]
+            "춘천시보건소 (도심지 일일감시-DMS)": [37.8751, 127.7202]
         }
         inje_hwacheon_locs = {
             "인제 남북리 (초지 환경)": [38.0650, 128.1611], "인제 남북리 (잡목림 환경)": [38.0652, 128.1612],
@@ -146,8 +146,7 @@ def get_climate_data():
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))})
                     
     df_res = pd.DataFrame(data)
-    if "춘천시보건소 (도심지 일일감시-DMS)" in df_res["지점명"].values or True:
-        df_res["지점명"] = df_res["지점명"].replace({"춘천시보건소 (도심지 일일감시-DMS)": "춘천시보건소 (도심지 일일감시-DMS)", "춘천시보sn소 (도심지 일일감시-DMS)": "춘천시보건소 (도심지 일일감시-DMS)"})
+    df_res["지점명"] = df_res["지점명"].replace({"춘천시보건소 (도심지 일일감시-DMS)": "춘천시보건소 (도심지 일일감시-DMS)", "춘천시보sn소 (도심지 일일감시-DMS)": "춘천시보건소 (도심지 일일감시-DMS)"})
     return df_res
 
 @st.cache_data
@@ -187,23 +186,8 @@ base_cli_df = rename_duplicate_columns(get_climate_data())
 base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
 
 # -----------------------------------------------------------------
-# [사이드바 영역 - 💡 첨부해주신 이미지 바이너리 데이터 직접 내장화 패치 완비]
+# [사이드바 영역 - 💡 깨지는 로고 코드 완전 분쇄 제거 완료]
 # -----------------------------------------------------------------
-# 첨부된 로고 원본 파일 이미지를 베이스64 텍스트로 임베딩하여 네트워크 차단 환경에서도 무조건 표출되도록 조치했습니다.
-logo_base64 = "data:image/png;base64,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"
-
-# -----------------------------------------------------------------
-# [사이드바 영역 - 💡 첨부해주신 이미지 바이너리 데이터 직접 내장화 패치 완비]
-# -----------------------------------------------------------------
-# state.gwd.go.kr 포털 웹 서버의 공식 고해상도 인증 스킨 배너 리소스를 직접 연동했습니다.
-st.sidebar.markdown(
-    f"""
-    <div style="text-align: center; margin-bottom: 20px;">
-        <img src="{logo_base64}" width="200" alt="강원특별자치도 로고">
-    </div>
-    """,
-    unsafe_allow_html=True
-)
 st.sidebar.markdown("### 📅 공통 시간 필터")
 
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년"])
@@ -273,8 +257,9 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         with c1:
             m_mal = folium.Map(location=[38.15, 127.9], zoom_start=9)
             for _, r in f_mal.iterrows():
+                # 💡 버그 전면 해결: 한자 오타 잔재 r['위度']를 r['위도']로 완벽 강제 교정하여 KeyError 원천 진압 완료
                 if pd.notna(r['위도']) and pd.notna(r['경도']):
-                    folium.CircleMarker([float(r['위度']), float(r['경도'])], radius=10, color="blue", fill=True).add_to(m_mal)
+                    folium.CircleMarker([float(r['위도']), float(r['경도'])], radius=10, color="blue", fill=True).add_to(m_mal)
             st_folium(m_mal, key="map_mal", width="100%", height=400)
         with c2:
             fig, ax = plt.subplots(figsize=(6, 5))
@@ -388,11 +373,11 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         })
         
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
-        m_forest['구분지점'] = m_forest.apply(
+        m_forest['gu분지점'] = m_forest.apply(
             lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" and x['지점번호'] <= 3 
             else (f"비관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "out" and x['지점번호'] <= 3 else "기타 타지점"), axis=1
         )
-        m_forest = m_forest[m_forest['구분지점'] != "기타 타지점"].copy()
+        m_forest = m_forest[m_forest['gu분지점'] != "기타 타지점"].copy()
         
         if not m_forest.empty:
             h_coords = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
@@ -400,7 +385,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             m_forest['경도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][1] if x in h_coords else 127.90)
             
             forest_summary = m_forest.pivot_table(
-                index=["채집지역2", "구분지점", "위도", "경도"],
+                index=["채집지역2", "gu분지점", "위도", "경도"],
                 columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0
             ).reset_index()
             
@@ -416,14 +401,14 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                         r_summary = forest_summary[forest_summary["채집지역2"] == r_name]
                         popup_text = f"<b>🌲 홍천 {r_name} 유아숲체험원</b><br><hr style='margin:5px 0;'>"
                         for _, r in r_summary.iterrows():
-                            popup_text += f"• {r['구분지점']}: 월간 누적 {r['합계']}개체<br>"
+                            popup_text += f"• {r['gu분지점']}: 월간 누적 {r['합계']}개체<br>"
                         folium.Marker(latlng, tooltip=f"홍천 {r_name} 유아숲체험원", popup=folium.Popup(popup_text, max_width=350), icon=folium.Icon(color='green', icon='tree')).add_to(m_f)
                     st_folium(m_f, key="map_forest_final", width="100%", height=430)
                     
                 with col_f_graph:
                     st.markdown(f"##### 📊 [대조분석] 관리지점 1-3(In) vs 비관리지점 1-3(Out) 월간 비교")
                     fig, ax = plt.subplots(figsize=(6, 5))
-                    chart_df = forest_summary.pivot_table(index="구분지점", columns="채집지역2", values="합계", aggfunc="sum")
+                    chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum")
                     desired_order = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
                     chart_df = chart_df.reindex([o for o in desired_order if o in chart_df.index])
                     
@@ -438,8 +423,8 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                     
                 st.markdown("---")
                 st.markdown("##### 📋 어린이 숲 체험장 실제 원본 장부 피벗 변환 연동 대장 내역")
-                display_cols = ["채집지역2", "구분지점"] + avail_species + ["합계"]
-                st.dataframe(forest_summary[display_cols].rename(columns={"채집지역2": "체험원명"}), hide_index=True, use_container_width=True)
+                display_cols = ["채집지역2", "gu분지점"] + avail_species + ["합계"]
+                st.dataframe(forest_summary[display_cols].rename(columns={"채집지역2": "체험원명", "gu분지점": "구분지점"}), hide_index=True, use_container_width=True)
             else:
                 st.info("💡 요약 조건에 맞는 채집 수치 데이터가 존재하지 않습니다.")
         else:
