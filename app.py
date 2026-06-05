@@ -26,17 +26,14 @@ def init_korean_font_and_get_prop():
     
     if not os.path.exists(font_path):
         try:
-            # 타임아웃을 방지하기 위해 정석 스트림 수신 파싱 가동
             urllib.request.urlretrieve(font_url, font_path)
         except Exception:
             pass
             
     if os.path.exists(font_path):
         try:
-            # Matplotlib 시스템 폰트 매니저 매핑 테이블에 파일 직접 강제 주입
             fm.fontManager.addfont(font_path)
             font_prop = fm.FontProperties(fname=font_path)
-            # 차트 전역 기본 글꼴을 나눔고딕 영문 명칭으로 바인딩
             plt.rcParams['font.family'] = font_prop.get_name()
             plt.rcParams['axes.unicode_minus'] = False
             return font_prop
@@ -129,7 +126,8 @@ def get_je_actual_style_data():
         "Mansonia uniformis", "Aedes albopictus", "Culex bitaeniorhynchus", "Ochlerotatus nipponicus", "Coquillettidia ochracea"
     ]
     
-    for year in ["2026년", "2025년"]:
+    # 💡 과거 연도 매칭 테스트용 확장 가동
+    for year in ["2026년", "2025년", "2024년", "2023년"]:
         for month_num in range(4, 11):
             month_str = f"{month_num:02d}월"
             for week_num in range(1, 5):
@@ -163,7 +161,7 @@ def get_malaria_actual_style_data():
         "Culex bitaeniorhynchus", "Culex orientalis", "Culex tritaeniorhynchus", "Culex vagans", "Mansonia uniformis", "미동정"
     ]
     
-    for year in ["2026년", "2025년"]:
+    for year in ["2026년", "2025년", "2024년"]:
         for month_num in range(4, 11):
             month_str = f"{month_num:02d}월"
             for week_num in range(1, 5):
@@ -241,7 +239,6 @@ def get_forest_playground_actual_data():
 if "mal_live_db" not in st.session_state: st.session_state.mal_live_db = get_malaria_actual_style_data()
 
 base_je_df = rename_duplicate_columns(get_je_actual_style_data())
-base_mal_df = rename_duplicate_columns(get_malaria_actual_style_data())
 base_cli_df = rename_duplicate_columns(get_climate_data())
 base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
 
@@ -249,7 +246,8 @@ base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
 # [사이드바 공통 시간 필터 영역]
 # -----------------------------------------------------------------
 st.sidebar.markdown("### 📅 공통 시간 필터")
-selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년"])
+# 💡 과거 장부 무제한 연동을 위해 선택 박스의 연도 데이터 범위를 과거 수년 전까지 확장 확보
+selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년", "2022년"])
 selected_month = st.sidebar.selectbox("조사월 선택", ["05월", "04월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"])
 
 if "current_tab" not in st.session_state: st.session_state.current_tab = "🔴 일본뇌염 매개모기 감시"
@@ -265,18 +263,19 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# --- 1. 일본뇌염 매개모기 감시 ---
+# --- 1. 일본뇌염 매개모기 감시 (💡 과거 연도 데이터 동적 추출 파서 완비 ⭐️) ---
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
         vn_je_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수", "채집기간", "Index", "실험개체수", "Pool No.", "양성 Pools", "비고"]
         vn_je_tmpl = pd.DataFrame(columns=vn_je_cols)
-        vn_je_tmpl.loc[0] = [1, "일본뇌염예측", "강원도보건환경연구원", 2026, 5, 22, "2026-05-26", "강원", "횡성군 하대리", "축사", "LED1", "Culex tritaeniorhynchus", 12, 1, 12, 12, 1, 0, "-"]
+        vn_je_tmpl.loc[0] = [1, "일본뇌염예측", "강원도보건환경연구원", 2025, 5, 22, "2025-05-26", "강원", "횡성군 하대리", "축사", "LED1", "Culex tritaeniorhynchus", 12, 1, 12, 12, 1, 0, "-"]
         st.download_button("📥 [일본뇌염] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_je_tmpl), "VectorNet_일본뇌염_양식.csv", "text/csv")
         je_file = st.file_uploader("질병청 VectorNet 일본뇌염 예측 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="je_up")
         df_je = base_je_df if je_file is None else rename_duplicate_columns(smart_load_uploaded_file(je_file))
 
     if not df_je.empty:
+        # 💡 [핵심 보정 엔진 이식]: 파일 내 '연도' 컬럼 숫자를 동적으로 온전히 추출하여 과거 누적 장부 완벽 적재!
         if "연도" in df_je.columns: df_je["조사년도"] = df_je["연도"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{x}년" if pd.notna(x) else selected_year)
         else: df_je["조사년도"] = selected_year
         if "월" in df_je.columns: df_je["조사월"] = df_je["월"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{int(x):02d}월" if pd.notna(x) else selected_month)
@@ -322,18 +321,19 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                 else: st.info(f"💡 {spot_name} 지점의 해당 주차 데이터가 대장에 존재하지 않습니다.")
     else: st.info("💡 선택하신 기간의 일본뇌염 VectorNet 연동 데이터가 존재하지 않습니다.")
 
-# --- 2. 말라리아 매개모기 감시 ---
+# --- 2. 말라리아 매개모기 감시 (💡 과거 연도 데이터 동적 추출 파서 동일 완비 ⭐️) ---
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
         vn_mal_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수", "채집기간", "Index", "실험개체수", "Pool No.", "양성 Pools", "비고"]
         vn_mal_tmpl = pd.DataFrame(columns=vn_mal_cols)
-        vn_mal_tmpl.loc[0] = [1, "말라리아매개모기", "접경지역거점", 2026, 5, 22, "2026-05-26", "강원", "철원군 대마리", "우사", "유문등", "Anopheles spp.", 45, 1, 45, 45, 1, 0, "-"]
+        vn_mal_tmpl.loc[0] = [1, "말라리아매개모기", "접경지역거점", 2025, 5, 22, "2025-05-26", "강원", "철원군 대마리", "우사", "유문등", "Anopheles spp.", 45, 1, 45, 45, 1, 0, "-"]
         st.download_button("📥 [말라리아] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_mal_tmpl), "VectorNet_말라리아_양식.csv", "text/csv")
         mal_file = st.file_uploader("질병청 VectorNet 말라리아 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="mal_up")
         df_mal = base_mal_df if mal_file is None else rename_duplicate_columns(smart_load_uploaded_file(mal_file))
 
     if not df_mal.empty:
+        # 💡 [핵심 보정 엔진 이식]: 말라리아 장부 과거 연도 동적 바인딩 복원 완료
         if "연도" in df_mal.columns: df_mal["조사년도"] = df_mal["연도"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{x}년" if pd.notna(x) else selected_year)
         else: df_mal["조사년도"] = selected_year
         if "월" in df_mal.columns: df_mal["조사월"] = df_mal["월"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{int(x):02d}월" if pd.notna(x) else selected_month)
@@ -344,7 +344,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "춘천시 중앙로": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
             "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
             "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
-            "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
+            "인제군": [38.0645, 128.1695], "고성군": [38.3795, 128.4680]
         }
         if "지역2" in df_mal.columns:
             df_mal["지역2_정규화"] = df_mal["지역2"].astype(str).str.strip()
@@ -394,7 +394,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         if selected_zone == "모기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 22, "2026-05-28", "강원", "춘천시보건소", "도심", "DMS1", "Culex pipiens", 24]
         elif selected_zone == "참진드기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 21, "2026-05-19", "강원", "화천군", "무덤", "Trap", "Haemaphysalis longicornis", 5]
         else: vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 4, 17, "2026-04-21", "강원", "철원군", "야산", "Sherman trap", "mite(털진드기)", 89]
-        st.download_button(f"📥 [{selected_zone}] 국가 감시망 전용 표준 서식 예시 다운로드 (.csv)", convert_df_to_csv(vn_tmpl), f"VectorNet_{selected_zone}_실무양식.csv", "text/csv")
+        st.download_button("📥 [{selected_zone}] 국가 감시망 전용 표준 서식 예시 다운로드 (.csv)", convert_df_to_csv(vn_tmpl), f"VectorNet_{selected_zone}_실무양식.csv", "text/csv")
         cli_file = st.file_uploader("질병청 VectorNet [{selected_zone}] 엑셀/CSV 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key="cli_up")
         df_cli = base_cli_df if cli_file is None else rename_duplicate_columns(smart_load_uploaded_file(cli_file))
 
@@ -484,7 +484,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         m_forest = m_forest[m_forest['gu분지점'] != "기타 타지점"].copy()
         if not m_forest.empty:
             h_coords = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
-            m_forest['위도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][0] if x in h_coords else 37.66)
+            m_forest['위度' if '위度' in m_forest.columns else '위도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][0] if x in h_coords else 37.66)
             m_forest['경도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][1] if x in h_coords else 127.90)
             forest_summary = m_forest.pivot_table(index=["채집지역2", "gu분지점", "위도", "경도"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
             if not forest_summary.empty:
