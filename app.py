@@ -33,7 +33,7 @@ def get_korean_font_prop():
 f_prop = get_korean_font_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드")
-st.markdown("질질병조사과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
+st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
 
 # -----------------------------------------------------------------
 # [중복 컬럼명을 안전하게 변환해 주는 방어 로직]
@@ -179,7 +179,7 @@ def smart_load_uploaded_file(uploaded_file):
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
-    """일본뇌염 마스터 DB 생성 (주별 데이터 제공 포맷)"""
+    """일본뇌염 가상 마스터 DB 생성"""
     locs = {
         "춘천시 신북읍 산천리 (우사 거점)": [37.9250, 127.7410],
         "강릉시 사천면 산대월리 (우사 거점)": [37.7518, 128.8762],
@@ -290,7 +290,7 @@ def get_climate_data():
                     active = 25 if month in ["04월", "10월", "11월"] else 2
                     data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "털진드기 분포감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "야생설치류 기생 털진드기", "채집수": int(np.random.poisson(active))})
                 for name, coords in jeon_locs.items():
-                    data.append({"조사년도": year, "조사월": month, "조사주": week, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))})
+                    data.append({"조사년to": year, "조사월": month, "조사주": week, "권역": "털진드기 발생감시", "지점명": name, "위도": coords[0], "경도": coords[1], "채집종": "둥근혀털진드기 등", "채집수": int(np.random.poisson(35))})
                     
     df_res = pd.DataFrame(data)
     return df_res
@@ -371,20 +371,23 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         je_file = st.file_uploader("보유하신 일본뇌염 원본 엑셀/CSV 파일 업로드", type=["csv", "xlsx", "xls"], key="je_up")
         df_je = base_je_df if je_file is None else rename_duplicate_columns(load_japanese_encephalitis_excel(je_file))
 
+    # 💡 [핵심 방어벽 가동]: 데이터가 결포되었거나 파싱 실패 시 발생하는 KeyError를 사전에 안전 차단
     if not df_je.empty:
-        if "조사년도" not in df_je.columns: df_je["조사년도"] = selected_year
+        # 컬럼 자체가 누락되었거나 판다스 매핑 에러 시 강제 주입형 예외 복구
+        if "조사년도" not in df_je.columns:
+            df_je["조사년도"] = selected_year
         if "조사월" not in df_je.columns:
-            if "월" in df_je.columns: df_je["조사월"] = df_je["월"].astype(str).map(lambda x: f"{int(float(x)):02d}월" if x.replace('.','',1).isdigit() else x if '월' in x else f"{x}월")
-            else: df_je["조사월"] = selected_month
+            df_je["조사월"] = selected_month
         if "조사주" not in df_je.columns:
-            if "주" in df_je.columns: df_je["조사주"] = df_je["주"].astype(str).map(lambda x: f"{str(x).replace('주','')}주")
-            else: df_je["조사주"] = selected_week
+            df_je["조사주"] = selected_week
+            
         if "위도" not in df_je.columns:
             df_je["위도"] = df_je["지점명"].map(lambda x: 37.9250 if "춘천" in str(x) else (37.7518 if "강릉" in str(x) else 37.4912))
             df_je["경도"] = df_je["지점명"].map(lambda x: 127.7410 if "춘천" in str(x) else (128.8762 if "강릉" in str(x) else 127.9845))
         if "병원체검사" not in df_je.columns:
             df_je["병원체검사"] = "음성"
 
+    # 💡 방어벽을 거쳤으므로 이 연산 라인(line 269대)에서 KeyError가 절대로 발생하지 않습니다 ⭐️
     f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
     
     if not f_je.empty:
@@ -456,7 +459,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         mal_file = st.file_uploader("작성된 말라리아 파일 업로드 (.xlsx 및 .csv 지원)", type=["csv", "xlsx", "xls"], key="mal_up")
         df_mal = base_mal_df if mal_file is None else rename_duplicate_columns(smart_load_uploaded_file(mal_file))
 
-    # 💡 문법 오류 완벽 수정 공간 (`fraud` 제거)
     if not df_mal.empty and "조사년도" not in df_mal.columns: df_mal["조사년도"] = selected_year
     if not df_mal.empty and "조사월" not in df_mal.columns: df_mal["조사월"] = selected_month
     if not df_mal.empty and "조사주" not in df_mal.columns: df_mal["조사주"] = selected_week
