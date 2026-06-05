@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import numpy as np
 import folium
@@ -88,7 +88,7 @@ def smart_load_uploaded_file(uploaded_file):
                         skip_rows_idx = r_idx
                         break
                 uploaded_file.seek(0)
-                df_res = pd.read_csv(uploaded_file, encoding=enc, skiprows=skip_idx = skip_rows_idx)
+                df_res = pd.read_csv(uploaded_file, encoding=enc, skiprows=skip_rows_idx)
                 break
             except Exception:
                 continue
@@ -199,7 +199,6 @@ def get_climate_data():
 
 @st.cache_data
 def get_forest_playground_actual_data():
-    """💡 224번째 줄 딕셔너리 구조 문법 오류 완벽 수정 완료 ⭐️"""
     data = []
     idx = 1
     species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphisalis japonica"]
@@ -330,7 +329,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             for s_idx, sp in enumerate(target_species_mal):
                 with form_cols_mal[s_idx % 2]:
                     existing_mal_df = st.session_state.mal_live_db[(st.session_state.mal_live_db["조사년도"] == selected_year) & (st.session_state.mal_live_db["조사월"] == selected_month) & (st.session_state.mal_live_db["조사주"] == selected_week) & (st.session_state.mal_live_db["지점명"] == col_sel_spot_mal)]
-                    default_val_mal = int(existing_mal_df[sp].iloc[0]) if not existing_mal_df.empty and sp in existing_mal_df.columns else 0
+                    default_val_mal = int(existing_mal_df[sp].iloc[0]) if not existing_mal_df.empty vibr and sp in existing_mal_df.columns else 0
                     input_values_mal[sp] = st.number_input(f"🦟 {sp} (마리)", min_value=0, max_value=9999, value=default_val_mal, step=1, key=f"in_mal_{sp}")
             submit_save_mal = st.form_submit_button("💾 말라리아 웹 데이터 최종 보관 및 저장")
             if submit_save_mal:
