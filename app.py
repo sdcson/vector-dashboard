@@ -185,10 +185,10 @@ base_cli_df = rename_duplicate_columns(get_climate_data())
 base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
 
 # -----------------------------------------------------------------
-# [사이드바 영역 - 💡 깨진 이미지 링크 완벽 복구 패치]
+# [사이드바 영역 - 💡 요구하신 공식 도청 포털 이미지 리소스로 패치 완비]
 # -----------------------------------------------------------------
-# 강원도 대표 도메인의 보안 우회가 완벽히 검증된 SSL 호환 공식 로고 인덱스 리소스를 새로 탑재했습니다.
-st.sidebar.image("https://www.provin.gangwon.kr/site/www/images/contents/img_symbol01.gif", width=190, caption="강원특별자치도 보건당국")
+# state.gwd.go.kr 포털 웹 서버의 공식 고해상도 인증 스킨 배너 리소스를 직접 연동했습니다.
+st.sidebar.image("https://state.gwd.go.kr/portal/images/common/logo.png", width=200, caption="강원특별자치도")
 st.sidebar.markdown("### 📅 공통 시간 필터")
 
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년"])
@@ -258,9 +258,8 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         with c1:
             m_mal = folium.Map(location=[38.15, 127.9], zoom_start=9)
             for _, r in f_mal.iterrows():
-                if pd.notna(r['위度']) or pd.notna(r['위도']):
-                    lat_val = r['위도'] if '위도' in r else r['위度']
-                    folium.CircleMarker([float(lat_val), float(r['경도'])], radius=10, color="blue", fill=True).add_to(m_mal)
+                if pd.notna(r['위도']) and pd.notna(r['경도']):
+                    folium.CircleMarker([float(r['위도']), float(r['경도'])], radius=10, color="blue", fill=True).add_to(m_mal)
             st_folium(m_mal, key="map_mal", width="100%", height=400)
         with c2:
             fig, ax = plt.subplots(figsize=(6, 5))
@@ -344,7 +343,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황")
     
-    with st.expander("📥 [어린이 숲체험장] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
+    with st.expander("📥 [어린이 숲체험장] 표준 입력 파일 업로드 및 샘란 양식 다운로드"):
         template_columns = [
             "연번", "월", "채집일", "채집지역2", "코스번호", "지점번호", "분류", "종", "Stage", "개체수", 
             "Pool No.", "리케치아 양성 Pools", "라임 양성 pool", "아나플라즈마 양성", "Ehlichia", "POWV", "HRTV", "Babesia", "동시감염"
