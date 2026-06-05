@@ -329,7 +329,8 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             for s_idx, sp in enumerate(target_species_mal):
                 with form_cols_mal[s_idx % 2]:
                     existing_mal_df = st.session_state.mal_live_db[(st.session_state.mal_live_db["조사년도"] == selected_year) & (st.session_state.mal_live_db["조사월"] == selected_month) & (st.session_state.mal_live_db["조사주"] == selected_week) & (st.session_state.mal_live_db["지점명"] == col_sel_spot_mal)]
-                    default_val_mal = int(existing_mal_df[sp].iloc[0]) if not existing_mal_df.empty vibr and sp in existing_mal_df.columns else 0
+                    # 💡 문법 오류 완벽 수정 공간 (`vibr` 제거) ⭐️
+                    default_val_mal = int(existing_mal_df[sp].iloc[0]) if not existing_mal_df.empty and sp in existing_mal_df.columns else 0
                     input_values_mal[sp] = st.number_input(f"🦟 {sp} (마리)", min_value=0, max_value=9999, value=default_val_mal, step=1, key=f"in_mal_{sp}")
             submit_save_mal = st.form_submit_button("💾 말라리아 웹 데이터 최종 보관 및 저장")
             if submit_save_mal:
@@ -355,7 +356,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                 if not spot_data_mal.empty:
                     c1, c2 = st.columns([5, 5])
                     with c1:
-                        m_mal = folium.Map(location=[float(spot_data_mal['위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], zoom_start=11)
+                        m_mal = folium.Map(location=[float(spot_data_mal['open' if 'open' in spot_data_mal else '위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], zoom_start=11)
                         folium.Marker([float(spot_data_mal['위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal)
                         st_folium(m_mal, key=f"map_mal_live_{idx}_{selected_month}", width="100%", height=400)
                     with c2:
