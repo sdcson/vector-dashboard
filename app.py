@@ -128,14 +128,11 @@ def get_je_actual_style_data():
                         if cnt > 0 or sp == "Culex tritaeniorhynchus":
                             data.append({
                                 "조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num,
-                                "사업명": "일본뇌염예측", "권역": "강원도보환경연구원", "지역2": loc2, "환경": "축사", "방법": "LED1",
+                                "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": loc2, "환경": "축사", "방법": "LED1",
                                 "위도": coords[0], "경도": coords[1], "종": sp, "개체수": cnt
                             })
     return pd.DataFrame(data)
 
-# -----------------------------------------------------------------
-# [말라리아 예측사업 VectorNet 양식 마스터 세션 백업본]
-# -----------------------------------------------------------------
 @st.cache_data
 def get_malaria_actual_style_data():
     data = []
@@ -225,7 +222,9 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
-# 💡 [NameError 원천 격리 해제 노드]: 말라리아 세션 메모리 변수 누락 완벽 복원 완료 ⭐️
+# 상주 세션 초기화
+if "mal_live_db" not in st.session_state: st.session_state.mal_live_db = get_malaria_actual_style_data()
+
 base_je_df = rename_duplicate_columns(get_je_actual_style_data())
 base_mal_df = rename_duplicate_columns(get_malaria_actual_style_data())
 base_cli_df = rename_duplicate_columns(get_climate_data())
@@ -302,7 +301,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                             width = bar.get_width()
                             if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8, fontproperties=f_prop)
                         plt_ax.invert_yaxis()
-                        plt_ax.set_xlabel("채집 개체 수 (마리)", fontproperties=f_prop)
                         if f_prop: plt_ax.set_yticklabels(sum_df["종"], fontproperties=f_prop, fontsize=8)
                         st.pyplot(fig)
                         plt.close()
@@ -367,7 +365,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             width = bar.get_width()
                             if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8, fontproperties=f_prop)
                         plt_ax.invert_yaxis()
-                        plt_ax.set_xlabel("채집 개체 수 (마리)", fontproperties=f_prop)
                         if f_prop: plt_ax.set_yticklabels(sum_df_mal["종"], fontproperties=f_prop, fontsize=8)
                         st.pyplot(fig)
                         plt.close()
@@ -379,20 +376,14 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
-    with st.expander(f"📥 [{selected_zone}] 최신 지정 서식 파일 업로드 및 가이드"):
-        if selected_zone == "모기 권역":
-            st.info("💡 권역 모기 데이터 업로드 시 '권역모기.xlsx' 원본을 그대로 업로드해 주세요.")
-            vn_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수"]
-        elif selected_zone == "참진드기 권역":
-            st.info("💡 참진드기 채집록 데이터 업로드 시 '권역 참진드기.xlsx' 원본을 그대로 업로드해 주세요.")
-            vn_cols = ["번호", "사업명", "권역", "월", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "발생단계", "개체수"]
-        else:
-            st.info("💡 털진드기(설치류) 야생 개체수 업로드 시 'VectorNet_털진드기(설치류)20260605133502.xlsx' 원본을 그대로 업로드해 주세요.")
-            vn_cols = ["번호", "사업명", "권역", "월", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수"]
-            
+    with st.expander(f"📥 [{selected_zone}] VectorNet 오리지널 서식 파일 업로드 및 가이드"):
+        vn_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수"]
         vn_tmpl = pd.DataFrame(columns=vn_cols)
+        if selected_zone == "모기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 22, "2026-05-28", "강원", "춘천시보건소", "도심", "DMS1", "Culex pipiens", 24]
+        elif selected_zone == "참진드기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 21, "2026-05-19", "강원", "화천군", "무덤", "Trap", "Haemaphysalis longicornis", 5]
+        else: vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 4, 17, "2026-04-21", "강원", "철원군", "야산", "Sherman trap", "mite(털진드기)", 89]
         st.download_button(f"📥 [{selected_zone}] 국가 감시망 전용 표준 서식 예시 다운로드 (.csv)", convert_df_to_csv(vn_tmpl), f"VectorNet_{selected_zone}_실무양식.csv", "text/csv")
-        cli_file = st.file_uploader(f"[{selected_zone}] 전용 엑셀 파일 업로드 드롭존", type=["csv", "xlsx", "xls"], key="cli_up")
+        cli_file = st.file_uploader("질병청 VectorNet [{selected_zone}] 엑셀/CSV 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key="cli_up")
         df_cli = base_cli_df if cli_file is None else rename_duplicate_columns(smart_load_uploaded_file(cli_file))
 
     if not df_cli.empty:
@@ -448,11 +439,21 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             st.markdown(f"##### 📊 {selected_month} 지점별/환경별 상세 밀도 비교 차트")
             fig, ax = plt.subplots(figsize=(6, 5.2))
             monthly_summary.set_index("지점명")[val_col].plot(kind='bar', ax=ax, color='#2a9d8f', edgecolor='black')
+            plt.gcf().subplots_adjust(bottom=0.35)
             if f_prop: ax.set_xticklabels(monthly_summary["지점명"], rotation=45, ha='right', fontsize=8, fontproperties=f_prop)
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
-        st.dataframe(monthly_summary[["지점명", "환경", "종", val_col]], hide_index=True, use_container_width=True)
+            
+        # 💡 [과장님 지시 완결 조치]: 하단 표의 지점명 레이블을 정비하여 글자 깨짐 및 유실을 원천 격리
+        st.markdown(f"##### 📋 {selected_month} [{selected_zone}] 국가 감시망 정밀 집계록 대장")
+        display_summary_df = monthly_summary.rename(columns={
+            "지점명": "조사지점",
+            "환경": "환경",
+            "종": "채집종",
+            val_col: "채집수(개체)"
+        })
+        st.dataframe(display_summary_df[["조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
     else: st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 지정 지점 관할 데이터가 존재하지 않습니다.")
 
 # --- 4. 참진드기조사 어린이숲체험장 ---
