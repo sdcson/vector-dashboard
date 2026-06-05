@@ -13,20 +13,39 @@ import os
 st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
 
 # -----------------------------------------------------------------
-# [💡 핵심 보정 패치: 서버 방화벽에 무관한 영구 무결점 한글 폰트 주입]
+# [💡 영구 차트 한글 깨짐 방지: 구글 나눔고딕 커널 엔진 강제 주입형 로더]
 # -----------------------------------------------------------------
-def apply_matplotlib_korean_setting():
+@st.cache_resource
+def init_korean_font_and_get_prop():
     """
-    클라우드 방화벽으로 인해 TTF 다운로드가 유실되어 글자가 네모(□)로 깨지는 현상을 
-    Matplotlib 전역 런타임 설정(RC)을 변경하여 근본적으로 해결합니다.
+    스트림릿 클라우드 리눅스 환경에서 한글이 네모(□)로 파괴되는 버그를 영구 치료합니다.
+    방화벽에 안전한 구글 공식 레포지토리에서 나눔고딕을 내려받아 Matplotlib 커널에 직접 등록합니다.
     """
-    # 1단계: 범용 한글 가용 글꼴 가족 우선 배정
-    plt.rcParams['font.family'] = ['Malgun Gothic', 'NanumGothic', 'AppleGothic', 'Dotum', 'sans-serif']
-    # 2단계: 마이너스 기호 깨짐 에러 동시 차단
-    plt.rcParams['axes.unicode_minus'] = False
+    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+    font_path = "NanumGothic.ttf"
+    
+    if not os.path.exists(font_path):
+        try:
+            # 타임아웃을 방지하기 위해 정석 스트림 수신 파싱 가동
+            urllib.request.urlretrieve(font_url, font_path)
+        except Exception:
+            pass
+            
+    if os.path.exists(font_path):
+        try:
+            # Matplotlib 시스템 폰트 매니저 매핑 테이블에 파일 직접 강제 주입
+            fm.fontManager.addfont(font_path)
+            font_prop = fm.FontProperties(fname=font_path)
+            # 차트 전역 기본 글꼴을 나눔고딕 영문 명칭으로 바인딩
+            plt.rcParams['font.family'] = font_prop.get_name()
+            plt.rcParams['axes.unicode_minus'] = False
+            return font_prop
+        except Exception:
+            return None
+    return None
 
-# 전역 그래프 한글 무결성 세팅 즉시 구동
-apply_matplotlib_korean_setting()
+# 전역 한글 글꼴 원천 주입기 기동
+f_prop = init_korean_font_and_get_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드")
 st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
@@ -325,7 +344,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "춘천시 중앙로": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
             "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
             "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
-            "인제군": [38.0645, 128.1695], "고성군": [38.3795, 128.4680]
+            "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
         if "지역2" in df_mal.columns:
             df_mal["지역2_정규화"] = df_mal["지역2"].astype(str).str.strip()
@@ -436,10 +455,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
-            
-        st.markdown(f"##### 📋 {selected_month} [{selected_zone}] 국가 감시망 정밀 집계록 대장")
-        display_summary_df = monthly_summary.rename(columns={"지점명": "조사지점", "환경": "환경", "종": "채집종", val_col: "채집수(개체)"})
-        st.dataframe(display_summary_df[["조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
+        st.dataframe(monthly_summary.rename(columns={"지점명": "조사지점", "환경": "환경", "종": "채집종", val_col: "채집수(개체)"})[["조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
     else: st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 지정 지점 관할 데이터가 존재하지 않습니다.")
 
 # --- 4. 참진드기조사 어린이숲체험장 ---
