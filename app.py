@@ -54,7 +54,7 @@ def convert_df_to_csv(df):
 
 
 def smart_load_uploaded_file(uploaded_file):
-    """표준 단일 파서 (기후변화, 어린이숲 공백 트림)"""
+    """표준 단일 파서 (공백 트림 기능 작동)"""
     if uploaded_file is None:
         return pd.DataFrame()
     file_name = uploaded_file.name.lower()
@@ -133,42 +133,47 @@ def get_je_actual_style_data():
                             })
     return pd.DataFrame(data)
 
+# -----------------------------------------------------------------
+# [💡 핵심 연동: 말라리아 예측사업 VectorNet 표준 마스터 DB 전환]
+# -----------------------------------------------------------------
 @st.cache_data
 def get_malaria_actual_style_data():
-    locs = {
-        "춘천시 중앙로 (우사 거점)": [37.8813, 127.7298], "춘천시 지내리 (우사 거점)": [37.9250, 127.7410],
-        "철원군 대마리 (우사 거점)": [38.2543, 127.2145], "철원군 학사리 (우사 거점)": [38.2520, 127.4415],
-        "화천군 거점 (우사 거점)": [38.1060, 127.7035], "양구군 거점 (우사 거점)": [38.1055, 127.9880],
-        "인제군 거점 (우사 거점)": [38.0645, 128.1695], "고성군 거점 (우사 거점)": [38.3795, 128.4680]
-    }
+    """말라리아 8대 거점 및 VectorNet 표준 양식 데이터 세팅"""
     data = []
-    mal_species = ["얼룩날개모기류", "흰줄숲모기", "등줄숲모기", "한국숲모기", "토고숲모기", "금빛숲모기", "큰검정들모기", "반점날개집모기", "동양집모기", "빨간집모기", "작은빨간집모기", "줄다리집모기", "반점날개늪모기", "미동정"]
+    mal_spots_map = {
+        "춘천시 중앙로": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
+        "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
+        "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
+        "인제군": [38.0645, 128.1695], "고성군": [38.3795, 128.4680]
+    }
+    mal_species_list = [
+        "Anopheles spp.", "Aedes vexans", "Culex pipiens", "Aedes albopictus", 
+        "Aedes dorsalis", "Ochlerotatus koreicus", "Aedes togoi", "Armigeres subalbatus", 
+        "Culex bitaeniorhynchus", "Culex orientalis", "Culex tritaeniorhynchus", "Culex vagans", "Mansonia uniformis", "미동정"
+    ]
+    
     for year in ["2026년", "2025년"]:
         for month_num in range(4, 11):
-            month = f"{month_num:02d}월"
+            month_str = f"{month_num:02d}월"
             for week_num in range(1, 5):
-                week = f"{week_num}주"
-                np.random.seed(month_num * 15 + week_num + 5)
-                for name, coords in locs.items():
-                    is_summer = month in ["06월", "07월", "08월", "09월"]
-                    anopheles = int(np.random.poisson(75 if is_summer else 5))
-                    row = {
-                        "조사년도": year, "조사월": month, "조사주": week, "월": month_num, "주": week_num, "연중 주수": month_num*4 + week_num,
-                        "지점명": name, "위도": coords[0], "경도": coords[1], "얼룩날개모기류": anopheles
-                    }
-                    etc_sum = 0
-                    for sp in mal_species[1:]:
-                        if sp == "빨간집모기": val = int(np.random.poisson(35 if is_summer else 10))
-                        elif sp == "금빛숲모기": val = int(np.random.poisson(15 if is_summer else 2))
-                        else: val = int(np.random.poisson(1 if is_summer else 0))
-                        row[sp] = val
-                        etc_sum += val
-                    row["기타모기류"] = etc_sum
-                    total = anopheles + etc_sum
-                    row["합계"] = total
-                    row["얼룩날개모기 비율"] = f"{((anopheles / total) * 100):.1f}%" if total > 0 else "0.0%"
-                    row["말라리아원충감염조사"] = "음성"
-                    data.append(row)
+                np.random.seed(month_num * 15 + week_num + 3)
+                for loc2, coords in mal_spots_map.items():
+                    is_summer = month_str in ["06월", "07월", "08월", "09월"]
+                    
+                    for sp in mal_species_list:
+                        if sp == "Anopheles spp.":
+                            cnt = int(np.random.poisson(80 if is_summer else 5))
+                        elif sp in ["Culex pipiens", "Aedes vexans"]:
+                            cnt = int(np.random.poisson(40 if is_summer else 8))
+                        else:
+                            cnt = int(np.random.poisson(2 if is_summer else 0))
+                            
+                        if cnt > 0 or sp == "Anopheles spp.":
+                            data.append({
+                                "조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num,
+                                "사업명": "말라리아매개모기", "권역": "접경지역거점", "지역2": loc2, "환경": "우사", "방법": "유문등",
+                                "위도": coords[0], "경도": coords[1], "종": sp, "개체수": cnt
+                            })
     return pd.DataFrame(data)
 
 @st.cache_data
@@ -226,10 +231,8 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
-# 상주 세션 초기화
-if "mal_live_db" not in st.session_state: st.session_state.mal_live_db = get_malaria_actual_style_data()
-
 base_je_df = rename_duplicate_columns(get_je_actual_style_data())
+base_mal_df = rename_duplicate_columns(get_malaria_actual_style_data())
 base_cli_df = rename_duplicate_columns(get_climate_data())
 base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
 
@@ -256,14 +259,12 @@ st.markdown("---")
 # --- 1. 일본뇌염 매개모기 감시 ---
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
-    
     with st.expander("📥 [일본뇌염 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
         st.markdown("##### 📄 질병보건통합관리시스템 일본뇌염 규격 헤더")
         vn_je_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수", "채집기간", "Index", "실험개체수", "Pool No.", "양성 Pools", "비고"]
         vn_je_tmpl = pd.DataFrame(columns=vn_je_cols)
         vn_je_tmpl.loc[0] = [1, "일본뇌염예측", "강원도보건환경연구원", 2026, 5, 22, "2026-05-26", "강원", "횡성군 하대리", "축사", "LED1", "Culex tritaeniorhynchus", 12, 1, 12, 12, 1, 0, "-"]
         st.download_button("📥 [일본뇌염] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_je_tmpl), "VectorNet_일본뇌염_양식.csv", "text/csv")
-        
         je_file = st.file_uploader("질병청 VectorNet 일본뇌염 예측 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="je_up")
         df_je = base_je_df if je_file is None else rename_duplicate_columns(smart_load_uploaded_file(je_file))
 
@@ -309,69 +310,96 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         plt_ax.invert_yaxis()
                         plt_ax.set_xlabel("채집 개체 수 (마리)", fontproperties=f_prop)
                         if f_prop: plt_ax.set_yticklabels(sum_df["종"], fontproperties=f_prop, fontsize=8)
-                        plt.tight_layout()
                         st.pyplot(fig)
                         plt.close()
                     st.dataframe(spot_data[["지점명", "환경", "종", val_col_je]], hide_index=True, use_container_width=True)
                 else: st.info(f"💡 {spot_name} 지점의 해당 주차 데이터가 대장에 존재하지 않습니다.")
     else: st.info("💡 선택하신 기간의 일본뇌염 VectorNet 연동 데이터가 존재하지 않습니다.")
 
-# --- 2. 말라리아 매개모기 감시 ---
+# --- 2. 말라리아 매개모기 감시 (⚠️ 요구사항: 웹수정 제거 및 VectorNet 파일 업로드 규격 매칭 완비 ⭐️) ---
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
-    with st.expander("📝 🖥️ 말라리아 주차별 실시간 웹 직접 입력 대장"):
-        target_species_mal = ["얼룩날개모기류", "흰줄숲모기", "등줄숲모기", "한국숲모기", "토고숲모기", "금빛숲모기", "큰검정들모기", "반점날개집모기", "동양집모기", "빨간집모기", "작은빨간집모기", "줄다리집모기", "반점날개늪모기", "미동정"]
-        mal_spots_list = ["춘천시 중앙로 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 거점 (우사 거점)", "양구군 거점 (우사 거점)", "인제군 거점 (우사 거점)", "고성군 거점 (우사 거점)"]
-        with st.form("mal_web_input_form"):
-            col_sel_spot_mal = st.selectbox("🎯 말라리아 거점 지점명 선택", mal_spots_list)
-            form_cols_mal = st.columns(2)
-            input_values_mal = {}
-            for s_idx, sp in enumerate(target_species_mal):
-                with form_cols_mal[s_idx % 2]:
-                    existing_mal_df = st.session_state.mal_live_db[(st.session_state.mal_live_db["조사년도"] == selected_year) & (st.session_state.mal_live_db["조사월"] == selected_month) & (st.session_state.mal_live_db["조사주"] == selected_week) & (st.session_state.mal_live_db["지점명"] == col_sel_spot_mal)]
-                    # 💡 문법 오류 완벽 수정 공간 (`vibr` 제거) ⭐️
-                    default_val_mal = int(existing_mal_df[sp].iloc[0]) if not existing_mal_df.empty and sp in existing_mal_df.columns else 0
-                    input_values_mal[sp] = st.number_input(f"🦟 {sp} (마리)", min_value=0, max_value=9999, value=default_val_mal, step=1, key=f"in_mal_{sp}")
-            submit_save_mal = st.form_submit_button("💾 말라리아 웹 데이터 최종 보관 및 저장")
-            if submit_save_mal:
-                current_mal_db = st.session_state.mal_live_db.copy()
-                match_condition_mal = (current_mal_db["조사년도"] == selected_year) & (current_mal_db["조사월"] == selected_month) & (current_mal_db["조사주"] == selected_week) & (current_mal_db["지점명"] == col_sel_spot_mal)
-                anopheles_val = input_values_mal["얼룩날개모기류"]
-                etc_sum_val = sum([v for k, v in input_values_mal.items() if k != "얼룩날개모기류"])
-                total_sum_val = anopheles_val + etc_sum_val
-                if current_mal_db[match_condition_mal].shape[0] > 0:
-                    target_idx = current_mal_db[match_condition_mal].index[0]
-                    for sp, val in input_values_mal.items(): current_mal_db.at[target_idx, sp] = val
-                    current_mal_db.at[target_idx, "기타모기류"] = etc_sum_val
-                    current_mal_db.at[target_idx, "합계"] = total_sum_val
-                st.session_state.mal_live_db = current_mal_db
-                st.success("✅ 말라리아 웹 데이터 대장 갱신 완료!")
-        st.download_button("📥 웹 입력 완료된 말라리아 장부 백업 다운로드 (.csv)", convert_df_to_csv(st.session_state.mal_live_db), "말라리아_웹입력_백업.csv", "text/csv")
-    f_mal = st.session_state.mal_live_db[(st.session_state.mal_live_db["조사년도"] == selected_year) & (st.session_state.mal_live_db["조사월"] == selected_month) & (st.session_state.mal_live_db["조사주"] == selected_week)]
+    
+    with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
+        st.markdown("##### 📄 질병보건통합관리시스템 말라리아 규격 헤더")
+        
+        # 💡 요구사항 반영: 업로드된 파일의 23개 국가 표준 컬럼 서식양식 템플릿화
+        vn_mal_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수", "채집기간", "Index", "실험개체수", "Pool No.", "양성 Pools", "비고"]
+        vn_mal_tmpl = pd.DataFrame(columns=vn_mal_cols)
+        vn_mal_tmpl.loc[0] = [1, "말라리아매개모기", "접경지역거점", 2026, 5, 22, "2026-05-26", "강원", "철원군 대마리", "우사", "유문등", "Anopheles spp.", 45, 1, 45, 45, 1, 0, "-"]
+        st.download_button("📥 [말라리아] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_mal_tmpl), "VectorNet_말라리아_양식.csv", "text/csv")
+        
+        mal_file = st.file_uploader("질병청 VectorNet 말라리아 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="mal_up")
+        df_mal = base_mal_df if mal_file is None else rename_duplicate_columns(smart_load_uploaded_file(mal_file))
+
+    # 💡 무결성 파서 패치: 말라리아 시계열 텍스트 자동 가공 및 8대 거점 매핑 스크리닝
+    if not df_mal.empty:
+        if "연도" in df_mal.columns: df_mal["조사년도"] = df_mal["연도"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{x}년" if pd.notna(x) else selected_year)
+        else: df_mal["조사년도"] = selected_year
+        if "월" in df_mal.columns: df_mal["조사월"] = df_mal["월"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{int(x):02d}월" if pd.notna(x) else selected_month)
+        else: df_mal["조사월"] = selected_month
+        df_mal["조사주"] = selected_week
+        
+        # 실제 질병청 8대 지정 거점 매핑 인덱서 바인딩
+        mal_coords_map = {
+            "춘천시 중앙로": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
+            "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
+            "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
+            "인제군": [38.0645, 128.1695], "고성군": [38.3795, 128.4680]
+        }
+        if "지역2" in df_mal.columns:
+            df_mal["지역2_정규화"] = df_mal["지역2"].astype(str).str.strip()
+            df_mal["위도"] = df_mal["지역2_정규화"].map(lambda x: mal_coords_map[x][0] if x in mal_coords_map else (38.2543 if "철원" in x else 38.0))
+            df_mal["경도"] = df_mal["지역2_정규화"].map(lambda x: mal_coords_map[x][1] if x in mal_coords_map else (127.2145 if "철원" in x else 127.5))
+            df_mal["지점명"] = df_mal["지역2_정규화"].map(lambda x: f"{x} (우사 거점)" if "거점" not in x else x)
+        else:
+            df_mal["지점명"] = "춘천시 중앙로 (우사 거점)"
+
+    f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month) & (df_mal["조사주"] == selected_week)]
+    
     if not f_mal.empty:
+        mal_spots_list = ["춘천시 중앙로 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
         mal_sub_tabs = st.tabs([f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list])
+        
         for idx, spot_name in enumerate(mal_spots_list):
             with mal_sub_tabs[idx]:
-                spot_data_mal = f_mal[f_mal["지점명"] == spot_name]
+                # 와일드카드 매칭 포함 스크리닝
+                short_name = spot_name.split(" (")[0]
+                spot_data_mal = f_mal[f_mal["지점명"].str.contains(short_name, na=False)]
+                
                 if not spot_data_mal.empty:
                     c1, c2 = st.columns([5, 5])
                     with c1:
-                        m_mal = folium.Map(location=[float(spot_data_mal['open' if 'open' in spot_data_mal else '위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], zoom_start=11)
+                        st.markdown(f"##### 🗺️ 거점센터 매핑 및 단면")
+                        m_mal = folium.Map(location=[float(spot_data_mal['위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], zoom_start=11)
                         folium.Marker([float(spot_data_mal['위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal)
-                        st_folium(m_mal, key=f"map_mal_live_{idx}_{selected_month}", width="100%", height=400)
+                        st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_month}_{selected_week}", width="100%", height=380)
                     with c2:
-                        graph_series_mal = spot_data_mal[target_species_mal].iloc[0]
+                        st.markdown(f"##### 📊 {short_name} 종별 채집량 분포 (개체수)")
+                        val_col_mal = "개체수" if "개체수" in spot_data_mal.columns else "채집수"
+                        sum_df_mal = spot_data_mal.groupby("종")[val_col_mal].sum().reset_index()
+                        
                         fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                        bar_colors_mal = ['#1d3557' if sp == "얼룩날개모기류" else '#c4cbde' for sp in target_species_mal]
-                        bars = plt_ax.barh(target_species_mal, graph_series_mal.values, color=bar_colors_mal, edgecolor='#2b2d42', height=0.7)
+                        # 💡 요구사항 반영: Anopheles spp.(얼룩날개모기류)만 파란색 강조, 나머지는 회색 처리
+                        bar_colors_mal = ['#1d3557' if str(s).strip() == "Anopheles spp." else '#c4cbde' for s in sum_df_mal["종"]]
+                        bars = plt_ax.barh(sum_df_mal["종"], sum_df_mal[val_col_mal].values, color=bar_colors_mal, edgecolor='#2b2d42', height=0.7)
+                        
                         for bar in bars:
                             width = bar.get_width()
                             if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8, fontproperties=f_prop)
+                            
                         plt_ax.invert_yaxis()
-                        if f_prop: plt_ax.set_yticklabels(target_species_mal, fontproperties=f_prop, fontsize=8)
+                        plt_ax.set_xlabel("채집 개체 수 (마리)", fontproperties=f_prop)
+                        if f_prop: plt_ax.set_yticklabels(sum_df_mal["종"], fontproperties=f_prop, fontsize=8)
+                        plt.tight_layout()
                         st.pyplot(fig)
                         plt.close()
-                    st.dataframe(spot_data_mal, hide_index=True, use_container_width=True)
+                        
+                    st.dataframe(spot_data_mal[["지점명", "환경", "종", val_col_mal]], hide_index=True, use_container_width=True)
+                else:
+                    st.info(f"💡 {short_name} 지점의 해당 주차 데이터가 대장에 존재하지 않습니다.")
+    else:
+        st.info("💡 선택하신 기간의 말라리아 VectorNet 연동 데이터가 존재하지 않습니다.")
 
 # --- 3. 기후변화 대응 매개체 감시 ---
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
@@ -383,7 +411,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         if selected_zone == "모기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 22, "2026-05-28", "강원", "춘천시보건소", "도심", "DMS1", "Culex pipiens", 24]
         elif selected_zone == "참진드기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 21, "2026-05-19", "강원", "화천군", "무덤", "Trap", "Haemaphysalis longicornis", 5]
         else: vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 4, 17, "2026-04-21", "강원", "철원군", "야산", "Sherman trap", "mite(털진드기)", 89]
-        st.download_button(f"📥 [{selected_zone}] VectorNet 표준 예시파일 다운로드 (.csv)", convert_df_to_csv(vn_tmpl), f"VectorNet_{selected_zone}_양식.csv", "text/csv")
+        st.download_button("📥 [{selected_zone}] VectorNet 표준 예시파일 다운로드 (.csv)", convert_df_to_csv(vn_tmpl), f"VectorNet_{selected_zone}_양식.csv", "text/csv")
         cli_file = st.file_uploader("질병청 VectorNet [{selected_zone}] 엑셀/CSV 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key="cli_up")
         df_cli = base_cli_df if cli_file is None else rename_duplicate_columns(smart_load_uploaded_file(cli_file))
 
@@ -410,7 +438,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             m_center_lat = 38.24 if "털진드기" in selected_zone else 38.05
             m_cli = folium.Map(location=[m_center_lat, 127.5], zoom_start=11 if "털진드기" in selected_zone else 9)
             for _, r in monthly_summary.iterrows(): folium.Marker(location=[float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=f"월간 누적 채집수: {r[val_col]}개체").add_to(m_cli)
-            st_folium(m_cli, key=f"map_cli_final_{selected_zone}", width="100%", height=430)
+            st_folium(m_cli, key=f"map_climate_static_node_{selected_month}", width="100%", height=430)
         with col_day:
             fig, ax = plt.subplots(figsize=(6, 5.2))
             monthly_summary.set_index("지점명")[val_col].plot(kind='bar', ax=ax, color='#2a9d8f', edgecolor='black')
@@ -441,7 +469,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     except Exception: m_forest = pd.DataFrame()
 
     if not m_forest.empty:
-        m_forest['종명_한글'] = m_forest['종'].replace({"Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphisalis japonica": "일본참진드기"})
+        m_forest['종명_한글'] = m_forest['종'].replace({"Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
         m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" and x['지점번호'] <= 3 else (f"비관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "out" and x['지점번호'] <= 3 else "기타 타지점"), axis=1)
         m_forest = m_forest[m_forest['gu분지점'] != "기타 타지점"].copy()
