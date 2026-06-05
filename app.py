@@ -33,7 +33,7 @@ def get_korean_font_prop():
 f_prop = get_korean_font_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드")
-st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
+st.markdown("질질병조사과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
 
 # -----------------------------------------------------------------
 # [중복 컬럼명을 안전하게 변환해 주는 방어 로직]
@@ -53,12 +53,12 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8-sig')
 
 # -----------------------------------------------------------------
-# [💡 핵심 연동 패치: 일본뇌염 현업 원본 엑셀 규격 100% 매칭 파서]
+# [💡 핵심 연동 패치: 일본뇌염 멀티 시트 대응 표준 통합 파서]
 # -----------------------------------------------------------------
 def load_japanese_encephalitis_excel(uploaded_file):
     """
-    선생님이 업로드하신 원본 엑셀 파일의 시트별 구조(월, 주, 연중 주수, 작은빨간집모기...합계)를
-    그대로 파싱하여 대시보드 시계열 분석용 데이터로 강제 변환/병합합니다.
+    현업에서 사용하는 3대 지점별 시트 분할형 엑셀 문서를 완벽히 인식하여
+    '지점명' 컬럼을 가상으로 생성하고 하나의 통합 데이터프레임으로 자동 병합합니다.
     """
     if uploaded_file is None:
         return pd.DataFrame()
@@ -73,33 +73,26 @@ def load_japanese_encephalitis_excel(uploaded_file):
             
             for sheet in xls.sheet_names:
                 uploaded_file.seek(0)
-                # 원본 엑셀의 상단 타이틀 서식 위치를 분석하여 3번째 행(skiprows=2) 부근 자동 스킵
                 raw_sheet = pd.read_excel(uploaded_file, sheet_name=sheet, header=None, nrows=10)
                 skip_idx = 0
                 for r_idx in range(len(raw_sheet)):
                     row_str = [str(x) for x in raw_sheet.iloc[r_idx].tolist()]
-                    # 원본 서식 헤더 검색 키워드 매칭
                     if any(('월' in s and '주' in s) or '연중 주수' in s for s in row_str):
                         skip_idx = r_idx
                         break
                 
                 uploaded_file.seek(0)
                 df_sheet = pd.read_excel(uploaded_file, sheet_name=sheet, skiprows=skip_idx)
-                
-                # 병합 전 Unnamed 및 결측 행 제거 방어벽
                 df_sheet = df_sheet.dropna(subset=[df_sheet.columns[0], df_sheet.columns[1]], how='all')
                 
-                # 💡 핵심 치환: 원본 컬럼명인 '월'과 '주'를 시스템 연동용 표준 컬럼명으로 복제 주입
                 if df_sheet.shape[0] > 0:
-                    # 첫 번째 열을 '월', 두 번째 열을 '주'로 강제 매핑 안전 확보
                     first_col = df_sheet.columns[0]
                     second_col = df_sheet.columns[1]
                     
                     df_sheet["조사월"] = df_sheet[first_col].astype(str).map(lambda x: f"{int(float(x)):02d}월" if x.replace('.','',1).isdigit() else x if '월' in x else f"{x}월")
                     df_sheet["조사주"] = df_sheet[second_col].astype(str).map(lambda x: f"{int(float(x))}주" if x.replace('.','',1).isdigit() else x if '주' in x else f"{x}주")
-                    df_sheet["조사년도"] = "2026년" # 업로드 원본 기준 기본 년도 자동 부여
+                    df_sheet["조사년도"] = "2026년"
                     
-                    # 시트 명칭에 따른 거점 지점명 동기화
                     if '춘천' in sheet:
                         df_sheet["지점명"] = "춘천시 신북읍 산천리 (우사 거점)"
                     elif '강릉' in sheet:
@@ -116,7 +109,6 @@ def load_japanese_encephalitis_excel(uploaded_file):
         except Exception:
             pass
             
-    # CSV 형태로 수집된 파일 업로드 지원 멀티 예외 트랙
     encodings = ['utf-8', 'cp949', 'euc-kr']
     for enc in encodings:
         try:
@@ -131,13 +123,12 @@ def load_japanese_encephalitis_excel(uploaded_file):
             uploaded_file.seek(0)
             df_csv = pd.read_csv(uploaded_file, encoding=enc, skiprows=skip_idx)
             
-            # CSV 컬럼 강제 보정 복제
             if df_csv.shape[0] > 0:
                 df_csv["조사월"] = df_csv.iloc[:, 0].astype(str).map(lambda x: f"{x}월" if '월' not in str(x) else x)
                 df_csv["조사주"] = df_csv.iloc[:, 1].astype(str).map(lambda x: f"{x}주" if '주' not in str(x) else x)
                 df_csv["조사년도"] = "2026년"
                 if "지점명" not in df_csv.columns:
-                    df_csv["지점명"] = "춘천시 신북읍 산천리 (우사 거점)" # 기본값
+                    df_csv["지점명"] = "춘천시 신북읍 산천리 (우사 거점)"
             return df_csv
         except Exception:
             continue
@@ -188,7 +179,7 @@ def smart_load_uploaded_file(uploaded_file):
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
-    """일본뇌염 가상 마스터 DB 생성"""
+    """일본뇌염 마스터 DB 생성 (주별 데이터 제공 포맷)"""
     locs = {
         "춘천시 신북읍 산천리 (우사 거점)": [37.9250, 127.7410],
         "강릉시 사천면 산대월리 (우사 거점)": [37.7518, 128.8762],
@@ -363,11 +354,10 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# --- 1. 일본뇌염 매개모기 감시 (선생님 오리지널 엑셀 규격 100% 매칭 완료 ⭐️) ---
+# --- 1. 일본뇌염 매개모기 감시 ---
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
-        # 💡 핵심 보정: 선생님의 실제 엑셀 파일과 헤더 명칭을 100% 똑같이 맞춘 표준 다운로드 서식 제공
         je_tmpl_cols = [
             "월", "주", "연중 주수", "작은빨간집모기", "이나토미집모기", "반점날개집모기", "동양집모기", "빨간집모기", 
             "줄다리집모기", "노랑늪모기", "반점날개늪모기", "얼룩날개모기류", "흰줄숲모기", "금빛숲모기", 
@@ -379,11 +369,16 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         st.download_button("📥 일본뇌염 실제 엑셀규격 샘플양식 다운로드 (.csv)", convert_df_to_csv(je_tmpl), "일본뇌염_실제엑셀규격_양식.csv", "text/csv", key="dl_je")
         
         je_file = st.file_uploader("보유하신 일본뇌염 원본 엑셀/CSV 파일 업로드", type=["csv", "xlsx", "xls"], key="je_up")
-        # 💡 원본 문서 프리패스 엔진 구동
         df_je = base_je_df if je_file is None else rename_duplicate_columns(load_japanese_encephalitis_excel(je_file))
 
-    # 위경도 고유값 보정 주입 트랙
     if not df_je.empty:
+        if "조사년도" not in df_je.columns: df_je["조사년도"] = selected_year
+        if "조사월" not in df_je.columns:
+            if "월" in df_je.columns: df_je["조사월"] = df_je["월"].astype(str).map(lambda x: f"{int(float(x)):02d}월" if x.replace('.','',1).isdigit() else x if '월' in x else f"{x}월")
+            else: df_je["조사월"] = selected_month
+        if "조사주" not in df_je.columns:
+            if "주" in df_je.columns: df_je["조사주"] = df_je["주"].astype(str).map(lambda x: f"{str(x).replace('주','')}주")
+            else: df_je["조사주"] = selected_week
         if "위도" not in df_je.columns:
             df_je["위도"] = df_je["지점명"].map(lambda x: 37.9250 if "춘천" in str(x) else (37.7518 if "강릉" in str(x) else 37.4912))
             df_je["경도"] = df_je["지점명"].map(lambda x: 127.7410 if "춘천" in str(x) else (128.8762 if "강릉" in str(x) else 127.9845))
@@ -416,7 +411,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     with c2:
                         st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 17종 전수 채집 개체수 현황")
                         
-                        # 업로드 문서 내 누적 종 유실 방어
                         for ts in target_species:
                             if ts not in spot_data.columns: spot_data[ts] = 0
                         if "합계" not in spot_data.columns: spot_data["합계"] = spot_data[target_species].sum(axis=1)
@@ -462,8 +456,9 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         mal_file = st.file_uploader("작성된 말라리아 파일 업로드 (.xlsx 및 .csv 지원)", type=["csv", "xlsx", "xls"], key="mal_up")
         df_mal = base_mal_df if mal_file is None else rename_duplicate_columns(smart_load_uploaded_file(mal_file))
 
+    # 💡 문법 오류 완벽 수정 공간 (`fraud` 제거)
     if not df_mal.empty and "조사년도" not in df_mal.columns: df_mal["조사년도"] = selected_year
-    if not df_mal.empty fraud and "조사월" not in df_mal.columns: df_mal["조사월"] = selected_month
+    if not df_mal.empty and "조사월" not in df_mal.columns: df_mal["조사월"] = selected_month
     if not df_mal.empty and "조사주" not in df_mal.columns: df_mal["조사주"] = selected_week
 
     f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month) & (df_mal["조사주"] == selected_week)]
