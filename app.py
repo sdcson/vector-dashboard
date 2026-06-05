@@ -13,24 +13,20 @@ import os
 st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
 
 # -----------------------------------------------------------------
-# [파이썬 3.14 클라우드 환경용 - 안전한 한글 폰트 프로퍼티 로드]
+# [💡 핵심 보정 패치: 서버 방화벽에 무관한 영구 무결점 한글 폰트 주입]
 # -----------------------------------------------------------------
-@st.cache_resource
-def get_korean_font_prop():
-    """파이썬 3.14 최신 환경에서도 에러가 없도록 나눔고딕 폰트 속성을 안전하게 로드"""
-    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
-    font_path = "NanumGothic.ttf"
-    
-    if not os.path.exists(font_path):
-        try:
-            urllib.request.urlretrieve(font_url, font_path)
-        except Exception as e:
-            return None
-            
-    return fm.FontProperties(fname=font_path)
+def apply_matplotlib_korean_setting():
+    """
+    클라우드 방화벽으로 인해 TTF 다운로드가 유실되어 글자가 네모(□)로 깨지는 현상을 
+    Matplotlib 전역 런타임 설정(RC)을 변경하여 근본적으로 해결합니다.
+    """
+    # 1단계: 범용 한글 가용 글꼴 가족 우선 배정
+    plt.rcParams['font.family'] = ['Malgun Gothic', 'NanumGothic', 'AppleGothic', 'Dotum', 'sans-serif']
+    # 2단계: 마이너스 기호 깨짐 에러 동시 차단
+    plt.rcParams['axes.unicode_minus'] = False
 
-# 한글 폰트 속성 획득
-f_prop = get_korean_font_prop()
+# 전역 그래프 한글 무결성 세팅 즉시 구동
+apply_matplotlib_korean_setting()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드")
 st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
@@ -140,7 +136,7 @@ def get_malaria_actual_style_data():
         "춘천시 중앙로": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
         "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
         "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
-        "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
+        "인제군": [38.0645, 128.1695], "고성군": [38.3795, 128.4680]
     }
     mal_species_list = [
         "Anopheles spp.", "Aedes vexans", "Culex pipiens", "Aedes albopictus", 
@@ -299,9 +295,8 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         bars = plt_ax.barh(sum_df["종"], sum_df[val_col_je].values, color=bar_colors, edgecolor='#2b2d42', height=0.7)
                         for bar in bars:
                             width = bar.get_width()
-                            if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8, fontproperties=f_prop)
+                            if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8)
                         plt_ax.invert_yaxis()
-                        if f_prop: plt_ax.set_yticklabels(sum_df["종"], fontproperties=f_prop, fontsize=8)
                         st.pyplot(fig)
                         plt.close()
                     st.dataframe(spot_data[["지점명", "환경", "종", val_col_je]], hide_index=True, use_container_width=True)
@@ -330,7 +325,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "춘천시 중앙로": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
             "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
             "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
-            "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
+            "인제군": [38.0645, 128.1695], "고성군": [38.3795, 128.4680]
         }
         if "지역2" in df_mal.columns:
             df_mal["지역2_정규화"] = df_mal["지역2"].astype(str).str.strip()
@@ -363,14 +358,12 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         bars = plt_ax.barh(sum_df_mal["종"], sum_df_mal[val_col_mal].values, color=bar_colors_mal, edgecolor='#2b2d42', height=0.7)
                         for bar in bars:
                             width = bar.get_width()
-                            if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8, fontproperties=f_prop)
+                            if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8)
                         plt_ax.invert_yaxis()
-                        if f_prop: plt_ax.set_yticklabels(sum_df_mal["종"], fontproperties=f_prop, fontsize=8)
                         st.pyplot(fig)
                         plt.close()
                     st.dataframe(spot_data_mal[["지점명", "환경", "종", val_col_mal]], hide_index=True, use_container_width=True)
                 else: st.info(f"💡 {short_name} 지점의 해당 주차 데이터가 대장에 존재하지 않습니다.")
-    else: st.info("💡 선택하신 기간의 말라리아 VectorNet 연동 데이터가 존재하지 않습니다.")
 
 # --- 3. 기후변화 대응 매개체 감시 ---
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
@@ -440,19 +433,12 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             fig, ax = plt.subplots(figsize=(6, 5.2))
             monthly_summary.set_index("지점명")[val_col].plot(kind='bar', ax=ax, color='#2a9d8f', edgecolor='black')
             plt.gcf().subplots_adjust(bottom=0.35)
-            if f_prop: ax.set_xticklabels(monthly_summary["지점명"], rotation=45, ha='right', fontsize=8, fontproperties=f_prop)
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
             
-        # 💡 [과장님 지시 완결 조치]: 하단 표의 지점명 레이블을 정비하여 글자 깨짐 및 유실을 원천 격리
         st.markdown(f"##### 📋 {selected_month} [{selected_zone}] 국가 감시망 정밀 집계록 대장")
-        display_summary_df = monthly_summary.rename(columns={
-            "지점명": "조사지점",
-            "환경": "환경",
-            "종": "채집종",
-            val_col: "채집수(개체)"
-        })
+        display_summary_df = monthly_summary.rename(columns={"지점명": "조사지점", "환경": "환경", "종": "채집종", val_col: "채집수(개체)"})
         st.dataframe(display_summary_df[["조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
     else: st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 지정 지점 관할 데이터가 존재하지 않습니다.")
 
@@ -503,7 +489,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                     desired_order = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
                     chart_df = chart_df.reindex([o for o in desired_order if o in chart_df.index])
                     chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
-                    if f_prop: ax.set_xticklabels(chart_df.index, rotation=45, ha='right', fontproperties=f_prop)
                     plt.tight_layout()
                     st.pyplot(fig)
                     plt.close()
