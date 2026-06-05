@@ -128,47 +128,46 @@ def get_je_actual_style_data():
                         if cnt > 0 or sp == "Culex tritaeniorhynchus":
                             data.append({
                                 "조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num,
-                                "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": loc2, "환경": "축사", "방법": "LED1",
+                                "사업명": "일본뇌염예측", "권역": "강원도보환경연구원", "지역2": loc2, "환경": "축사", "방법": "LED1",
                                 "위도": coords[0], "경도": coords[1], "종": sp, "개체수": cnt
                             })
     return pd.DataFrame(data)
 
+# -----------------------------------------------------------------
+# [말라리아 예측사업 VectorNet 양식 마스터 세션 백업본]
+# -----------------------------------------------------------------
 @st.cache_data
 def get_malaria_actual_style_data():
-    locs = {
-        "춘천시 중앙로 (우사 거점)": [37.8813, 127.7298], "춘천시 지내리 (우사 거점)": [37.9250, 127.7410],
-        "철원군 대마리 (우사 거점)": [38.2543, 127.2145], "철원군 학사리 (우사 거점)": [38.2520, 127.4415],
-        "화천군 거점 (우사 거점)": [38.1060, 127.7035], "양구군 거점 (우사 거점)": [38.1055, 127.9880],
-        "인제군 거점 (우사 거점)": [38.0645, 128.1695], "고성군 거점 (우사 거점)": [38.3795, 128.4680]
-    }
     data = []
-    mal_species = ["얼룩날개모기류", "흰줄숲모기", "등줄숲모기", "한국숲모기", "토고숲모기", "금빛숲모기", "큰검정들모기", "반점날개집모기", "동양집모기", "빨간집모기", "작은빨간집모기", "줄다리집모기", "반점날개늪모기", "미동정"]
+    mal_spots_map = {
+        "춘천시 중앙로": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
+        "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
+        "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
+        "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
+    }
+    mal_species_list = [
+        "Anopheles spp.", "Aedes vexans", "Culex pipiens", "Aedes albopictus", 
+        "Aedes dorsalis", "Ochlerotatus koreicus", "Aedes togoi", "Armigeres subalbatus", 
+        "Culex bitaeniorhynchus", "Culex orientalis", "Culex tritaeniorhynchus", "Culex vagans", "Mansonia uniformis", "미동정"
+    ]
+    
     for year in ["2026년", "2025년"]:
         for month_num in range(4, 11):
-            month = f"{month_num:02d}월"
+            month_str = f"{month_num:02d}월"
             for week_num in range(1, 5):
-                week = f"{week_num}주"
-                np.random.seed(month_num * 15 + week_num + 5)
-                for name, coords in locs.items():
-                    is_summer = month in ["06월", "07월", "08월", "09월"]
-                    anopheles = int(np.random.poisson(75 if is_summer else 5))
-                    row = {
-                        "조사년도": year, "조사월": month, "조사주": week, "월": month_num, "주차": week_num, "연중 주수": month_num*4 + week_num,
-                        "지점명": name, "위도": coords[0], "경도": coords[1], "얼룩날개모기류": anopheles
-                    }
-                    etc_sum = 0
-                    for sp in mal_species[1:]:
-                        if sp == "빨간집모기": val = int(np.random.poisson(35 if is_summer else 10))
-                        elif sp == "금빛숲모기": val = int(np.random.poisson(15 if is_summer else 2))
-                        else: val = int(np.random.poisson(1 if is_summer else 0))
-                        row[sp] = val
-                        etc_sum += val
-                    row["기타모기류"] = etc_sum
-                    total = anopheles + etc_sum
-                    row["합계"] = total
-                    row["얼룩날개모기 비율"] = f"{((anopheles / total) * 100):.1f}%" if total > 0 else "0.0%"
-                    row["말라리아원충감염조사"] = "음성"
-                    data.append(row)
+                np.random.seed(month_num * 15 + week_num + 3)
+                for loc2, coords in mal_spots_map.items():
+                    is_summer = month_str in ["06월", "07월", "08월", "09월"]
+                    for sp in mal_species_list:
+                        if sp == "Anopheles spp.": cnt = int(np.random.poisson(80 if is_summer else 5))
+                        elif sp in ["Culex pipiens", "Aedes vexans"]: cnt = int(np.random.poisson(40 if is_summer else 8))
+                        else: cnt = int(np.random.poisson(2 if is_summer else 0))
+                        if cnt > 0 or sp == "Anopheles spp.":
+                            data.append({
+                                "조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num,
+                                "사업명": "말라리아매개모기", "권역": "접경지역거점", "지역2": loc2, "환경": "우사", "방법": "유문등",
+                                "위도": coords[0], "경도": coords[1], "종": sp, "개체수": cnt
+                            })
     return pd.DataFrame(data)
 
 @st.cache_data
@@ -226,10 +225,9 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
-# 상주 세션 초기화
-if "mal_live_db" not in st.session_state: st.session_state.mal_live_db = get_malaria_actual_style_data()
-
+# 💡 [NameError 원천 격리 해제 노드]: 말라리아 세션 메모리 변수 누락 완벽 복원 완료 ⭐️
 base_je_df = rename_duplicate_columns(get_je_actual_style_data())
+base_mal_df = rename_duplicate_columns(get_malaria_actual_style_data())
 base_cli_df = rename_duplicate_columns(get_climate_data())
 base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
 
@@ -304,6 +302,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                             width = bar.get_width()
                             if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8, fontproperties=f_prop)
                         plt_ax.invert_yaxis()
+                        plt_ax.set_xlabel("채집 개체 수 (마리)", fontproperties=f_prop)
                         if f_prop: plt_ax.set_yticklabels(sum_df["종"], fontproperties=f_prop, fontsize=8)
                         st.pyplot(fig)
                         plt.close()
@@ -368,6 +367,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             width = bar.get_width()
                             if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8, fontproperties=f_prop)
                         plt_ax.invert_yaxis()
+                        plt_ax.set_xlabel("채집 개체 수 (마리)", fontproperties=f_prop)
                         if f_prop: plt_ax.set_yticklabels(sum_df_mal["종"], fontproperties=f_prop, fontsize=8)
                         st.pyplot(fig)
                         plt.close()
@@ -375,11 +375,10 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                 else: st.info(f"💡 {short_name} 지점의 해당 주차 데이터가 대장에 존재하지 않습니다.")
     else: st.info("💡 선택하신 기간의 말라리아 VectorNet 연동 데이터가 존재하지 않습니다.")
 
-# --- 3. 기후변화 대응 매개체 감시 (💡 요구사항: 모기는 춘천만, 참진드기는 화천/인제만 필터 격리 가동) ---
+# --- 3. 기후변화 대응 매개체 감시 ---
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
-    
     with st.expander(f"📥 [{selected_zone}] 최신 지정 서식 파일 업로드 및 가이드"):
         if selected_zone == "모기 권역":
             st.info("💡 권역 모기 데이터 업로드 시 '권역모기.xlsx' 원본을 그대로 업로드해 주세요.")
@@ -416,25 +415,19 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             df_cli["위도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][0] if x in h_coords else 38.0)
             df_cli["경도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][1] if x in h_coords else 127.5)
             df_cli["지점명"] = df_cli["지역2_정외"] + " (" + df_cli["환경"].astype(str) + ")"
-        else:
-            df_cli["지점명"] = "지정 감시소"
+        else: df_cli["지점명"] = "지정 감시소"
 
     m_data = df_cli[(df_cli["조사년도"] == selected_year) & (df_cli["조사월"] == selected_month)].copy()
-    if "털진드기" in selected_zone and "종" in m_data.columns:
-        m_data = m_data[m_data["종"].str.contains("mite|털진드기", case=False, na=False)]
+    if "털진드기" in selected_zone and "종" in m_data.columns: m_data = m_data[m_data["종"].str.contains("mite|털진드기", case=False, na=False)]
 
-    # 💡 [핵심 알고리즘 주입]: 권역 선택에 따라 주무관님이 지정하신 고정 지점 외에는 철저히 Drop 처리
     if not m_data.empty and "지역2_정외" in m_data.columns:
         if selected_zone == "모기 권역":
-            # 모기는 오직 춘천 고정 관할망만 매핑 허용
             allowed_spots = ["춘천시보건소", "백로서식지", "주택", "종가오리"]
             m_data = m_data[m_data["지역2_정외"].isin(allowed_spots)]
         elif selected_zone == "참진드기 권역":
-            # 참진드기는 오직 화천군과 인제군만 허용
             allowed_spots = ["화천군", "인제군"]
             m_data = m_data[m_data["지역2_정외"].isin(allowed_spots)]
         elif "털진드기" in selected_zone:
-            # 털진드기는 철원군 집중 매핑
             m_data = m_data[m_data["지역2_정외"] == "철원군"]
 
     if not m_data.empty:
@@ -446,13 +439,9 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             st.markdown(f"##### 📍 {selected_month} [{selected_zone}] 관할 지점 격리 매핑 GIS 지도")
             m_center_lat = 38.24 if "털진드기" in selected_zone else (37.88 if selected_zone == "모기 권역" else 38.08)
             m_center_lng = 127.22 if "털진드기" in selected_zone else (127.75 if selected_zone == "모기 권역" else 127.95)
-            
-            # 격리된 위치에 맞는 가시성 스케일 조절
             m_zoom = 11 if "털진드기" in selected_zone or selected_zone == "모기 권역" else 10
             m_cli = folium.Map(location=[m_center_lat, m_center_lng], zoom_start=m_zoom)
-            
-            for _, r in monthly_summary.iterrows():
-                folium.Marker(location=[float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=f"월간 누적 채집수: {r[val_col]}개체").add_to(m_cli)
+            for _, r in monthly_summary.iterrows(): folium.Marker(location=[float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=f"월간 누적 채집수: {r[val_col]}개체").add_to(m_cli)
             st_folium(m_cli, key=f"map_climate_static_node_{selected_month}", width="100%", height=430)
             
         with col_day:
@@ -463,10 +452,8 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
-            
         st.dataframe(monthly_summary[["지점명", "환경", "종", val_col]], hide_index=True, use_container_width=True)
-    else:
-        st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 지정 지점 관할 데이터가 존재하지 않습니다.")
+    else: st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 지정 지점 관할 데이터가 존재하지 않습니다.")
 
 # --- 4. 참진드기조사 어린이숲체험장 ---
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
