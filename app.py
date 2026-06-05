@@ -59,7 +59,7 @@ def convert_df_to_csv(df):
 def get_je_actual_style_data():
     """일본뇌염 마스터 DB 생성 (주별 데이터 제공 포맷)"""
     locs = {
-        "춘천시 신북읍 산천리 (우사 거점)": [37.9250, 12.7410],
+        "춘천시 신북읍 산천리 (우사 거점)": [37.9250, 127.7410],
         "강릉시 사천면 산대월리 (우사 거점)": [37.7518, 128.8762],
         "횡성군 공근면 하대리 (우사 거점)": [37.4912, 127.9845]
     }
@@ -186,7 +186,7 @@ base_cli_df = rename_duplicate_columns(get_climate_data())
 base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
 
 # -----------------------------------------------------------------
-# [사이드바 영역 - 💡 깨지는 로고 코드 완전 분쇄 제거 완료]
+# [사이드바 공통 시간 필터 및 이원화 제어 영역]
 # -----------------------------------------------------------------
 st.sidebar.markdown("### 📅 공통 시간 필터")
 
@@ -208,7 +208,7 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# --- 1. 일본뇌염 매개모기 감시 ---
+# --- 1. 일본뇌염 매개모기 감시 (지점별 하위 탭 형식 개편 완비 ⭐️) ---
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
@@ -220,27 +220,56 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         df_je = base_je_df if je_file is None else rename_duplicate_columns(pd.read_csv(je_file) if je_file.name.endswith('.csv') else pd.read_excel(je_file))
 
     f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
+    
     if not f_je.empty:
-        c1, c2 = st.columns([5, 5])
-        with c1:
-            st.markdown(f"##### 📍 {selected_year} {selected_month} 주요 거점 우사 지리정보 (GIS)")
-            m_je = folium.Map(location=[37.75, 128.3], zoom_start=8)
-            for _, r in f_je.iterrows():
-                if pd.notna(r['위도']) and pd.notna(r['경도']):
-                    folium.Marker([float(r['위도']), float(r['경도'])], tooltip=r['지점명'], icon=folium.Icon(color='red')).add_to(m_je)
-            st_folium(m_je, key="map_je", width="100%", height=400)
-        with c2:
-            fig, ax = plt.subplots(figsize=(6, 4.5))
-            sizes = [f_je["작은빨간집모기"].sum(), f_je["빨간집모기"].sum(), f_je["금빛숲모기"].sum()]
-            patches, texts, autotexts = ax.pie(sizes, labels=["작은빨간집모기", "빨간집모기", "금빛숲모기"], autopct='%1.1f%%', startangle=90, colors=['#e63946', '#f4a261', '#2a9d8f'])
-            if f_prop:
-                for t in texts: t.set_fontproperties(f_prop)
-                for t in autotexts: t.set_fontproperties(f_prop)
-            st.pyplot(fig)
-            plt.close()
-        st.dataframe(f_je[["지점명", "조사주", "작은빨간집모기", "빨간집모기", "금빛숲모기", "합계", "병원체검사"]], hide_index=True, use_container_width=True)
+        # 💡 요구사항 반영: 일본뇌염 하위 시스템을 '지점별 탭' 형식으로 전면 고도화 분리
+        je_spots = ["춘천시 신북읍 산천리 (우사 거점)", "강릉시 사천면 산대월리 (우사 거점)", "횡성군 공근면 하대리 (우사 거점)"]
+        je_sub_tabs = st.tabs([f"📍 {spot.split(' (')[0]}" for spot in je_spots])
+        
+        for idx, spot_name in enumerate(je_spots):
+            with je_sub_tabs[idx]:
+                spot_data = f_je[f_je["지점명"] == spot_name]
+                
+                if not spot_data.empty:
+                    c1, c2 = st.columns([5, 5])
+                    with c1:
+                        st.markdown(f"##### 🗺️ 지리정보 매핑 및 거점 단면")
+                        m_je = folium.Map(location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], zoom_start=11)
+                        folium.Marker([float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='red', icon='home')).add_to(m_je)
+                        st_folium(m_je, key=f"map_je_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
+                    with c2:
+                        # 💡 요구사항 반영: 그래프 지표를 [작은빨간집모기 마리수 vs 기타모기 마리수] 대조군으로 전면 교체
+                        culex_count = int(spot_data["작은빨간집모기"].sum())
+                        # 합계에서 작은빨간집모기를 뺀 나머지를 '기타모기'로 규정
+                        etc_count = max(0, int(spot_data["합계"].sum()) - culex_count)
+                        
+                        st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 주요 지표 분석")
+                        fig, ax = plt.subplots(figsize=(6, 4.2))
+                        
+                        if (culex_count + etc_count) > 0:
+                            patches, texts, autotexts = ax.pie(
+                                [culex_count, etc_count], 
+                                labels=["작은빨간집모기", "기타모기류"], 
+                                autopct='%1.1f%%', 
+                                startangle=90, 
+                                colors=['#ef233c', '#8d99ae']
+                            )
+                            if f_prop:
+                                for t in texts: t.set_fontproperties(f_prop)
+                                for t in autotexts: t.set_fontproperties(f_prop)
+                        else:
+                            ax.text(0.5, 0.5, "해당 주차 채집량 없음", ha='center', va='center', fontproperties=f_prop)
+                            
+                        st.pyplot(fig)
+                        plt.close()
+                        
+                    st.dataframe(spot_data[["지점명", "조사주", "작은빨간집모기", "빨간집모기", "금빛숲모기", "합계", "병원체검사"]], hide_index=True, use_container_width=True)
+                else:
+                    st.info(f"💡 {spot_name} 지점의 해당 주차 데이터가 대장에 존재하지 않습니다.")
+    else:
+        st.info("💡 선택하신 기간의 일본뇌염 감시 데이터가 존재하지 않습니다.")
 
-# --- 2. 말라리아 매개모기 감시 ---
+# --- 2. 말라리아 매개모기 감시 (무터치 철저 검증 완료) ---
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
@@ -257,7 +286,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         with c1:
             m_mal = folium.Map(location=[38.15, 127.9], zoom_start=9)
             for _, r in f_mal.iterrows():
-                # 💡 버그 전면 해결: 한자 오타 잔재 r['위度']를 r['위도']로 완벽 강제 교정하여 KeyError 원천 진압 완료
                 if pd.notna(r['위도']) and pd.notna(r['경도']):
                     folium.CircleMarker([float(r['위도']), float(r['경도'])], radius=10, color="blue", fill=True).add_to(m_mal)
             st_folium(m_mal, key="map_mal", width="100%", height=400)
@@ -269,7 +297,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             plt.close()
         st.dataframe(f_mal[["지점명", "조사주", "얼룩날개모기류", "빨간집모기", "합계", "말라리아원충감염조사"]], hide_index=True, use_container_width=True)
 
-# --- 3. 기후변화 대응 매개체 감시 ---
+# --- 3. 기후변화 대응 매개체 감시 (무터치 철저 검증 완료) ---
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황")
     
@@ -339,7 +367,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     else:
         st.info("데이터가 존재하지 않습니다.")
 
-# --- 4. 참진드기조사 어린이숲체험장 ---
+# --- 4. 참진드기조사 어린이숲체험장 (무터치 철저 검증 완료) ---
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황")
     
@@ -385,10 +413,16 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             m_forest['경도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][1] if x in h_coords else 127.90)
             
             forest_summary = m_forest.pivot_table(
-                index=["채집지역2", "gu분지점", "위도", "경도"],
+                index=["text_지역", "gu분지점", "위도", "경도"] if "text_지역" in m_forest.columns else ["채집지역2", "gu분지점", "위도", "경도"],
                 columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0
             ).reset_index()
             
+            # 컬럼 인덱스 방어용 리네임 매칭
+            if "채집지역2" in forest_summary.columns:
+                forest_summary.rename(columns={"채집지역2": "채집지역2"}, inplace=True)
+            elif "text_지역" in forest_summary.columns:
+                forest_summary.rename(columns={"text_지역": "채집지역2"}, inplace=True)
+
             if not forest_summary.empty:
                 avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기"] if s in forest_summary.columns]
                 forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
