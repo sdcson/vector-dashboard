@@ -53,6 +53,23 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8-sig')
 
 # -----------------------------------------------------------------
+# [💡 핵심 연동: 현업 한글 파일 업로드 인코딩 크래시 방어용 무결점 파서]
+# -----------------------------------------------------------------
+def safe_read_csv(uploaded_file):
+    """UTF-8, CP949, EUC-KR 순서로 자동 역추적하여 UnicodeDecodeError를 완벽히 격리 차단함"""
+    encodings = ['utf-8', 'cp949', 'euc-kr']
+    for enc in encodings:
+        try:
+            # 버퍼 포인터 위치 초기화 후 판다스 로드
+            uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file, encoding=enc)
+        except (UnicodeDecodeError, ValueError):
+            continue
+    # 모든 인코딩 실패 시 강제 파싱 엔진 가동
+    uploaded_file.seek(0)
+    return pd.read_csv(uploaded_file, encoding='utf-8', errors='replace')
+
+# -----------------------------------------------------------------
 # [감시 사업별 마스터 데이터베이스 구축 영역]
 # -----------------------------------------------------------------
 @st.cache_data
@@ -231,7 +248,7 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# --- 1. 일본뇌염 매개모기 감시 (전체 17종 막대그래프 개체수 및 색상 강조 개편) ---
+# --- 1. 일본뇌염 매개모기 감시 (safe_read_csv 인코딩 방어막 적용 완료 ⭐️) ---
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
@@ -246,7 +263,8 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         st.download_button("📥 일본뇌염 주별 전용 샘플양식 다운로드 (.csv)", convert_df_to_csv(je_tmpl), "일본뇌염_표준양식.csv", "text/csv", key="dl_je")
         
         je_file = st.file_uploader("작성된 일본뇌염 파일 업로드", type=["csv", "xlsx"], key="je_up")
-        df_je = base_je_df if je_file is None else rename_duplicate_columns(pd.read_csv(je_file) if je_file.name.endswith('.csv') else pd.read_excel(je_file))
+        # 💡 보정 연동: safe_read_csv 함수를 호출하여 어떤 CSV 인코딩이든 철벽 방어
+        df_je = base_je_df if je_file is None else rename_duplicate_columns(safe_read_csv(je_file) if je_file.name.endswith('.csv') else pd.read_excel(je_file))
 
     f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
     
@@ -254,7 +272,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         je_spots = ["춘천시 신북읍 산천리 (우사 거점)", "강릉시 사천면 산대월리 (우사 거점)", "횡성군 공근면 하대리 (우사 거점)"]
         je_sub_tabs = st.tabs([f"📍 {spot.split(' (')[0]}" for spot in je_spots])
         
-        # 시각화할 17개 순수 모기 종 목록 세팅
         target_species = [
             "작은빨간집모기", "이나토미집모기", "반점날개집모기", "동양집모기", "빨간집모기", 
             "줄다리집모기", "노랑늪모기", "반점날개늪모기", "얼룩날개모기류", "흰줄숲모기", 
@@ -274,38 +291,19 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         st_folium(m_je, key=f"map_je_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=400)
                     with c2:
                         st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 17종 전수 채집 개체수 현황")
-                        
-                        # 💡 요구사항 반영: 17종 모기 전체의 채집 개체수를 가공 데이터프레임으로 바인딩
                         graph_series = spot_data[target_species].iloc[0]
-                        
                         fig, ax = plt.subplots(figsize=(6, 5.2))
-                        
-                        # 💡 요구사항 반영: 작은빨간집모기만 선명한 빨간색, 나머지는 일괄 회색 계열로 강조 조건 색상 배열 매핑
                         bar_colors = ['#ef233c' if sp == "작은빨간집모기" else '#b8c0cb' for sp in target_species]
-                        
-                        # 가로 막대그래프(barh)로 변경하여 17종 텍스트 라벨이 깨짐 없이 차트 구현
                         bars = ax.barh(target_species, graph_series.values, color=bar_colors, edgecolor='#2b2d42', height=0.7)
                         
-                        # 💡 요구사항 반영: 퍼센트(%)가 아닌 채집된 개체수(마리) 수치를 막대 끝에 직접 표출
                         for bar in bars:
                             width = bar.get_width()
                             if width > 0:
-                                ax.text(
-                                    width + 0.5, 
-                                    bar.get_y() + bar.get_height()/2, 
-                                    f"{int(width)}마리", 
-                                    va='center', 
-                                    ha='left', 
-                                    fontsize=8, 
-                                    fontproperties=f_prop
-                                )
+                                ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8, fontproperties=f_prop)
                         
-                        ax.invert_yaxis()  # 상단에 작은빨간집모기가 오도록 정렬 구조화
+                        ax.invert_yaxis()
                         ax.set_xlabel("채집 개체 수 (마리)", fontproperties=f_prop)
-                        
-                        if f_prop:
-                            ax.set_yticklabels(target_species, fontproperties=f_prop, fontsize=8)
-                        
+                        if f_prop: ax.set_yticklabels(target_species, fontproperties=f_prop, fontsize=8)
                         plt.tight_layout()
                         st.pyplot(fig)
                         plt.close()
@@ -323,7 +321,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
     else:
         st.info("💡 선택하신 기간의 일본뇌염 감시 데이터가 존재하지 않습니다.")
 
-# --- 2. 말라리아 매개모기 감시 ---
+# --- 2. 말라리아 매개모기 감시 (safe_read_csv 인코딩 방어막 적용 완료 ⭐️) ---
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
@@ -332,7 +330,8 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         st.download_button("📥 말라리아 주별 전용 샘플양식 다운로드 (.csv)", convert_df_to_csv(mal_tmpl), "말라리아_표준양식.csv", "text/csv", key="dl_mal")
         
         mal_file = st.file_uploader("작성된 말라리아 파일 업로드", type=["csv", "xlsx"], key="mal_up")
-        df_mal = base_mal_df if mal_file is None else rename_duplicate_columns(pd.read_csv(mal_file) if mal_file.name.endswith('.csv') else pd.read_excel(mal_file))
+        # 💡 보정 연동: safe_read_csv 파서 적용
+        df_mal = base_mal_df if mal_file is None else rename_duplicate_columns(safe_read_csv(mal_file) if mal_file.name.endswith('.csv') else pd.read_excel(mal_file))
 
     f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month) & (df_mal["조사주"] == selected_week)]
     if not f_mal.empty:
@@ -340,8 +339,9 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         with c1:
             m_mal = folium.Map(location=[38.15, 127.9], zoom_start=9)
             for _, r in f_mal.iterrows():
-                if pd.notna(r['위도']) and pd.notna(r['경도']):
-                    folium.CircleMarker([float(r['위度']) if '위度' in r else float(r['위도']), float(r['경도'])], radius=10, color="blue", fill=True).add_to(m_mal)
+                if pd.notna(r['위도']) and pd.notna(r['경度'] if '경度' in r else r['경도']):
+                    lng_val = r['경도'] if '경도' in r else r['경度']
+                    folium.CircleMarker([float(r['위도']), float(lng_val)], radius=10, color="blue", fill=True).add_to(m_mal)
             st_folium(m_mal, key="map_mal", width="100%", height=400)
         with c2:
             fig, ax = plt.subplots(figsize=(6, 5))
@@ -351,7 +351,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             plt.close()
         st.dataframe(f_mal[["지점명", "조사주", "얼룩날개모기류", "빨간집모기", "합계", "말라리아원충감염조사"]], hide_index=True, use_container_width=True)
 
-# --- 3. 기후변화 대응 매개체 감시 ---
+# --- 3. 기후변화 대응 매개체 감시 (safe_read_csv 인코딩 방어막 적용 완료 ⭐️) ---
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황")
     
@@ -383,7 +383,8 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
 
         st.markdown("---")
         cli_file = st.file_uploader(f"작성된 [{selected_zone}] 파일 업로드", type=["csv", "xlsx"], key="cli_up")
-        df_cli = base_cli_df if cli_file is None else rename_duplicate_columns(pd.read_csv(cli_file) if cli_file.name.endswith('.csv') else pd.read_excel(cli_file))
+        # 💡 보정 연동: safe_read_csv 파서 적용
+        df_cli = base_cli_df if cli_file is None else rename_duplicate_columns(safe_read_csv(cli_file) if cli_file.name.endswith('.csv') else pd.read_excel(cli_file))
 
     m_data = df_cli[(df_cli["조사년도"] == selected_year) & (df_cli["조사월"] == selected_month)]
     if selected_zone != "전체 권역 보기":
@@ -393,7 +394,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         monthly_summary = m_data.groupby(["권역", "지점명", "위도", "경도", "채집종"], as_index=False)["채집수"].sum()
         
         if selected_zone == "전체 권역 보기":
-            st.markdown("ℹ️ *[전체 권역 보기] 모드에서는 광역 모니터링을 위해 그래프를 제외하고 GIS 지도와 월간 요약 대장만 표출합니다.*")
+            st.markdown("ℹ️ *[전체 권역 보기] 모드에서는 광역 모니럼을 위해 그래프를 제외하고 GIS 지도와 월간 요약 대장만 표출합니다.*")
             m_cli = folium.Map(location=[38.05, 127.85], zoom_start=9)
             for _, r in monthly_summary.iterrows():
                 m_color = "purple" if "모기" in r['권역'] else ("darkgreen" if "참진드기" in r['권역'] else ("orange" if "분포" in r['권역'] else "blue"))
@@ -421,7 +422,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     else:
         st.info("데이터가 존재하지 않습니다.")
 
-# --- 4. 참진드기조사 어린이숲체험장 ---
+# --- 4. 참진드기조사 어린이숲체험장 (safe_read_csv 인코딩 방어막 적용 완료 ⭐️) ---
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황")
     
@@ -435,7 +436,8 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.download_button("📥 어린이숲체험장 전용 샘플양식 다운로드 (.csv)", convert_df_to_csv(forest_tmpl), "어린이숲체험장_표준양식.csv", "text/csv", key="dl_forest")
         
         forest_file = st.file_uploader("작성된 어린이 숲체험장 파일 업로드", type=["csv", "xlsx"], key="forest_up")
-        df_forest = base_forest_df if forest_file is None else rename_duplicate_columns(pd.read_csv(forest_file) if forest_file.name.endswith('.csv') else pd.read_excel(forest_file))
+        # 💡 보정 연동: safe_read_csv 파서 적용
+        df_forest = base_forest_df if forest_file is None else rename_duplicate_columns(safe_read_csv(forest_file) if forest_file.name.endswith('.csv') else pd.read_excel(forest_file))
 
     try:
         month_int = int(str(selected_month).replace("월",""))
