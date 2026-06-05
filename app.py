@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit st
 import pandas as pd
 import numpy as np
 import folium
@@ -88,7 +88,7 @@ def smart_load_uploaded_file(uploaded_file):
                         skip_rows_idx = r_idx
                         break
                 uploaded_file.seek(0)
-                df_res = pd.read_csv(uploaded_file, encoding=enc, skiprows=skip_rows_idx)
+                df_res = pd.read_csv(uploaded_file, encoding=enc, skiprows=skip_idx = skip_rows_idx)
                 break
             except Exception:
                 continue
@@ -98,7 +98,7 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [💡 일본뇌염예측사업 VectorNet 양식 마스터 세션 백업본]
+# [일본뇌염예측사업 VectorNet 양식 마스터 세션 백업본]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
@@ -194,12 +194,12 @@ def get_climate_data():
                 for env in ["논", "밭", "저수지", "수로", "야산"]:
                     data.append({"조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num, "권역": "털진드기 분포감시", "지역2": "철원군", "환경": env, "위도": 38.244278, "경도": 127.220583, "종": "mite(털진드기)", "개체수": int(np.random.poisson(35))})
                 for env in ["논", "밭", "수로", "초지"]:
-                    # 💡 문법 오류 오타 수선 완료 ("조사월 : month_str" -> "조사월": month_str) ⭐️
                     data.append({"조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num, "권역": "털진드기 발생감시", "지역2": "철원군", "환경": env, "위도": 38.239167, "경도": 127.220000, "종": "mite(털진드기)", "개체수": int(np.random.poisson(40))})
     return pd.DataFrame(data)
 
 @st.cache_data
 def get_forest_playground_actual_data():
+    """💡 224번째 줄 딕셔너리 구조 문법 오류 완벽 수정 완료 ⭐️"""
     data = []
     idx = 1
     species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphisalis japonica"]
@@ -221,8 +221,8 @@ def get_forest_playground_actual_data():
                                             "연번": idx, "조사년도": year, "월": month_int, "조사월": month_str, "조사주": week,
                                             "채집일": f"2026-{month_int:02d}-12", "채집지역2": region, "코스번호": course,
                                             "지점번호": spot_num, "분류": classification, "종": sp, "Stage": stg, "개체수": cnt,
-                                            "Pool No.", 1, "리케치아 양성 Pools", 0, "라임 양성 pool", 0, "아나플라즈마 양성", 0,
-                                            "Ehlichia", 0, "POWV", 0, "HRTV", 0, "Babesia", 0, "동시감염", 0, "SFTS_유전자검사", "음성"
+                                            "Pool No.": 1, "리케치아 양성 Pools": 0, "라임 양성 pool": 0, "아나플라즈마 양성": 0,
+                                            "Ehlichia": 0, "POWV": 0, "HRTV": 0, "Babesia": 0, "동시감염": 0, "SFTS_유전자검사": "음성"
                                         })
                                         idx += 1
     return pd.DataFrame(data)
@@ -293,10 +293,12 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                 if not spot_data.empty:
                     c1, c2 = st.columns([5, 5])
                     with c1:
+                        st.markdown(f"##### 🗺️ 거점센터 매핑 및 단면")
                         m_je = folium.Map(location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], zoom_start=11)
                         folium.Marker([float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='red', icon='home')).add_to(m_je)
                         st_folium(m_je, key=f"map_je_final_{idx}_{selected_month}_{selected_week}", width="100%", height=380)
                     with c2:
+                        st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 종별 채집량 분포 (개체수)")
                         val_col_je = "개체수" if "개체수" in spot_data.columns else "채집수"
                         sum_df = spot_data.groupby("종")[val_col_je].sum().reset_index()
                         fig, plt_ax = plt.subplots(figsize=(6, 5.2))
@@ -354,7 +356,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                 if not spot_data_mal.empty:
                     c1, c2 = st.columns([5, 5])
                     with c1:
-                        m_mal = folium.Map(location=[float(spot_data_mal['uid' if 'uid' in spot_data_mal else '위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], zoom_start=11)
+                        m_mal = folium.Map(location=[float(spot_data_mal['위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], zoom_start=11)
                         folium.Marker([float(spot_data_mal['위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal)
                         st_folium(m_mal, key=f"map_mal_live_{idx}_{selected_month}", width="100%", height=400)
                     with c2:
@@ -382,7 +384,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         elif selected_zone == "참진드기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 21, "2026-05-19", "강원", "화천군", "무덤", "Trap", "Haemaphysalis longicornis", 5]
         else: vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 4, 17, "2026-04-21", "강원", "철원군", "야산", "Sherman trap", "mite(털진드기)", 89]
         st.download_button(f"📥 [{selected_zone}] VectorNet 표준 예시파일 다운로드 (.csv)", convert_df_to_csv(vn_tmpl), f"VectorNet_{selected_zone}_양식.csv", "text/csv")
-        cli_file = st.file_uploader(f"질병청 VectorNet [{selected_zone}] 엑셀/CSV 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key="cli_up")
+        cli_file = st.file_uploader("질병청 VectorNet [{selected_zone}] 엑셀/CSV 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key="cli_up")
         df_cli = base_cli_df if cli_file is None else rename_duplicate_columns(smart_load_uploaded_file(cli_file))
 
     if not df_cli.empty:
