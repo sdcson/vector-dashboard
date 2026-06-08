@@ -347,10 +347,11 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         if "조사주" not in df_je.columns:
             df_je["조사주"] = "1주"
 
+        # 💡 [버그 수정 완료] 오타 "조사년to" ➡️ 진짜 컬럼명인 "조사년도"로 정밀 수정 완료!
         if selected_week != "전체":
             f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
         else:
-            f_je = df_je[(df_je["조사년to"] == selected_year) & (df_je["조사월"] == selected_month)]
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)]
         
         if not f_je.empty:
             je_spots = ["춘천시 산천리 (우사 거점)", "강릉시 산대월리 (우사 거점)", "횡성군 하대리 (우사 거점)"]
@@ -424,7 +425,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
             
             df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
-            if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data"):
+            if save_df_to_github(df_mal, "database_mal.csv", "Update Malaria data"):
                 st.success("✅ [말라리아] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
@@ -468,7 +469,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month)]
         
         if not f_mal.empty:
-            mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
+            mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
             mal_sub_tabs = st.tabs([f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list])
             for idx, spot_name in enumerate(mal_spots_list):
                 with mal_sub_tabs[idx]:
@@ -521,9 +522,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# -----------------------------------------------------------------
-# 3. 🟢 기후변화 대응 매개체 감시 레이어 (💡 지점별 분리 완전 정착 파트)
-# -----------------------------------------------------------------
+# 3. 기후변화 대응 매개체 감시 레이어
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -587,7 +586,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         m_data_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
         
         if not m_data_clean.empty:
-            # 💡 [지점 분할 물리 격리 구현] 지점별로 독립된 탭을 자동 분해 생성하여 충돌 완전 차단
             unique_spots = sorted(m_data_clean["지역2_정외"].unique())
             cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in unique_spots])
             for idx, spot_name in enumerate(unique_spots):
@@ -604,7 +602,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         ).add_to(m_cli)
                         st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
                     with c2:
-                        # 💡 [정밀 집계] 탭 안에 해당하는 지점에서 잡힌 종 데이터만 그룹핑 합산
                         st.markdown(f"##### 📊 종별 채집량 분포 (합산 및 정렬)")
                         sum_df = spot_data.groupby("종")[val_col].sum().reset_index()
                         sum_df = sum_df.sort_values(by=val_col, ascending=True)
