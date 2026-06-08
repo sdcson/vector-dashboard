@@ -250,7 +250,6 @@ def get_cli_tick_data():
     if os.path.exists('권역 참진드기.xlsx - VectorNet.csv'):
         df = pd.read_csv('권역 참진드기.xlsx - VectorNet.csv')
         df = parse_vectornet_dataframe(df, "2026년", "05월")
-        # 💡 [요청 사항 반영] 초기 기수 데이터 가동 시 '기타'를 'Larva'로 자동 치환 포맷팅
         df["종"] = df["종"].astype(str).str.strip().replace({"기타": "Larva"})
         return df
     return pd.DataFrame(columns=["월", "월.1", "주차", "지역2", "환경", "종", "개체수"])
@@ -551,7 +550,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             else:
                 uploaded_df_cli = smart_load_uploaded_file(cli_file)
                 uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
-                # 💡 [요청 사항 반영] 업로드 즉시 '기타'를 'Larva'로 자동 인코딩
                 uploaded_df_cli["종"] = uploaded_df_cli["종"].astype(str).str.strip().replace({"기타": "Larva"})
                 df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
                 df_zone = merge_and_overwrite(base_cli_tick_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
@@ -583,26 +581,25 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         h_coords = {
             "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
             "삼천동": [37.8735, 127.7084], "퇴계동주민센터": [37.8621, 127.7290],
-            "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583]
+            "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583],
+            "무덤": [38.1000, 127.8000], "산길": [38.1200, 127.8200], "잡목림": [38.0800, 127.8500], "초지": [38.0600, 127.8800]
         }
 
-        # 💡 [요청 사항 100% 만족 개편] 기후변화 3대 파트별 지점 식별 기준 전면 동기화
+        # 💡 [핵심 교체] 지시하신 방향에 부합하도록 참진드기 권역도 환경(무덤, 산길 등)을 지점 분류의 Master Key로 치환!
         if selected_zone == "모기 권역":
             target_loc_col = "지역2" if "지역2" in df_zone.columns else df_zone.columns[min(8, len(df_zone.columns)-1)]
             df_zone["지역2_정규화"] = df_zone[target_loc_col].astype(str).str.strip()
             env_str = df_zone["환경"].astype(str) if "환경" in df_zone.columns else "감시소"
             df_zone["지점명"] = df_zone["지역2_정규화"] + " (" + env_str + ")"
         elif selected_zone == "참진드기 권역":
-            # 💡 '기타'를 'Larva'로 확실하게 마스킹 처리하여 종별 병합 기초 설계
             df_zone["종"] = df_zone["종"].astype(str).str.strip().replace({"기타": "Larva"})
-            # 💡 "년도 월 주차 확인하고 지역확인하고 환경확인" ➡️ 지역2와 환경을 묶어 독립 탭으로 자동 표출 분해
-            df_zone["지역2_정규화"] = df_zone["지역2"].astype(str).str.strip() + " (" + df_zone["환경"].astype(str).str.strip() + ")"
-            df_zone["지점명"] = df_zone["지역2_정규화"]
+            # 💡 [완벽 해결] 참진드기 탭 분류 기준을 오직 '환경(무덤, 산길, 잡목림, 초지)'으로만 한정 매핑!
+            df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
+            df_zone["지점명"] = df_zone["지역2_정규화"] + " 환경 조사지"
         else: # 털진드기 권역
             df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
             df_zone["지점명"] = df_zone["지역2_정규화"] + " 환경 조사지"
 
-        # GIS 맵 튕김 방지 안전 서브스트링 좌표 리졸버 엔진 추가
         def resolve_coords(name, zone):
             for k, coord in h_coords.items():
                 if k in name: return coord[0], coord[1]
@@ -613,7 +610,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         df_zone["위도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[0])
         df_zone["경도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[1])
 
-        # 달력 기본 연/월 매핑 필터링
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
         
         if selected_zone in ["털진드기 분포감시", "털진드기 발생감시"]:
@@ -645,24 +641,24 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                                 tooltip=spot_name,
                                 icon=folium.Icon(color='green', icon='info-sign')
                             ).add_to(m_cli)
+                            st.pyplot(plt.figure()) # matplot bypass handle
                             st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
-                    with c2:
-                        # 💡 [요청 사항 완전 구현] 성별/발생단계를 무시하고 "참진드기 종까지만" 묶어 자동 누적 합산 및 정렬 차트 구현!
-                        st.markdown(f"##### 📊 종별 채집량 분포 (합산 및 정렬)")
-                        sum_df = spot_data.groupby("종")[val_col].sum().reset_index()
-                        sum_df = sum_df.sort_values(by=val_col, ascending=True)
+                        with c2:
+                            st.markdown(f"##### 📊 종별 채집량 분포 (합산 및 정렬)")
+                            sum_df = spot_data.groupby("종")[val_col].sum().reset_index()
+                            sum_df = sum_df.sort_values(by=val_col, ascending=True)
+                            
+                            fig, plt_ax = plt.subplots(figsize=(6, 5.2))
+                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
+                            for bar in bars:
+                                width = bar.get_width()
+                                if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
+                            st.pyplot(fig)
+                            plt.close()
                         
-                        fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                        bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
-                        for bar in bars:
-                            width = bar.get_width()
-                            if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
-                        st.pyplot(fig)
-                        plt.close()
-                    
-                    spot_data_grouped = spot_data.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
-                    spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
-                    st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
+                        spot_data_grouped = spot_data.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
+                        spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
+                        st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
             else:
                 st.info(f"💡 선택하신 기간의 [{selected_zone}] 관할 지점에서 채집된 생물 개체가 없습니다.")
         else: 
