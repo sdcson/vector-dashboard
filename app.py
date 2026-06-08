@@ -97,6 +97,33 @@ def load_df_from_github(filename_on_github, fallback_df):
     return fallback_df
 
 # -----------------------------------------------------------------
+# [💡 최신 판다스 <NA> 결측치 및 예외 데이터 우회용 안전 포맷터 엔진]
+# -----------------------------------------------------------------
+def safe_parse_year_series(series, default_val):
+    def _parse(val):
+        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']:
+            return str(default_val)
+        val_str = str(val).strip()
+        if "년" in val_str:
+            return val_str
+        return f"{val_str}년"
+    return series.apply(_parse)
+
+def safe_parse_month_series(series, default_val):
+    def _parse(val):
+        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']:
+            return str(default_val)
+        try:
+            val_str = str(val).strip()
+            if "월" in val_str:
+                val_str = val_str.replace("월", "").strip()
+            num = int(float(val_str))
+            return f"{num:02d}월"
+        except Exception:
+            return str(default_val)
+    return series.apply(_parse)
+
+# -----------------------------------------------------------------
 # [보조 유틸리티 함수]
 # -----------------------------------------------------------------
 def rename_duplicate_columns(df):
@@ -112,16 +139,25 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8-sig')
 
 def merge_and_overwrite(old_df, new_df, keys):
-    if old_df.empty:
-        return new_df
     if new_df.empty:
         return old_df
-    valid_keys = [k for k in keys if k in old_df.columns and k in new_df.columns]
-    if not valid_keys:
-        valid_keys = [c for c in old_df.columns if c in new_df.columns and c not in ['개체수', '번호', '연번', '조사주']]
+        
+    val_col = "개체수" if "개체수" in new_df.columns else ("채집수" if "채집수" in new_df.columns else "개체수")
+    groupby_keys = [k for k in keys if k in new_df.columns]
     
-    combined = pd.concat([old_df, new_df], ignore_index=True)
-    return combined.drop_duplicates(subset=valid_keys, keep='last')
+    agg_dict = {}
+    for col in new_df.columns:
+        if col == val_col:
+            agg_dict[col] = 'sum'
+        elif col not in groupby_keys and col not in ['번호', '연번']:
+            agg_dict[col] = 'first'
+    new_df_aggregated = new_df.groupby(groupby_keys, as_index=False).agg(agg_dict)
+    
+    if old_df.empty:
+        return new_df_aggregated
+        
+    combined = pd.concat([old_df, new_df_aggregated], ignore_index=True)
+    return combined.drop_duplicates(subset=groupby_keys, keep='last')
 
 def smart_load_uploaded_file(uploaded_file):
     if uploaded_file is None:
@@ -190,20 +226,20 @@ def get_climate_data():
     if os.path.exists('권역모기.xlsx - VectorNet.csv') and os.path.exists('권역 참진드기.xlsx - VectorNet.csv') and os.path.exists('털진드기 분포감시.xlsx - VectorNet.csv'):
         df_moq = pd.read_csv('권역모기.xlsx - VectorNet.csv')
         df_moq.columns = [c.strip() for c in df_moq.columns]
-        df_moq['조사년도'] = df_moq['연도'].astype(str) + "년"
-        df_moq['조사월'] = df_moq['월'].apply(lambda x: f"{x:02d}월")
+        df_moq['조사년도'] = safe_parse_year_series(df_moq['연도'], "2026년")
+        df_moq['조사월'] = safe_parse_month_series(df_moq['월'], "05월")
         df_moq['권역'] = "모기 권역"
         
         df_tick = pd.read_csv('권역 참진드기.xlsx - VectorNet.csv')
         df_tick.columns = [c.strip() for c in df_tick.columns]
-        df_tick['조사년도'] = df_tick['월'].astype(str) + "년"
-        df_tick['조사월'] = df_tick['월.1'].apply(lambda x: f"{x:02d}월")
+        df_tick['조사년도'] = safe_parse_year_series(df_tick['월'], "2026년")
+        df_tick['조사월'] = safe_parse_month_series(df_tick['월.1'], "05월")
         df_tick['권역'] = "참진드기 권역"
         
         df_mite = pd.read_csv('털진드기 분포감시.xlsx - VectorNet.csv')
         df_mite.columns = [c.strip() for c in df_mite.columns]
-        df_mite['조사년도'] = df_mite['월'].astype(str) + "년"
-        df_mite['조사월'] = df_mite['월.1'].apply(lambda x: f"{x:02d}월")
+        df_mite['조사년도'] = safe_parse_year_series(df_mite['월'], "2026년")
+        df_mite['조사월'] = safe_parse_month_series(df_mite['월.1'], "05월")
         df_mite['권역'] = df_mite['사업명'].apply(lambda x: "털진드기 발생감시" if "발생" in str(x) else "털진드기 분포감시")
         
         cols = ['조사년도', '조사월', '권역', '지역2', '환경', '종', '개체수', '주차']
@@ -218,7 +254,6 @@ def get_forest_playground_actual_data():
     stages = ["Female", "Male", "Nymph", "Larvae"]
     for year in ["2026년", "2025년", "2024년"]:
         seed_year = int(year.replace("년",""))
-        # 💡 [요청 반영] 어린이숲 기본 시뮬레이션 세션 월 범위도 3월~11월(range 3~12)로 완전 통일
         for month_int in range(3, 12): 
             month_str = f"{month_int:02d}월"
             for week in ["1주", "2주", "3주", "4주"]:
@@ -252,7 +287,6 @@ base_forest_df = rename_duplicate_columns(load_df_from_github("database_forest.c
 # -----------------------------------------------------------------
 st.sidebar.markdown("### 📅 통합 시간 동기화 필터")
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년"])
-# 💡 [요청 반영] 마스터 조사월 선택 셀렉트박스를 03월부터 11월까지 연동 누락 없이 완벽 통일 및 정렬
 selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월"], index=2)
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
@@ -278,13 +312,14 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             uploaded_df = smart_load_uploaded_file(je_file)
             uploaded_df.columns = [c.strip() for c in uploaded_df.columns]
             
+            # 💡 안전 필터 적용
             if "연도" in uploaded_df.columns:
-                uploaded_df["조사년도"] = uploaded_df["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+                uploaded_df["조사년도"] = safe_parse_year_series(uploaded_df["연도"], selected_year)
             else:
                 uploaded_df["조사년도"] = selected_year
                 
             if "월" in uploaded_df.columns:
-                uploaded_df["조사월"] = uploaded_df["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+                uploaded_df["조사월"] = safe_parse_month_series(uploaded_df["월"], selected_month)
             else:
                 uploaded_df["조사월"] = selected_month
                 
@@ -296,11 +331,11 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
 
     if not df_je.empty:
         if "연도" in df_je.columns:
-            df_je["조사년도"] = df_je["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+            df_je["조사년도"] = safe_parse_year_series(df_je["연도"], selected_year)
         if "조사년도" not in df_je.columns: df_je["조사년도"] = selected_year
         
         if "월" in df_je.columns:
-            df_je["조사월"] = df_je["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+            df_je["조사월"] = safe_parse_month_series(df_je["월"], selected_month)
         if "조사월" not in df_je.columns: df_je["조사월"] = selected_month
 
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
@@ -394,6 +429,16 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             uploaded_df_mal = smart_load_uploaded_file(mal_file)
             uploaded_df_mal.columns = [c.strip() for c in uploaded_df_mal.columns]
             
+            if "연도" in uploaded_df_mal.columns:
+                uploaded_df_mal["조사년도"] = safe_parse_year_series(uploaded_df_mal["연도"], selected_year)
+            else:
+                uploaded_df_mal["조사년도"] = selected_year
+
+            if "월" in uploaded_df_mal.columns:
+                uploaded_df_mal["조사월"] = safe_parse_month_series(uploaded_df_mal["월"], selected_month)
+            else:
+                uploaded_df_mal["조사월"] = selected_month
+                
             df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
             df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
             if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data"):
@@ -402,11 +447,11 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 
     if not df_mal.empty:
         if "연도" in df_mal.columns:
-            df_mal["조사년도"] = df_mal["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+            df_mal["조사년도"] = safe_parse_year_series(df_mal["연도"], selected_year)
         if "조사년도" not in df_mal.columns: df_mal["조사년도"] = selected_year
 
         if "월" in df_mal.columns:
-            df_mal["조사월"] = df_mal["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+            df_mal["조사월"] = safe_parse_month_series(df_mal["월"], selected_month)
         if "조사월" not in df_mal.columns: df_mal["조사월"] = selected_month
 
         mal_coords_map = {
@@ -519,15 +564,16 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         else:
             uploaded_df_cli = smart_load_uploaded_file(cli_file)
             
+            # 💡 안전 필터 적용형 엔진 이식
             if "연도" in uploaded_df_cli.columns:
-                uploaded_df_cli["조사년도"] = uploaded_df_cli["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+                uploaded_df_cli["조사년도"] = safe_parse_year_series(uploaded_df_cli["연도"], selected_year)
             elif "년도" in uploaded_df_cli.columns:
-                uploaded_df_cli["조사년도"] = uploaded_df_cli["년도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+                uploaded_df_cli["조사년도"] = safe_parse_year_series(uploaded_df_cli["년도"], selected_year)
             else:
                 uploaded_df_cli["조사년도"] = selected_year
 
             if "월" in uploaded_df_cli.columns:
-                uploaded_df_cli["조사월"] = uploaded_df_cli["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+                uploaded_df_cli["조사월"] = safe_parse_month_series(uploaded_df_cli["월"], selected_month)
             else:
                 uploaded_df_cli["조사월"] = selected_month
                 
@@ -541,11 +587,11 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
 
     if not df_cli.empty:
         if "연도" in df_cli.columns:
-            df_cli["조사년도"] = df_cli["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+            df_cli["조사년도"] = safe_parse_year_series(df_cli["연도"], selected_year)
         if "조사년도" not in df_cli.columns: df_cli["조사년도"] = selected_year
 
         if "월" in df_cli.columns:
-            df_cli["조사월"] = df_cli["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+            df_cli["조사월"] = safe_parse_month_series(df_cli["월"], selected_month)
         if "조사월" not in df_cli.columns: df_cli["조사월"] = selected_month
 
     h_coords = {
@@ -618,7 +664,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 ax.set_xticklabels(loc_total["지점명"], rotation=45, ha='right')
                 for bar in bars:
                     height = bar.get_height()
-                    if height > 0: bars = ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
+                    if height > 0: ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
                 plt.gcf().subplots_adjust(bottom=0.35)
                 plt.tight_layout()
                 st.pyplot(fig)
