@@ -106,7 +106,7 @@ def smart_load_uploaded_file(uploaded_file):
 @st.cache_data
 def get_je_actual_style_data():
     data = [
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 15},
+        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 15},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Aedes vexans", "개체수": 8},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "강릉시 산대월리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 22},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "횡성군 하대리", "환경": "축사", "방법": "LED1", "종": "Culex tritaeniorhynchus", "개체수": 2},
@@ -146,28 +146,35 @@ def get_climate_data():
     ]
     return pd.DataFrame(data)
 
+# 💡 [어린이 숲체험장 오리지널 마스터 세션 복원] range(1, 4) 적용하여 관리 1~3, 비관리 1~3 완벽 복구
 @st.cache_data
 def get_forest_playground_actual_data():
     data = []
     idx = 1
     species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica"]
-    for year in ["2026년"]:
-        for month_int in [5]: 
-            month_str = "05월"
-            for week in ["1주", "2주"]:
+    stages = ["Female", "Male", "Nymph", "Larvae"]
+    for year in ["2026년", "2025년", "2024년"]:
+        seed_year = int(year.replace("년",""))
+        for month_int in range(4, 11): 
+            month_str = f"{month_int:02d}월"
+            for week in ["1주", "2주", "3주", "4주"]:
+                np.random.seed(seed_year + month_int * 13 + len(week))
                 for region in ["남산", "삼마치"]:
                     course = 1 if region == "남산" else 2
-                    for spot_num in [1, 2]: 
+                    for spot_num in range(1, 4):  # 1, 2, 3 지점 완벽 복원
                         for classification in ["In", "Out"]:
                             for sp in species_map:
-                                data.append({
-                                    "연번": idx, "조사년도": year, "월": month_int, "조사월": month_str, "조사주": week,
-                                    "채집일": f"2026-05-12", "채집지역2": region, "코스번호": course,
-                                    "지점번호": spot_num, "분류": classification, "종": sp, "Stage": "Nymph", "개체수": 4,
-                                    "Pool No.": 1, "리케치아 양성 Pools": 0, "라임 양성 pool": 0, "아나플라즈마 양성": 0,
-                                    "Ehlichia": 0, "POWV": 0, "HRTV": 0, "Babesia": 0, "동시감염": 0, "SFTS_유전자검사": "음성"
-                                })
-                                idx += 1
+                                for stg in stages:
+                                    cnt = int(np.random.poisson(20 if stg=="Larvae" and month_int in [8,9] else 2))
+                                    if cnt > 0:
+                                        data.append({
+                                            "연번": idx, "조사년도": year, "월": month_int, "조사월": month_str, "조사주": week,
+                                            "채집일": f"{seed_year}-{month_int:02d}-12", "채집지역2": region, "코스번호": course,
+                                            "지점번호": spot_num, "분류": classification, "종": sp, "Stage": stg, "개체수": cnt,
+                                            "Pool No.": 1, "리케치아 양성 Pools": 0, "라임 양성 pool": 0, "아나플라즈마 양성": 0,
+                                            "Ehlichia": 0, "POWV": 0, "HRTV": 0, "Babesia": 0, "동시감염": 0, "SFTS_유전자검사": "음성"
+                                        })
+                                        idx += 1
     return pd.DataFrame(data)
 
 base_je_df = rename_duplicate_columns(get_je_actual_style_data())
@@ -364,9 +371,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# -----------------------------------------------------------------
-# 3. 🟢 기후변화 대응 매개체 감시 레이어 (버그 전면 수정 완료)
-# -----------------------------------------------------------------
+# 3. 기후변화 대응 매개체 감시 레이어
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황 [{selected_year} {selected_month}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -385,7 +390,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         else:
             uploaded_df_cli = smart_load_uploaded_file(cli_file)
             
-            # 파일 데이터 구조의 날짜 파싱 고도화 (월 데이터 포맷 매칭 불일치 완벽 방어)
             if "연도" in uploaded_df_cli.columns:
                 uploaded_df_cli["조사년도"] = uploaded_df_cli["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
             elif "년도" in uploaded_df_cli.columns:
@@ -435,12 +439,10 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             m_center_lng = 127.22 if "털진드기" in selected_zone else (127.75 if selected_zone == "모기 권역" else 127.95)
             m_zoom = 11 if "털진드기" in selected_zone or selected_zone == "모기 권역" else 10
             
-            # 💡 [지도 파괴 방지 핵심 로직] 지점당 단 1개의 고유 마커만 생성하여 folium 충돌 차단
             map_summary = m_data.groupby(["지점명", "위도", "경도", "환경"], as_index=False)[val_col].sum()
             m_cli = folium.Map(location=[m_center_lat, m_center_lng], zoom_start=m_zoom)
             
             for _, r in map_summary.iterrows():
-                # 해당 지점에 존재하는 종별 상세 수치들을 합산하여 말풍선 팝업 하나로 합쳐서 제공
                 spec_data = m_data[m_data["지점명"] == r["지점명"]].groupby("종")[val_col].sum().reset_index()
                 popup_html = f"<div style='font-family:NanumGothic, sans-serif; font-size:12px;'><b>🏢 {r['지점명']}</b><br><hr style='margin:5px 0;'>"
                 for _, s_row in spec_data.iterrows():
@@ -454,7 +456,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     icon=folium.Icon(color='green', icon='info-sign')
                 ).add_to(m_cli)
                 
-            # 데이터 수량 변화를 반영한 고유 키를 매핑하여 지도가 굳거나 백화되는 현상 제어
             map_key = f"map_climate_final_{selected_year}_{selected_month}_{selected_zone}_{len(map_summary)}"
             st_folium(m_cli, key=map_key, width="100%", height=430)
             
@@ -479,7 +480,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     else: 
         st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
-# 4. 참진드기조사 어린이숲체험장 레이어
+# 4. 🟡 참진드기조사 어린이숲체험장 레이어 (구조 완벽 복원)
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
     with st.expander("📥 [어린이 숲체험장] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
