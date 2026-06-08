@@ -222,7 +222,7 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [첨부파일 기반 정식 데이터 마스터 세션 빌더]
+# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 3대 파일 전용 로더 격리]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
@@ -239,28 +239,25 @@ def get_malaria_actual_style_data():
     return pd.DataFrame(columns=["연도", "월", "주차", "사업명", "권역", "지역2", "환경", "방법", "종", "개체수"])
 
 @st.cache_data
-def get_climate_data():
-    dfs = []
+def get_cli_moq_data():
     if os.path.exists('권역모기.xlsx - VectorNet.csv'):
         df = pd.read_csv('권역모기.xlsx - VectorNet.csv')
-        df = parse_vectornet_dataframe(df, "2026년", "05월")
-        df['권역'] = "모기 권역"
-        dfs.append(df)
+        return parse_vectornet_dataframe(df, "2026년", "05월")
+    return pd.DataFrame(columns=["연도", "월", "주차", "지역2", "환경", "종", "개체수"])
+
+@st.cache_data
+def get_cli_tick_data():
     if os.path.exists('권역 참진드기.xlsx - VectorNet.csv'):
         df = pd.read_csv('권역 참진드기.xlsx - VectorNet.csv')
-        df = parse_vectornet_dataframe(df, "2026년", "05월")
-        df['권역'] = "참진드기 권역"
-        dfs.append(df)
+        return parse_vectornet_dataframe(df, "2026년", "05월")
+    return pd.DataFrame(columns=["월", "월.1", "주차", "지역2", "환경", "종", "개체수"])
+
+@st.cache_data
+def get_cli_mite_data():
     if os.path.exists('털진드기 분포감시.xlsx - VectorNet.csv'):
         df = pd.read_csv('털진드기 분포감시.xlsx - VectorNet.csv')
-        df = parse_vectornet_dataframe(df, "2026년", "05월")
-        df['권역'] = df['사업명'].apply(lambda x: "털진드기 발생감시" if "발생" in str(x) else "털진드기 분포감시")
-        dfs.append(df)
-        
-    if dfs:
-        cols = ['조사년도', '조사월', '권역', '지역2', '환경', '종', '개체수', '주차']
-        return pd.concat([d[cols] for d in dfs], ignore_index=True)
-    return pd.DataFrame(columns=['조사년도', '조사월', '권역', '지역2', '환경', '종', '개체수', '주차'])
+        return parse_vectornet_dataframe(df, "2026년", "05월")
+    return pd.DataFrame(columns=["월", "월.1", "주차", "지역2", "환경", "종", "개체수", "사업명"])
 
 @st.cache_data
 def get_forest_playground_actual_data():
@@ -292,10 +289,12 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
-# 원격 깃허브 DB와 로컬 원본 데이터 동기화 연동 체인 생성
+# 💡 [원격 깃허브 개별 계정 대장 엔진 세션 분리 매핑 완료]
 base_je_df = rename_duplicate_columns(load_df_from_github("database_je.csv", get_je_actual_style_data()))
 base_mal_df = rename_duplicate_columns(load_df_from_github("database_mal.csv", get_malaria_actual_style_data()))
-base_cli_df = rename_duplicate_columns(load_df_from_github("database_cli.csv", get_climate_data()))
+base_cli_moq_df = rename_duplicate_columns(load_df_from_github("database_cli_moq.csv", get_cli_moq_data()))
+base_cli_tick_df = rename_duplicate_columns(load_df_from_github("database_cli_tick.csv", get_cli_tick_data()))
+base_cli_mite_df = rename_duplicate_columns(load_df_from_github("database_cli_mite.csv", get_cli_mite_data()))
 base_forest_df = rename_duplicate_columns(load_df_from_github("database_forest.csv", get_forest_playground_actual_data()))
 
 # -----------------------------------------------------------------
@@ -336,7 +335,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
 
     if not df_je.empty:
         df_je = parse_vectornet_dataframe(df_je, selected_year, selected_month)
-        je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 Sancheon-ri": [37.9250, 127.7410], "춘천시 산천리": [37.9250, 127.7410]}
+        je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
         if "지역2" in df_je.columns:
             df_je["지역2_정규화"] = df_je["지역2"].astype(str).str.strip()
             df_je["위도"] = df_je["지역2_정규화"].map(lambda x: je_coords_map[x][0] if x in je_coords_map else 37.9250)
@@ -374,7 +373,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                             m_je = folium.Map(location=[float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], zoom_start=9)
                             
                             for target_spot_name, coords in je_coords_map.items():
-                                if "Sancheon" in target_spot_name: continue
                                 full_target_name = f"{target_spot_name} (우사 거점)"
                                 marker_color = 'orange' if target_spot_name in spot_name or spot_name in full_target_name else 'red'
                                 marker_icon = 'star' if target_spot_name in spot_name or spot_name in full_target_name else 'home'
@@ -519,7 +517,9 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어
+# -----------------------------------------------------------------
+# 3. 🟢 기후변화 대응 매개체 감시 레이어 (💡 완전히 독립된 3중 대장 분리 포털 완료)
+# -----------------------------------------------------------------
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -531,93 +531,125 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         elif selected_zone == "참진드기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 1, "화천군", "무덤", "Haemaphysalis longicornis", 5]
         else: vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 4, 1, "철원군", "야산", "mite(털진드기)", 89]
         st.download_button("📥 국가 감시망 전용 표준 서식 예시 다운로드 (.csv)", convert_df_to_csv(vn_tmpl), f"VectorNet_{selected_zone}_실무양식.csv", "text/csv")
-        cli_file = st.file_uploader("질병청 VectorNet 엑셀/CSV 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key="cli_up")
+        cli_file = st.file_uploader("질병청 VectorNet 엑셀/CSV 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key=f"cli_up_{selected_zone}")
         
-        if cli_file is None:
-            df_cli = base_cli_df.copy()
+        # 💡 [핵심 해결 지점] 3대 매개체의 파일 쓰기 경로를 원천 물리 격리
+        if selected_zone == "모기 권역":
+            if cli_file is None:
+                df_zone = base_cli_moq_df.copy()
+            else:
+                uploaded_df_cli = smart_load_uploaded_file(cli_file)
+                uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
+                df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
+                df_zone = merge_and_overwrite(base_cli_moq_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+                if save_df_to_github(df_zone, "database_cli_moq.csv", "Update Climate Mosquito data"):
+                    st.success("✅ [모기 권역] 새 데이터가 전용 대장(database_cli_moq.csv)에 안전하게 누적되었습니다.")
+                    st.cache_data.clear()
+        elif selected_zone == "참진드기 권역":
+            if cli_file is None:
+                df_zone = base_cli_tick_df.copy()
+            else:
+                uploaded_df_cli = smart_load_uploaded_file(cli_file)
+                uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
+                df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
+                df_zone = merge_and_overwrite(base_cli_tick_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+                if save_df_to_github(df_zone, "database_cli_tick.csv", "Update Climate Tick data"):
+                    st.success("✅ [참진드기 권역] 새 데이터가 전용 대장(database_cli_tick.csv)에 안전하게 누적되었습니다.")
+                    st.cache_data.clear()
+        else: # 털진드기 분포감시 또는 발생감시
+            if cli_file is None:
+                df_zone = base_cli_mite_df.copy()
+            else:
+                uploaded_df_cli = smart_load_uploaded_file(cli_file)
+                uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
+                df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
+                df_zone = merge_and_overwrite(base_cli_mite_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+                if save_df_to_github(df_zone, "database_cli_mite.csv", "Update Climate Mite data"):
+                    st.success(f"✅ [{selected_zone}] 새 데이터가 전용 대장(database_cli_mite.csv)에 안전하게 누적되었습니다.")
+                    st.cache_data.clear()
+
+    if not df_zone.empty:
+        df_zone = parse_vectornet_dataframe(df_zone, selected_year, selected_month)
+        
+        # 주차 스케줄러 독립 팩터라이징
+        if "주차" in df_zone.columns:
+            df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
+            weeks_sorted = df_zone.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
+            df_zone["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
         else:
-            uploaded_df_cli = smart_load_uploaded_file(cli_file)
-            uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
-            uploaded_df_cli["권역"] = selected_zone
-            df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
-            
-            df_cli = merge_and_overwrite(base_cli_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종', '권역'])
-            if save_df_to_github(df_cli, "database_cli.csv", "Update Climate data"):
-                st.success("✅ [기후변화] 새 데이터가 원격 연/월/권역별 고유 계정 대장에 안전하게 누적되었습니다.")
-                st.cache_data.clear()
+            df_zone["조사주"] = "1주"
 
-    if not df_cli.empty:
-        df_cli = parse_vectornet_dataframe(df_cli, selected_year, selected_month)
+        h_coords = {
+            "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
+            "삼천동": [37.8735, 127.7084], "퇴계동주민센터": [37.8621, 127.7290],
+            "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583]
+        }
 
-    h_coords = {
-        "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
-        "삼천동": [37.8735, 127.7084], "퇴계동주민센터": [37.8621, 127.7290],
-        "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583]
-    }
-    
-    if "주차" in df_cli.columns and not df_cli.empty:
-        df_cli = df_cli.sort_values(by=["조사년도", "조사월", "권역", "주차"])
-        weeks_sorted = df_cli.groupby(["조사년도", "조사월", "권역"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
-        df_cli["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
-    else:
-        df_cli["조사주"] = "1주"
-
-    target_loc_col = "지역2" if "지역2" in df_cli.columns else "지역2.1"
-    if target_loc_col in df_cli.columns and not df_cli.empty:
-        df_cli["지역2_정외"] = df_cli[target_loc_col].astype(str).str.strip()
+        target_loc_col = "지역2" if "지역2" in df_zone.columns else ("지역2.1" if "지역2.1" in df_zone.columns else df_zone.columns[min(8, len(df_zone.columns)-1)])
+        df_zone["지역2_정외"] = df_zone[target_loc_col].astype(str).str.strip()
+        
         default_lat = 37.88 if selected_zone == "모기 권역" else (38.24 if "털진드기" in selected_zone else 38.08)
         default_lng = 127.75 if selected_zone == "모기 권역" else (127.22 if "털진드기" in selected_zone else 127.95)
-        df_cli["위도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][0] if x in h_coords else default_lat)
-        df_cli["경도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][1] if x in h_coords else default_lng)
-        df_cli["지점명"] = df_cli["지역2_정외"] + " (" + df_cli["환경"].astype(str) + ")"
-    else:
-        df_cli["지점명"] = "지정 감시소"
-
-    if selected_week != "전체":
-        m_data = df_cli[(df_cli["조사년도"] == selected_year) & (df_cli["조사월"] == selected_month) & (df_cli["조사주"] == selected_week) & (df_cli["권역"] == selected_zone)].copy()
-    else:
-        m_data = df_cli[(df_cli["조사년도"] == selected_year) & (df_cli["조사월"] == selected_month) & (df_cli["권역"] == selected_zone)].copy()
-
-    if not m_data.empty:
-        val_col = "개체수" if "개체수" in m_data.columns else "채집수"
-        m_data_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
+        df_zone["위도"] = df_zone["지역2_정외"].map(lambda x: h_coords[x][0] if x in h_coords else default_lat)
+        df_zone["경도"] = df_zone["지역2_정외"].map(lambda x: h_coords[x][1] if x in h_coords else default_lng)
         
-        if not m_data_clean.empty:
-            unique_spots = sorted(m_data_clean["지역2_정외"].unique())
-            cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in unique_spots])
-            for idx, spot_name in enumerate(unique_spots):
-                with cli_sub_tabs[idx]:
-                    spot_data = m_data_clean[m_data_clean["지역2_정외"] == spot_name]
-                    c1, c2 = st.columns([5, 5])
-                    with c1:
-                        st.markdown(f"##### 🗺️ GIS 감시 지점 지도")
-                        m_cli = folium.Map(location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], zoom_start=11)
-                        folium.Marker(
-                            location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])],
-                            tooltip=spot_name,
-                            icon=folium.Icon(color='green', icon='info-sign')
-                        ).add_to(m_cli)
-                        st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
-                    with c2:
-                        st.markdown(f"##### 📊 종별 채집량 분포 (합산 및 정렬)")
-                        sum_df = spot_data.groupby("종")[val_col].sum().reset_index()
-                        sum_df = sum_df.sort_values(by=val_col, ascending=True)
+        env_str = df_zone["환경"].astype(str) if "환경" in df_zone.columns else "감시소"
+        df_zone["지점명"] = df_zone["지역2_정외"] + " (" + env_str + ")"
+
+        # 연/월 기본 시계열 매핑 필터링
+        m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
+        
+        # 털진드기 내부 하위 감시 권역 스플리터
+        if selected_zone in ["털진드기 분포감시", "털진드기 발생감시"]:
+            if "사업명" in m_data.columns:
+                m_data["권역_필터"] = m_data["사업명"].apply(lambda x: "털진드기 발생감시" if "발생" in str(x) else "털진드기 분포감시")
+            else:
+                m_data["권역_필터"] = selected_zone
+            m_data = m_data[m_data["권역_필터"] == selected_zone]
+
+        if selected_week != "전체":
+            m_data = m_data[m_data["조사주"] == selected_week]
+
+        if not m_data.empty:
+            val_col = "개체수" if "개체수" in m_data.columns else "채집수"
+            m_data_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
+            
+            if not m_data_clean.empty:
+                unique_spots = sorted(m_data_clean["지역2_정외"].unique())
+                cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in unique_spots])
+                for idx, spot_name in enumerate(unique_spots):
+                    with cli_sub_tabs[idx]:
+                        spot_data = m_data_clean[m_data_clean["지역2_정외"] == spot_name]
+                        c1, c2 = st.columns([5, 5])
+                        with c1:
+                            st.markdown(f"##### 🗺️ GIS 감시 지점 지도")
+                            m_cli = folium.Map(location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], zoom_start=11)
+                            folium.Marker(
+                                location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])],
+                                tooltip=spot_name,
+                                icon=folium.Icon(color='green', icon='info-sign')
+                            ).add_to(m_cli)
+                            st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
+                        with c2:
+                            st.markdown(f"##### 📊 종별 채집량 분포 (합산 및 정렬)")
+                            sum_df = spot_data.groupby("종")[val_col].sum().reset_index()
+                            sum_df = sum_df.sort_values(by=val_col, ascending=True)
+                            
+                            fig, plt_ax = plt.subplots(figsize=(6, 5.2))
+                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
+                            for bar in bars:
+                                width = bar.get_width()
+                                if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
+                            st.pyplot(fig)
+                            plt.close()
                         
-                        fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                        bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
-                        for bar in bars:
-                            width = bar.get_width()
-                            if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
-                        st.pyplot(fig)
-                        plt.close()
-                    
-                    spot_data_grouped = spot_data.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
-                    spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
-                    st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
-        else:
-            st.info(f"💡 선택하신 기간의 [{selected_zone}] 관할 지점에서 채집된 생물 개체가 없습니다.")
-    else: 
-        st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
+                        spot_data_grouped = spot_data.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
+                        spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
+                        st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
+            else:
+                st.info(f"💡 선택하신 기간의 [{selected_zone}] 관할 지점에서 채집된 생물 개체가 없습니다.")
+        else: 
+            st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
 # 4. 참진드기조사 어린이숲체험장 레이어
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
