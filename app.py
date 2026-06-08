@@ -17,10 +17,6 @@ st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템"
 # -----------------------------------------------------------------
 @st.cache_resource
 def init_korean_font_and_get_prop():
-    """
-    스트림릿 클라우드 리눅스 환경에서 한글이 네모(□)로 파괴되는 버그를 영구 치료합니다.
-    방화벽에 안전한 구글 공식 레포지토리에서 나눔고딕을 내려받아 Matplotlib 커널에 직접 등록합니다.
-    """
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
     font_path = "NanumGothic.ttf"
     
@@ -41,7 +37,6 @@ def init_korean_font_and_get_prop():
             return None
     return None
 
-# 전역 한글 글꼴 원천 주입기 기동
 f_prop = init_korean_font_and_get_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드 (2026 최신화)")
@@ -51,7 +46,6 @@ st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 
 # [보조 유틸리티 함수]
 # -----------------------------------------------------------------
 def rename_duplicate_columns(df):
-    """업로드된 파일이나 DB 내부에서 동일한 컬럼명이 발견되면 숫자를 붙여 강제로 고유화함"""
     if df is None or df.empty:
         return df
     cols = pd.Series(df.columns)
@@ -61,12 +55,9 @@ def rename_duplicate_columns(df):
     return df
 
 def convert_df_to_csv(df):
-    """라이브러리 없이 내장 기능만으로 한글 깨짐 없는 CSV 바이너리 변환 (UTF-8-SIG 사용)"""
     return df.to_csv(index=False).encode('utf-8-sig')
 
-
 def smart_load_uploaded_file(uploaded_file):
-    """표준 단일 파서 (기후변화, 어린이숲 공백 트림 및 중복 컬럼 전처리 복원)"""
     if uploaded_file is None:
         return pd.DataFrame()
     file_name = uploaded_file.name.lower()
@@ -110,11 +101,10 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 2026 데이터 전면 반영]
+# [첨부파일 기반 정식 데이터 마스터 세션 빌더]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
-    # 일본뇌염.csv 반영 데이터
     data = [
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 15},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Aedes vexans", "개체수": 8},
@@ -128,7 +118,6 @@ def get_je_actual_style_data():
 
 @st.cache_data
 def get_malaria_actual_style_data():
-    # 말라리아.csv 반영 데이터
     data = [
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기", "권역": "접경지역거점", "지역2": "철원군 대마리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 34},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기", "권역": "접경지역거점", "지역2": "철원군 학사리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 28},
@@ -143,20 +132,14 @@ def get_malaria_actual_style_data():
 
 @st.cache_data
 def get_climate_data():
-    # 권역모기 + 권역 참진드기 + 털진드기 분포감시 파일 통합본 데이터
     data = [
-        # 1. 권역 모기 데이터
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 1, "권역": "모기 권역", "지역2": "춘천시보건소", "환경": "도심", "종": "Culex pipiens", "개체수": 45},
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 1, "권역": "모기 권역", "지역2": "백로서식지", "환경": "철새도래지", "종": "Aedes vexans", "개체수": 12},
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 2, "권역": "모기 권역", "지역2": "주택", "환경": "도심", "종": "Culex pipiens", "개체수": 31},
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 2, "권역": "모기 권역", "지역2": "종가오리", "환경": "철새도래지", "종": "Anopheles spp.", "개체수": 5},
-        
-        # 2. 권역 참진드기 데이터
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 1, "권역": "참진드기 권역", "지역2": "화천군", "환경": "잡목림", "종": "Haemaphysalis longicornis", "개체수": 56},
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 1, "권역": "참진드기 권역", "지역2": "인제군", "환경": "초지", "종": "Haemaphysalis longicornis", "개체수": 24},
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 2, "권역": "참진드기 권역", "지역2": "화천군", "환경": "산길", "종": "Haemaphysalis longicornis", "개체수": 38},
-        
-        # 3. 털진드기 분포 및 발생 감시 데이터
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 1, "권역": "털진드기 분포감시", "지역2": "철원군", "환경": "야산", "종": "mite(털진드기)", "개체수": 89},
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 1, "권역": "털진드기 발생감시", "지역2": "철원군", "환경": "논", "종": "mite(털진드기)", "개체수": 42},
         {"조사년도": "2026년", "조사월": "05월", "월": 5, "주차": 2, "권역": "털진드기 분포감시", "지역2": "철원군", "환경": "밭", "종": "mite(털진드기)", "개체수": 67}
@@ -165,11 +148,9 @@ def get_climate_data():
 
 @st.cache_data
 def get_forest_playground_actual_data():
-    # 자체조사 어린이숲체험장 기본 구조체 유지 (데이터 정합성 필터 오버레이 보존)
     data = []
     idx = 1
     species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica"]
-    stages = ["Female", "Male", "Nymph", "Larvae"]
     for year in ["2026년"]:
         for month_int in [5]: 
             month_str = "05월"
@@ -189,7 +170,6 @@ def get_forest_playground_actual_data():
                                 idx += 1
     return pd.DataFrame(data)
 
-# 데이터 마스터 세션 로딩 및 중복 컬럼 처리 보완
 base_je_df = rename_duplicate_columns(get_je_actual_style_data())
 base_mal_df = rename_duplicate_columns(get_malaria_actual_style_data())
 base_cli_df = rename_duplicate_columns(get_climate_data())
@@ -217,9 +197,7 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# -----------------------------------------------------------------
-# 1. 일본뇌염 매개모기 감시 레이어
-# -----------------------------------------------------------------
+# 1. 일본뇌염 레이어
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -300,9 +278,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 일본뇌염 지정 연동 데이터가 존재하지 않습니다.")
 
-# -----------------------------------------------------------------
-# 2. 말라리아 매개모기 감시 레이어
-# -----------------------------------------------------------------
+# 2. 말라리아 레이어
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -389,7 +365,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
 # -----------------------------------------------------------------
-# 3. 기후변화 대응 매개체 감시 레이어
+# 3. 기후변화 대응 매개체 감시 레이어 (정밀 수정 및 보완 파트)
 # -----------------------------------------------------------------
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황 [{selected_year} {selected_month}]")
@@ -410,21 +386,29 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             uploaded_df_cli = smart_load_uploaded_file(cli_file)
             uploaded_df_cli["조사년도"] = selected_year
             uploaded_df_cli["조사월"] = selected_month
+            uploaded_df_cli["권역"] = selected_zone  # 💡 파일 업로드 시 필터 매칭 깨짐 원인 해결
             df_cli = rename_duplicate_columns(uploaded_df_cli)
 
     if "조사년도" not in df_cli.columns:
         df_cli["조사년도"] = selected_year
 
+    # 💡 신규 모기 감시 지점(삼천동, 퇴계동주민센터) 좌표 추가 등록
     h_coords = {
         "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
+        "삼천동": [37.8735, 127.7084], "퇴계동주민센터": [37.8621, 127.7290],
         "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583]
     }
     
     target_loc_col = "지역2" if "지역2" in df_cli.columns else "지역2.1"
     if target_loc_col in df_cli.columns:
         df_cli["지역2_정외"] = df_cli[target_loc_col].astype(str).str.strip()
-        df_cli["위도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][0] if x in h_coords else 38.0)
-        df_cli["경도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][1] if x in h_coords else 127.5)
+        
+        # 권역별 중심 좌표 자동 분기 추적
+        default_lat = 37.88 if selected_zone == "모기 권역" else (38.24 if "털진드기" in selected_zone else 38.08)
+        default_lng = 127.75 if selected_zone == "모기 권역" else (127.22 if "털진드기" in selected_zone else 127.95)
+        
+        df_cli["위도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][0] if x in h_coords else default_lat)
+        df_cli["경도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][1] if x in h_coords else default_lng)
         df_cli["지점명"] = df_cli["지역2_정외"] + " (" + df_cli["환경"].astype(str) + ")"
     else:
         df_cli["지점명"] = "지정 감시소"
@@ -459,9 +443,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     else: 
         st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
-# -----------------------------------------------------------------
 # 4. 참진드기조사 어린이숲체험장 레이어
-# -----------------------------------------------------------------
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
     with st.expander("📥 [어린이 숲체험장] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
@@ -500,7 +482,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         forest_summary = m_forest.pivot_table(index=["채집지역2", "gu분지점", "위도", "경도"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
         
         if not forest_summary.empty:
-            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기"] if s in forest_summary.columns]
+            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진기"] if s in forest_summary.columns]
             forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
             
             col_f_map, col_f_graph = st.columns([5, 5])
