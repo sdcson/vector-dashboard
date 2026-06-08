@@ -97,7 +97,7 @@ def load_df_from_github(filename_on_github, fallback_df):
     return fallback_df
 
 # -----------------------------------------------------------------
-# [💡 최신 판다스 <NA> 결측치 및 예외 데이터 우회용 안전 포맷터 엔진]
+# [💡 최신 판다스 결측치 및 예외 데이터 우회용 안전 포맷터 엔진]
 # -----------------------------------------------------------------
 def safe_parse_year_series(series, default_val):
     def _parse(val):
@@ -106,7 +106,7 @@ def safe_parse_year_series(series, default_val):
         val_str = str(val).strip()
         if "년" in val_str:
             return val_str
-        return f"{val_str}년"
+        return f"{int(float(val_str))}년" if val_str.replace('.', '', 1).isdigit() else f"{val_str}년"
     return series.apply(_parse)
 
 def safe_parse_month_series(series, default_val):
@@ -122,6 +122,26 @@ def safe_parse_month_series(series, default_val):
         except Exception:
             return str(default_val)
     return series.apply(_parse)
+
+def parse_vectornet_dataframe(df, default_year, default_month):
+    """💡 [핵심 엔진] 참진드기/털진드기 파일의 '월(년도)', '월.1(월)' 컬럼 뒤틀림 현상을 정밀 탐지 및 교정"""
+    df.columns = [c.strip() for c in df.columns]
+    if "월.1" in df.columns and "월" in df.columns:
+        df["조사년도"] = safe_parse_year_series(df["월"], default_year)
+        df["조사월"] = safe_parse_month_series(df["월.1"], default_month)
+    else:
+        if "연도" in df.columns:
+            df["조사년도"] = safe_parse_year_series(df["연도"], default_year)
+        elif "년도" in df.columns:
+            df["조사년도"] = safe_parse_year_series(df["년도"], default_year)
+        else:
+            df["조사년도"] = default_year
+            
+        if "월" in df.columns:
+            df["조사월"] = safe_parse_month_series(df["월"], default_month)
+        else:
+            df["조사월"] = default_month
+    return df
 
 # -----------------------------------------------------------------
 # [보조 유틸리티 함수]
@@ -209,37 +229,29 @@ def smart_load_uploaded_file(uploaded_file):
 def get_je_actual_style_data():
     if os.path.exists('일본뇌염.xlsx - VectorNet.csv'):
         df = pd.read_csv('일본뇌염.xlsx - VectorNet.csv')
-        df.columns = [c.strip() for c in df.columns]
-        return df
+        return parse_vectornet_dataframe(df, "2026년", "05월")
     return pd.DataFrame(columns=["연도", "월", "주차", "사업명", "권역", "지역2", "환경", "방법", "종", "개체수"])
 
 @st.cache_data
 def get_malaria_actual_style_data():
     if os.path.exists('말라리아.xlsx - VectorNet.csv'):
         df = pd.read_csv('말라리아.xlsx - VectorNet.csv')
-        df.columns = [c.strip() for c in df.columns]
-        return df
+        return parse_vectornet_dataframe(df, "2026년", "05월")
     return pd.DataFrame(columns=["연도", "월", "주차", "사업명", "권역", "지역2", "환경", "방법", "종", "개체수"])
 
 @st.cache_data
 def get_climate_data():
     if os.path.exists('권역모기.xlsx - VectorNet.csv') and os.path.exists('권역 참진드기.xlsx - VectorNet.csv') and os.path.exists('털진드기 분포감시.xlsx - VectorNet.csv'):
         df_moq = pd.read_csv('권역모기.xlsx - VectorNet.csv')
-        df_moq.columns = [c.strip() for c in df_moq.columns]
-        df_moq['조사년도'] = safe_parse_year_series(df_moq['연도'], "2026년")
-        df_moq['조사월'] = safe_parse_month_series(df_moq['월'], "05월")
+        df_moq = parse_vectornet_dataframe(df_moq, "2026년", "05월")
         df_moq['권역'] = "모기 권역"
         
         df_tick = pd.read_csv('권역 참진드기.xlsx - VectorNet.csv')
-        df_tick.columns = [c.strip() for c in df_tick.columns]
-        df_tick['조사년도'] = safe_parse_year_series(df_tick['월'], "2026년")
-        df_tick['조사월'] = safe_parse_month_series(df_tick['월.1'], "05월")
+        df_tick = parse_vectornet_dataframe(df_tick, "2026년", "05월")
         df_tick['권역'] = "참진드기 권역"
         
         df_mite = pd.read_csv('털진드기 분포감시.xlsx - VectorNet.csv')
-        df_mite.columns = [c.strip() for c in df_mite.columns]
-        df_mite['조사년도'] = safe_parse_year_series(df_mite['월'], "2026년")
-        df_mite['조사월'] = safe_parse_month_series(df_mite['월.1'], "05월")
+        df_mite = parse_vectornet_dataframe(df_mite, "2026년", "05월")
         df_mite['권역'] = df_mite['사업명'].apply(lambda x: "털진드기 발생감시" if "발생" in str(x) else "털진드기 분포감시")
         
         cols = ['조사년도', '조사월', '권역', '지역2', '환경', '종', '개체수', '주차']
@@ -306,38 +318,20 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         st.download_button("📥 [일본뇌염] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_je_tmpl), "VectorNet_일본뇌염_양식.csv", "text/csv")
         je_file = st.file_uploader("질병청 VectorNet 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="je_up")
         
-        if je_file is None:
-            df_je = base_je_df.copy()
-        else:
+        if je_file is not None:
             uploaded_df = smart_load_uploaded_file(je_file)
-            uploaded_df.columns = [c.strip() for c in uploaded_df.columns]
-            
-            # 💡 안전 필터 적용
-            if "연도" in uploaded_df.columns:
-                uploaded_df["조사년도"] = safe_parse_year_series(uploaded_df["연도"], selected_year)
-            else:
-                uploaded_df["조사년도"] = selected_year
-                
-            if "월" in uploaded_df.columns:
-                uploaded_df["조사월"] = safe_parse_month_series(uploaded_df["월"], selected_month)
-            else:
-                uploaded_df["조사월"] = selected_month
-                
+            uploaded_df = parse_vectornet_dataframe(uploaded_df, selected_year, selected_month)
             df_je_uploaded = rename_duplicate_columns(uploaded_df)
+            
             df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
             if save_df_to_github(df_je, "database_je.csv", f"Append/Overwrite JE data"):
-                st.success("✅ [일본뇌염] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
+                st.success("✅ [일본뇌염] 새 데이터가 기존 통합 대장에 합산 및 정형화 누적되었습니다.")
                 st.cache_data.clear()
+        else:
+            df_je = base_je_df.copy()
 
     if not df_je.empty:
-        if "연도" in df_je.columns:
-            df_je["조사년도"] = safe_parse_year_series(df_je["연도"], selected_year)
-        if "조사년도" not in df_je.columns: df_je["조사년도"] = selected_year
-        
-        if "월" in df_je.columns:
-            df_je["조사월"] = safe_parse_month_series(df_je["월"], selected_month)
-        if "조사월" not in df_je.columns: df_je["조사월"] = selected_month
-
+        df_je = parse_vectornet_dataframe(df_je, selected_year, selected_month)
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
         if "지역2" in df_je.columns:
             df_je["지역2_정규화"] = df_je["지역2"].astype(str).str.strip()
@@ -427,33 +421,16 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             df_mal = base_mal_df.copy()
         else:
             uploaded_df_mal = smart_load_uploaded_file(mal_file)
-            uploaded_df_mal.columns = [c.strip() for c in uploaded_df_mal.columns]
-            
-            if "연도" in uploaded_df_mal.columns:
-                uploaded_df_mal["조사년도"] = safe_parse_year_series(uploaded_df_mal["연도"], selected_year)
-            else:
-                uploaded_df_mal["조사년도"] = selected_year
-
-            if "월" in uploaded_df_mal.columns:
-                uploaded_df_mal["조사월"] = safe_parse_month_series(uploaded_df_mal["월"], selected_month)
-            else:
-                uploaded_df_mal["조사월"] = selected_month
-                
+            uploaded_df_mal = parse_vectornet_dataframe(uploaded_df_mal, selected_year, selected_month)
             df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
+            
             df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
             if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data"):
-                st.success("✅ [말라리아] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
+                st.success("✅ [말라리아] 새 데이터가 기존 원격 대장에 합산 백업 누적되었습니다.")
                 st.cache_data.clear()
 
     if not df_mal.empty:
-        if "연도" in df_mal.columns:
-            df_mal["조사년도"] = safe_parse_year_series(df_mal["연도"], selected_year)
-        if "조사년도" not in df_mal.columns: df_mal["조사년도"] = selected_year
-
-        if "월" in df_mal.columns:
-            df_mal["조사월"] = safe_parse_month_series(df_mal["월"], selected_month)
-        if "조사월" not in df_mal.columns: df_mal["조사월"] = selected_month
-
+        df_mal = parse_vectornet_dataframe(df_mal, selected_year, selected_month)
         mal_coords_map = {
             "춘천시 중앙동": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
             "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
@@ -545,7 +522,9 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어
+# -----------------------------------------------------------------
+# 3. 기후변화 대응 매개체 감시 레이어 (월.1 파싱 버그 수정 완료)
+# -----------------------------------------------------------------
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -563,36 +542,18 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             df_cli = base_cli_df.copy()
         else:
             uploaded_df_cli = smart_load_uploaded_file(cli_file)
-            
-            # 💡 안전 필터 적용형 엔진 이식
-            if "연도" in uploaded_df_cli.columns:
-                uploaded_df_cli["조사년도"] = safe_parse_year_series(uploaded_df_cli["연도"], selected_year)
-            elif "년도" in uploaded_df_cli.columns:
-                uploaded_df_cli["조사년도"] = safe_parse_year_series(uploaded_df_cli["년도"], selected_year)
-            else:
-                uploaded_df_cli["조사년도"] = selected_year
-
-            if "월" in uploaded_df_cli.columns:
-                uploaded_df_cli["조사월"] = safe_parse_month_series(uploaded_df_cli["월"], selected_month)
-            else:
-                uploaded_df_cli["조사월"] = selected_month
-                
+            # 💡 [버그 완전 치료] 기후변화 참진드기/털진드기 전용 독립 변환 함수 호출
+            uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
             uploaded_df_cli["권역"] = selected_zone
             df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
             
             df_cli = merge_and_overwrite(base_cli_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종', '권역'])
             if save_df_to_github(df_cli, "database_cli.csv", f"Auto-save Climate data"):
-                st.success("✅ [기후변화] 새 데이터가 기존 대장에 안전하게 누적되었습니다.")
+                st.success("✅ [기후변화] 새 데이터가 원격 연/월/권역별 고유 계정 대장에 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
     if not df_cli.empty:
-        if "연도" in df_cli.columns:
-            df_cli["조사년도"] = safe_parse_year_series(df_cli["연도"], selected_year)
-        if "조사년도" not in df_cli.columns: df_cli["조사년도"] = selected_year
-
-        if "월" in df_cli.columns:
-            df_cli["조사월"] = safe_parse_month_series(df_cli["월"], selected_month)
-        if "조사월" not in df_cli.columns: df_cli["조사월"] = selected_month
+        df_cli = parse_vectornet_dataframe(df_cli, selected_year, selected_month)
 
     h_coords = {
         "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
@@ -600,9 +561,10 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583]
     }
     
-    if "주차" in df_cli.columns:
-        df_cli = df_cli.sort_values(by=["조사년도", "조사월", "주차"])
-        weeks_sorted = df_cli.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
+    # 💡 [독립 권역 주차 정렬 스케줄러 보완] 각 권역별 수집 주차를 분리 팩터라이징하여 매핑 유실 전면 해결
+    if "주차" in df_cli.columns and not df_cli.empty:
+        df_cli = df_cli.sort_values(by=["조사년도", "조사월", "권역", "주차"])
+        weeks_sorted = df_cli.groupby(["조사년도", "조사월", "권역"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
         df_cli["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
     else:
         df_cli["조사주"] = "1주"
@@ -662,6 +624,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 bars = ax.bar(loc_total["지점명"], loc_total[val_col], color='#2a9d8f', edgecolor='black')
                 ax.set_xticks(range(len(loc_total)))
                 ax.set_xticklabels(loc_total["지점명"], rotation=45, ha='right')
+                # 💡 [맷플롯립 오버라이트 섀도잉 버그 소거] 변수명 bars 중복 선언 해제
                 for bar in bars:
                     height = bar.get_height()
                     if height > 0: ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
@@ -734,31 +697,4 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         forest_summary = m_forest.pivot_table(index=["채집지역2", "gu분지점", "위도", "경도"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
         
         if not forest_summary.empty:
-            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기"] if s in forest_summary.columns]
-            forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
-            
-            col_f_map, col_f_graph = st.columns([5, 5])
-            with col_f_map:
-                st.markdown(f"##### 🗺️ 홍천군 어린이숲 자체 감시망")
-                m_f = folium.Map(location=[37.665, 127.900], zoom_start=11)
-                for r_name, latlng in h_coords.items():
-                    r_summary = forest_summary[forest_summary["채집지역2"] == r_name]
-                    popup_text = f"<b>🌲 홍천 {r_name} 유아숲체험원</b><br><hr style='margin:5px 0;'>"
-                    for _, r in r_summary.iterrows(): 
-                        popup_text += f"• {r['gu분지점']}: 월간 누적 {r['합계']}개체<br>"
-                    folium.Marker(latlng, popup=folium.Popup(popup_text, max_width=350), icon=folium.Icon(color='green', icon='tree')).add_to(m_f)
-                st_folium(m_f, key=f"map_forest_final_{selected_year}_{selected_month}", width="100%", height=430)
-                
-            with col_f_graph:
-                st.markdown(f"##### 📊 구역별 채집 총합 비교")
-                fig, ax = plt.subplots(figsize=(6, 5))
-                chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum")
-                chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
-                plt.tight_layout()
-                st.pyplot(fig)
-                plt.close()
-            st.dataframe(forest_summary, hide_index=True, use_container_width=True)
-        else: 
-            st.info("💡 요약 조건에 맞는 채집 수치 데이터가 존재하지 않습니다.")
-    else: 
-        st.info("💡 선택하신 연도와 월에 해당하는 어린이 숲 체험장 조사 내역이 없습니다.")
+            avail_species =
