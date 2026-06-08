@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit st
 import pandas as pd
 import numpy as np
 import folium
@@ -257,7 +257,7 @@ def get_cli_mite_data():
     if os.path.exists('털진드기 분포감시.xlsx - VectorNet.csv'):
         df = pd.read_csv('털진드기 분포감시.xlsx - VectorNet.csv')
         return parse_vectornet_dataframe(df, "2026년", "05월")
-    return pd.DataFrame(columns=["월", "월.1", "주차", "지역2", "환경", "종", "개체수", "사업명"])
+    return pd.DataFrame(columns=["월", "월.1", "주차", "지역2", "환경", "종", "개체수", "방법"])
 
 @st.cache_data
 def get_forest_playground_actual_data():
@@ -289,7 +289,7 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
-# 💡 [원격 깃허브 개별 계정 대장 엔진 세션 분리 매핑 완료]
+# 💡 원격 깃허브 개별 계정 대장 엔진 세션 분리 매핑
 base_je_df = rename_duplicate_columns(load_df_from_github("database_je.csv", get_je_actual_style_data()))
 base_mal_df = rename_duplicate_columns(load_df_from_github("database_mal.csv", get_malaria_actual_style_data()))
 base_cli_moq_df = rename_duplicate_columns(load_df_from_github("database_cli_moq.csv", get_cli_moq_data()))
@@ -517,9 +517,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# -----------------------------------------------------------------
-# 3. 🟢 기후변화 대응 매개체 감시 레이어 (💡 완전히 독립된 3중 대장 분리 포털 완료)
-# -----------------------------------------------------------------
+# 3. 기후변화 대응 매개체 감시 레이어
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -533,7 +531,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         st.download_button("📥 국가 감시망 전용 표준 서식 예시 다운로드 (.csv)", convert_df_to_csv(vn_tmpl), f"VectorNet_{selected_zone}_실무양식.csv", "text/csv")
         cli_file = st.file_uploader("질병청 VectorNet 엑셀/CSV 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key=f"cli_up_{selected_zone}")
         
-        # 💡 [핵심 해결 지점] 3대 매개체의 파일 쓰기 경로를 원천 물리 격리
         if selected_zone == "모기 권역":
             if cli_file is None:
                 df_zone = base_cli_moq_df.copy()
@@ -556,7 +553,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 if save_df_to_github(df_zone, "database_cli_tick.csv", "Update Climate Tick data"):
                     st.success("✅ [참진드기 권역] 새 데이터가 전용 대장(database_cli_tick.csv)에 안전하게 누적되었습니다.")
                     st.cache_data.clear()
-        else: # 털진드기 분포감시 또는 발생감시
+        else: # 털진드기 분포감시 또는 발생감시 트랙
             if cli_file is None:
                 df_zone = base_cli_mite_df.copy()
             else:
@@ -571,7 +568,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     if not df_zone.empty:
         df_zone = parse_vectornet_dataframe(df_zone, selected_year, selected_month)
         
-        # 주차 스케줄러 독립 팩터라이징
         if "주차" in df_zone.columns:
             df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
             weeks_sorted = df_zone.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
@@ -585,24 +581,28 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583]
         }
 
-        target_loc_col = "지역2" if "지역2" in df_zone.columns else ("지역2.1" if "지역2.1" in df_zone.columns else df_zone.columns[min(8, len(df_zone.columns)-1)])
-        df_zone["지역2_정외"] = df_zone[target_loc_col].astype(str).str.strip()
-        
-        default_lat = 37.88 if selected_zone == "모기 권역" else (38.24 if "털진드기" in selected_zone else 38.08)
-        default_lng = 127.75 if selected_zone == "모기 권역" else (127.22 if "털진드기" in selected_zone else 127.95)
+        # 💡 [요청 사항 완전 구현] 털진드기 선택 시 환경(야산, 수로 등)을 지점 탭으로 자동 인식하도록 매핑 치환
+        if "털진드기" in selected_zone:
+            df_zone["지역2_정외"] = df_zone["환경"].astype(str).str.strip()
+            df_zone["지점명"] = df_zone["지역2_정외"] + " 환경 조사지"
+        else:
+            target_loc_col = "지역2" if "지역2" in df_zone.columns else ("지역2.1" if "지역2.1" in df_zone.columns else df_zone.columns[min(8, len(df_zone.columns)-1)])
+            df_zone["지역2_정외"] = df_zone[target_loc_col].astype(str).str.strip()
+            env_str = df_zone["환경"].astype(str) if "환경" in df_zone.columns else "감시소"
+            df_zone["지점명"] = df_zone["지역2_정외"] + " (" + env_str + ")"
+
+        default_lat = 37.88 if selected_zone == "모기 권역" else (38.244278 if "털진드기" in selected_zone else 38.08)
+        default_lng = 127.75 if selected_zone == "모기 권역" else (127.220583 if "털진드기" in selected_zone else 127.95)
         df_zone["위도"] = df_zone["지역2_정외"].map(lambda x: h_coords[x][0] if x in h_coords else default_lat)
         df_zone["경도"] = df_zone["지역2_정외"].map(lambda x: h_coords[x][1] if x in h_coords else default_lng)
-        
-        env_str = df_zone["환경"].astype(str) if "환경" in df_zone.columns else "감시소"
-        df_zone["지점명"] = df_zone["지역2_정외"] + " (" + env_str + ")"
 
-        # 연/월 기본 시계열 매핑 필터링
+        # 달력 기본 연/월 매핑 필터링
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
         
-        # 털진드기 내부 하위 감시 권역 스플리터
+        # 💡 [요청 사항 완전 구현] 방법(Sherman trap / 털진드기 채집기) 컬럼 기준으로 분포/발생감시 데이터 분산 정형화
         if selected_zone in ["털진드기 분포감시", "털진드기 발생감시"]:
-            if "사업명" in m_data.columns:
-                m_data["권역_필터"] = m_data["사업명"].apply(lambda x: "털진드기 발생감시" if "발생" in str(x) else "털진드기 분포감시")
+            if "방법" in m_data.columns:
+                m_data["권역_필터"] = m_data["방법"].apply(lambda x: "털진드기 발생감시" if "채집기" in str(x) else "털진드기 분포감시")
             else:
                 m_data["권역_필터"] = selected_zone
             m_data = m_data[m_data["권역_필터"] == selected_zone]
