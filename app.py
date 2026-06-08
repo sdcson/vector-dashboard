@@ -167,7 +167,7 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [💡 첨부파일 기반 정식 데이터 마스터 세션 빌더 - 로컬 연동 최우선화]
+# [첨부파일 기반 정식 데이터 마스터 세션 빌더]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
@@ -175,7 +175,6 @@ def get_je_actual_style_data():
         df = pd.read_csv('일본뇌염.xlsx - VectorNet.csv')
         df.columns = [c.strip() for c in df.columns]
         return df
-    # 백업용 대체 데이터 구조
     return pd.DataFrame(columns=["연도", "월", "주차", "사업명", "권역", "지역2", "환경", "방법", "종", "개체수"])
 
 @st.cache_data
@@ -279,7 +278,9 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         st.download_button("📥 [일본뇌염] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_je_tmpl), "VectorNet_일본뇌염_양식.csv", "text/csv")
         je_file = st.file_uploader("질병청 VectorNet 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="je_up")
         
-        if je_file is not None:
+        if je_file is None:
+            df_je = base_je_df.copy()
+        else:
             uploaded_df = smart_load_uploaded_file(je_file)
             uploaded_df.columns = [c.strip() for c in uploaded_df.columns]
             
@@ -298,8 +299,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             if save_df_to_github(df_je, "database_je.csv", f"Append/Overwrite JE data"):
                 st.success("✅ [일본뇌염] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
                 st.cache_data.clear()
-        else:
-            df_je = base_je_df.copy()
 
     if not df_je.empty:
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
@@ -328,7 +327,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     spot_data = f_je[f_je["지점명"] == spot_name]
                     val_col_je = "개체수" if "개체수" in spot_data.columns else "채집수"
                     
-                    # 💡 [핵심 버그 치료] 미채집 항목 및 0건 항목을 필터링해 진짜 곤충 채집 수치만 도출
                     spot_data_clean = spot_data[(spot_data["종"] != "미채집") & (spot_data[val_col_je] > 0)]
                     
                     if not spot_data_clean.empty:
@@ -356,7 +354,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         with c2:
                             st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 채집량 분포")
                             sum_df = spot_data_clean.groupby("종")[val_col_je].sum().reset_index()
-                            # 💡 [디자인 가이드 반영] 바 그래프 데이터 내림차순 정렬 연동
                             sum_df = sum_df.sort_values(by=val_col_je, ascending=True)
                             
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
@@ -367,7 +364,11 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                                 if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8)
                             st.pyplot(fig)
                             plt.close()
-                        st.dataframe(spot_data_clean[["지점명", "환경", "종", val_col_je]], hide_index=True, use_container_width=True)
+                        
+                        # 💡 [요청 반영] 한 주 데이터 내에 여러 번 채집된 동일 종을 하나로 합쳐서 깔끔하게 표출
+                        spot_data_grouped = spot_data_clean.groupby(["지점명", "환경", "종"], as_index=False)[val_col_je].sum()
+                        spot_data_grouped = spot_data_grouped.sort_values(by=val_col_je, ascending=False)
+                        st.dataframe(spot_data_grouped[["지점명", "환경", "종", val_col_je]], hide_index=True, use_container_width=True)
                     else:
                         st.info(f"💡 {spot_name} 지점의 해당 기간 채집된 매개체가 없거나 미채집 상태입니다.")
         else:
@@ -390,7 +391,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             uploaded_df_mal.columns = [c.strip() for c in uploaded_df_mal.columns]
             
             if "연도" in uploaded_df_mal.columns:
-                uploaded_df_mal["조사년도"] = uploaded_df_mal["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+                uploaded_df_mal["조사년도"] = uploaded_df_mal["연度"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
             else:
                 uploaded_df_mal["조사년도"] = selected_year
 
@@ -452,7 +453,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     spot_data_mal = f_mal[f_mal["지점명"].str.contains(short_name, na=False)]
                     val_col_mal = "개체수" if "개체수" in spot_data_mal.columns else "채집수"
                     
-                    # 💡 [동일 정형화 엔진 오버레이] 말라리아 실무 데이터 미채집 행 제거
                     spot_data_mal_clean = spot_data_mal[(spot_data_mal["종"] != "미채집") & (spot_data_mal[val_col_mal] > 0)]
                     
                     if not spot_data_mal_clean.empty:
@@ -489,7 +489,11 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                                 if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8)
                             st.pyplot(fig)
                             plt.close()
-                        st.dataframe(spot_data_mal_clean[["지점명", "환경", "종", val_col_mal]], hide_index=True, use_container_width=True)
+                        
+                        # 💡 [요청 반영] 말라리아 거점 데이터 테이블 역시 자동 중복 합산 및 내림차순 정렬 표출
+                        spot_data_mal_grouped = spot_data_mal_clean.groupby(["지점명", "환경", "종"], as_index=False)[val_col_mal].sum()
+                        spot_data_mal_grouped = spot_data_mal_grouped.sort_values(by=val_col_mal, ascending=False)
+                        st.dataframe(spot_data_mal_grouped[["지점명", "환경", "종", val_col_mal]], hide_index=True, use_container_width=True)
                     else:
                         st.info(f"💡 {short_name} 지점의 해당 기간 채집된 매개체가 없거나 미채집 상태입니다.")
         else:
@@ -561,7 +565,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     if not m_data.empty:
         val_col = "개체수" if "개체수" in m_data.columns else "채집수"
         
-        # 💡 기후변화 탭 데이터 역시 미채집(0건) 필터 오버레이 적용
         m_data_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
         
         if not m_data_clean.empty:
@@ -609,6 +612,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 plt.close()
                 
             monthly_summary_table = m_data_clean.groupby(["지점명", "환경", "종"], as_index=False)[val_col].sum()
+            monthly_summary_table = monthly_summary_table.sort_values(by=val_col, ascending=False)
             st.dataframe(monthly_summary_table.rename(columns={"지점명": "조사지점", "환경": "환경", "종": "채집종", val_col: "채집수(개체)"})[["조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
         else:
             st.info(f"💡 선택하신 기간의 [{selected_zone}] 관할 지점에서 채집된 생물 개체가 없습니다.")
