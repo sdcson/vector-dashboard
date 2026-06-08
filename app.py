@@ -307,7 +307,7 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# 1. 일본뇌염 레이어 (💡 중복 else 구문 완벽 제거 완료)
+# 1. 일본뇌염 레이어
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -406,7 +406,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 일본뇌염 지정 연동 데이터가 존재하지 않습니다.")
 
-# 2. 말라리아 레이어 (💡 중복 else 구문 완벽 제거 완료)
+# 2. 말라리아 레이어
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -521,7 +521,9 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어 (💡 중복 else 구문 완벽 제거 완료)
+# -----------------------------------------------------------------
+# 3. 🟢 기후변화 대응 매개체 감시 레이어 (지점별 분리 및 종별 독립 차트 전면 개편)
+# -----------------------------------------------------------------
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -585,64 +587,39 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         m_data_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
         
         if not m_data_clean.empty:
-            col_map, col_day, col_trend = st.columns([4, 4, 4])
-            with col_map:
-                st.markdown(f"##### 🗺️ GIS 공간 매핑")
-                m_center_lat = 38.24 if "털진드기" in selected_zone else (37.88 if selected_zone == "모기 권역" else 38.08)
-                m_center_lng = 127.22 if "털진드기" in selected_zone else (127.75 if selected_zone == "모기 권역" else 127.95)
-                m_zoom = 11 if "털진드기" in selected_zone or selected_zone == "모기 권역" else 10
-                
-                map_summary = m_data_clean.groupby(["지점명", "위도", "경도", "환경"], as_index=False)[val_col].sum()
-                m_cli = folium.Map(location=[m_center_lat, m_center_lng], zoom_start=m_zoom)
-                
-                for _, r in map_summary.iterrows():
-                    spec_data = m_data_clean[m_data_clean["지점명"] == r["지점명"]].groupby("종")[val_col].sum().reset_index()
-                    popup_html = f"<div style='font-family:NanumGothic, sans-serif; font-size:12px;'><b>🏢 {r['지점명']}</b><br><hr style='margin:5px 0;'>"
-                    for _, s_row in spec_data.iterrows():
-                        popup_html += f"• {s_row['종']}: {int(s_row[val_col])}마리<br>"
-                    popup_html += f"<hr style='margin:5px 0;'><b>총 채집수: {int(r[val_col])}개체</b></div>"
+            # 💡 [핵심 해결 지점] 기후변화 탭 데이터도 지역2 기준 동적 하위 탭 개설하여 지점별 매핑
+            unique_spots = sorted(m_data_clean["지역2_정외"].unique())
+            cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in unique_spots])
+            for idx, spot_name in enumerate(unique_spots):
+                with cli_sub_tabs[idx]:
+                    spot_data = m_data_clean[m_data_clean["지역2_정외"] == spot_name]
+                    c1, c2 = st.columns([5, 5])
+                    with c1:
+                        st.markdown(f"##### 🗺️ GIS 감시 지점 지도")
+                        m_cli = folium.Map(location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], zoom_start=11)
+                        folium.Marker(
+                            location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])],
+                            tooltip=spot_name,
+                            icon=folium.Icon(color='green', icon='info-sign')
+                        ).add_to(m_cli)
+                        st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
+                    with c2:
+                        # 💡 [요청 사항 반영 완벽 구현] 해당 지점 내에서 같은 종은 하나로 더하고 다른 종은 각각 쪼개서 정렬 차트 표출!
+                        st.markdown(f"##### 📊 종별 채집량 분포 (합산 및 정렬)")
+                        sum_df = spot_data.groupby("종")[val_col].sum().reset_index()
+                        sum_df = sum_df.sort_values(by=val_col, ascending=True)
+                        
+                        fig, plt_ax = plt.subplots(figsize=(6, 5.2))
+                        bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
+                        for bar in bars:
+                            width = bar.get_width()
+                            if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
+                        st.pyplot(fig)
+                        plt.close()
                     
-                    folium.Marker(
-                        location=[float(r['위도']), float(r['경도'])], 
-                        tooltip=r['지점명'], 
-                        popup=folium.Popup(popup_html, max_width=300),
-                        icon=folium.Icon(color='green', icon='info-sign')
-                    ).add_to(m_cli)
-                    
-                map_key = f"map_climate_final_{selected_year}_{selected_month}_{selected_zone}_{len(map_summary)}"
-                st_folium(m_cli, key=map_key, width="100%", height=380)
-                
-            with col_day:
-                st.markdown(f"##### 📊 지점별 밀도 비교 (정렬)")
-                fig, ax = plt.subplots(figsize=(6, 5.2))
-                loc_total = m_data_clean.groupby("지점명")[val_col].sum().reset_index().sort_values(by=val_col, ascending=False)
-                bars = ax.bar(loc_total["지점명"], loc_total[val_col], color='#2a9d8f', edgecolor='black')
-                ax.set_xticks(range(len(loc_total)))
-                ax.set_xticklabels(loc_total["지점명"], rotation=45, ha='right')
-                # 💡 중복 변수 선언 해제로 루프 충돌 완벽 방어
-                for bar in bars:
-                    height = bar.get_height()
-                    if height > 0: ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
-                plt.gcf().subplots_adjust(bottom=0.35)
-                plt.tight_layout()
-                st.pyplot(fig)
-                plt.close()
-
-            with col_trend:
-                st.markdown(f"##### 📈 주차별 채집량 변동 추이 ({selected_month})")
-                weekly_trend = m_data_clean.groupby("조사주")[val_col].sum().reindex(["1주", "2주", "3주", "4주"], fill_value=0).reset_index()
-                fig2, ax2 = plt.subplots(figsize=(6, 5.2))
-                ax2.plot(weekly_trend["조사주"], weekly_trend[val_col], marker='o', color='#e76f51', linewidth=2.5, markersize=8)
-                ax2.grid(True, linestyle='--', alpha=0.5)
-                for t_idx, val in enumerate(weekly_trend[val_col]):
-                    ax2.text(t_idx, val + (max(weekly_trend[val_col])*0.03 if max(weekly_trend[val_col])>0 else 0.5), f"{int(val)}", ha='center', fontsize=9, fontweight='bold')
-                plt.tight_layout()
-                st.pyplot(fig2)
-                plt.close()
-                
-            monthly_summary_table = m_data_clean.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
-            monthly_summary_table = monthly_summary_table.sort_values(by=["조사주", val_col], ascending=[True, False])
-            st.dataframe(monthly_summary_table.rename(columns={"조사주": "조사주차", "지점명": "조사지점", "환경": "환경", "종": "채집종", val_col: "채집수(개체)"})[["조사주차", "조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
+                    spot_data_grouped = spot_data.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
+                    spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
+                    st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
         else:
             st.info(f"💡 선택하신 기간의 [{selected_zone}] 관할 지점에서 채집된 생물 개체가 없습니다.")
     else: 
@@ -667,56 +644,4 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             
             df_forest = merge_and_overwrite(base_forest_df, df_forest_uploaded, keys=['조사년도', '월', '조사월', '조사주', '채집지역2', '지점번호', '분류', '종', 'Stage'])
             if save_df_to_github(df_forest, "database_forest.csv", f"Auto-save Forest Playground data"):
-                st.success("✅ [어린이 숲체험장] 새 데이터가 기존 대장에 안전하게 누적되었습니다.")
-                st.cache_data.clear()
-
-    try:
-        month_int = int(str(selected_month).replace("월",""))
-        if "월" in df_forest.columns:
-            df_forest["월_인덱스"] = df_forest["월"].astype(str).str.extract(r'(\d+)').astype(int)
-            m_forest = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월_인덱스"] == month_int)].copy()
-        else: 
-            m_forest = pd.DataFrame()
-    except Exception: 
-        m_forest = pd.DataFrame()
-
-    if not m_forest.empty:
-        m_forest['종명_한글'] = m_forest['종'].replace({"Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
-        m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
-        m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
-        
-        h_coords = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
-        m_forest['위도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][0] if x in h_coords else 37.66)
-        m_forest['경도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][1] if x in h_coords else 127.90)
-        
-        forest_summary = m_forest.pivot_table(index=["채집지역2", "gu분지점", "위도", "경도"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
-        
-        if not forest_summary.empty:
-            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기"] if s in forest_summary.columns]
-            forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
-            
-            col_f_map, col_f_graph = st.columns([5, 5])
-            with col_f_map:
-                st.markdown(f"##### 🗺️ 홍천군 어린이숲 자체 감시망")
-                m_f = folium.Map(location=[37.665, 127.900], zoom_start=11)
-                for r_name, latlng in h_coords.items():
-                    r_summary = forest_summary[forest_summary["채집지역2"] == r_name]
-                    popup_text = f"<b>🌲 홍천 {r_name} 유아숲체험원</b><br><hr style='margin:5px 0;'>"
-                    for _, r in r_summary.iterrows(): 
-                        popup_text += f"• {r['gu분지점']}: 월간 누적 {r['합계']}개체<br>"
-                    folium.Marker(latlng, popup=folium.Popup(popup_text, max_width=350), icon=folium.Icon(color='green', icon='tree')).add_to(m_f)
-                st_folium(m_f, key=f"map_forest_final_{selected_year}_{selected_month}", width="100%", height=430)
-                
-            with col_f_graph:
-                st.markdown(f"##### 📊 구역별 채집 총합 비교")
-                fig, ax = plt.subplots(figsize=(6, 5))
-                chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum")
-                chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
-                plt.tight_layout()
-                st.pyplot(fig)
-                plt.close()
-            st.dataframe(forest_summary, hide_index=True, use_container_width=True)
-        else: 
-            st.info("💡 요약 조건에 맞는 채집 수치 데이터가 존재하지 않습니다.")
-    else: 
-        st.info("💡 선택하신 연도와 월에 해당하는 어린이 숲 체험장 조사 내역이 없습니다.")
+                st.success("✅
