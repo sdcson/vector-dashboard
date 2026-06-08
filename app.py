@@ -112,16 +112,27 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8-sig')
 
 def merge_and_overwrite(old_df, new_df, keys):
-    if old_df.empty:
-        return new_df
+    """💡 [유저 요청 완벽 반영] 새 파일 내부에서 동일 주차/종이 있으면 합산(Sum)하고 기존 대장을 덮어씀"""
     if new_df.empty:
         return old_df
-    valid_keys = [k for k in keys if k in old_df.columns and k in new_df.columns]
-    if not valid_keys:
-        valid_keys = [c for c in old_df.columns if c in new_df.columns and c not in ['개체수', '번호', '연번', '조사주']]
+        
+    val_col = "개체수" if "개체수" in new_df.columns else ("채집수" if "채집수" in new_df.columns else "개체수")
+    groupby_keys = [k for k in keys if k in new_df.columns]
     
-    combined = pd.concat([old_df, new_df], ignore_index=True)
-    return combined.drop_duplicates(subset=valid_keys, keep='last')
+    # 새 파일 내부의 동일 주차, 지점, 모기종 개체수 합산 바인딩
+    agg_dict = {}
+    for col in new_df.columns:
+        if col == val_col:
+            agg_dict[col] = 'sum'
+        elif col not in groupby_keys and col not in ['번호', '연번']:
+            agg_dict[col] = 'first'
+    new_df_aggregated = new_df.groupby(groupby_keys, as_index=False).agg(agg_dict)
+    
+    if old_df.empty:
+        return new_df_aggregated
+        
+    combined = pd.concat([old_df, new_df_aggregated], ignore_index=True)
+    return combined.drop_duplicates(subset=groupby_keys, keep='last')
 
 def smart_load_uploaded_file(uploaded_file):
     if uploaded_file is None:
@@ -167,7 +178,7 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [첨부파일 기반 정식 데이터 마스터 세션 빌더]
+# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 로컬 정식 파일 연동 자동화]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
@@ -252,15 +263,7 @@ base_forest_df = rename_duplicate_columns(load_df_from_github("database_forest.c
 st.sidebar.markdown("### 📅 통합 시간 동기화 필터")
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년"])
 selected_month = st.sidebar.selectbox("조사월 선택", ["05월", "04월", "06월", "07월", "08월", "09월", "10월"])
-
-if "current_tab" not in st.session_state: 
-    st.session_state.current_tab = "🔴 일본뇌염 매개모기 감시"
-
-if st.session_state.current_tab in ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시"]:
-    selected_week = st.sidebar.selectbox("조사주 선택 (주별 감시 전용)", ["1주", "2주", "3주", "4주"])
-else:
-    st.sidebar.info("💡 본 감시사업은 월간 통합 시각화 모드로 구동되어 주차 필터가 자동 마스킹됩니다.")
-    selected_week = "전체"
+selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)"]
 selected_tab = st.radio("📡 감시사업 카테고리 선택", tabs, horizontal=True)
@@ -284,23 +287,22 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             uploaded_df = smart_load_uploaded_file(je_file)
             uploaded_df.columns = [c.strip() for c in uploaded_df.columns]
             
-            if "연도" in uploaded_df.columns:
-                uploaded_df["조사년도"] = uploaded_df["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
-            else:
-                uploaded_df["조사년도"] = selected_year
-                
-            if "월" in uploaded_df.columns:
-                uploaded_df["조사월"] = uploaded_df["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
-            else:
-                uploaded_df["조사월"] = selected_month
-                
             df_je_uploaded = rename_duplicate_columns(uploaded_df)
-            df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+            df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['연도', '월', '주차', '지역2', '종'])
             if save_df_to_github(df_je, "database_je.csv", f"Append/Overwrite JE data"):
                 st.success("✅ [일본뇌염] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
+    # 💡 [전천후 시간 동기화 보장 레이어] 파일 미업로드 시에도 사이드바 달력 필터가 원천 작동하도록 고정
     if not df_je.empty:
+        if "연도" in df_je.columns:
+            df_je["조사년도"] = df_je["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+        if "조사년도" not in df_je.columns: df_je["조사년도"] = selected_year
+        
+        if "월" in df_je.columns:
+            df_je["조사월"] = df_je["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+        if "조사월" not in df_je.columns: df_je["조사월"] = selected_month
+
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
         if "지역2" in df_je.columns:
             df_je["지역2_정규화"] = df_je["지역2"].astype(str).str.strip()
@@ -315,9 +317,12 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             weeks_sorted = df_je.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
             df_je["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
         if "조사주" not in df_je.columns:
-            df_je["조사주"] = selected_week
+            df_je["조사주"] = "1주"
 
-        f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
+        if selected_week != "전체":
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
+        else:
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)]
         
         if not f_je.empty:
             je_spots = ["춘천시 산천리 (우사 거점)", "강릉시 산대월리 (우사 거점)", "횡성군 하대리 (우사 거점)"]
@@ -327,6 +332,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     spot_data = f_je[f_je["지점명"] == spot_name]
                     val_col_je = "개체수" if "개체수" in spot_data.columns else "채집수"
                     
+                    # 💡 미채집 및 0건 레코드를 완벽히 정제하여 순수 Culex pipiens 채집 내역만 부각
                     spot_data_clean = spot_data[(spot_data["종"] != "미채집") & (spot_data[val_col_je] > 0)]
                     
                     if not spot_data_clean.empty:
@@ -352,7 +358,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                                 
                             st_folium(m_je, key=f"map_je_final_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
-                            st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 채집량 분포")
+                            st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 채집량 분포 (합산 및 정렬)")
                             sum_df = spot_data_clean.groupby("종")[val_col_je].sum().reset_index()
                             sum_df = sum_df.sort_values(by=val_col_je, ascending=True)
                             
@@ -365,10 +371,9 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                             st.pyplot(fig)
                             plt.close()
                         
-                        # 💡 [요청 반영] 한 주 데이터 내에 여러 번 채집된 동일 종을 하나로 합쳐서 깔끔하게 표출
-                        spot_data_grouped = spot_data_clean.groupby(["지점명", "환경", "종"], as_index=False)[val_col_je].sum()
-                        spot_data_grouped = spot_data_grouped.sort_values(by=val_col_je, ascending=False)
-                        st.dataframe(spot_data_grouped[["지점명", "환경", "종", val_col_je]], hide_index=True, use_container_width=True)
+                        spot_data_grouped = spot_data_clean.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col_je].sum()
+                        spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col_je], ascending=[True, False])
+                        st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col_je]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
                     else:
                         st.info(f"💡 {spot_name} 지점의 해당 기간 채집된 매개체가 없거나 미채집 상태입니다.")
         else:
@@ -390,23 +395,22 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             uploaded_df_mal = smart_load_uploaded_file(mal_file)
             uploaded_df_mal.columns = [c.strip() for c in uploaded_df_mal.columns]
             
-            if "연도" in uploaded_df_mal.columns:
-                uploaded_df_mal["조사년도"] = uploaded_df_mal["연度"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
-            else:
-                uploaded_df_mal["조사년도"] = selected_year
-
-            if "월" in uploaded_df_mal.columns:
-                uploaded_df_mal["조사월"] = uploaded_df_mal["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
-            else:
-                uploaded_df_mal["조사월"] = selected_month
-                
             df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
-            df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+            df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['연도', '월', '주차', '지역2', '종'])
             if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data"):
                 st.success("✅ [말라리아] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
+    # 💡 [전천후 시간 동기화 보장 레이어]
     if not df_mal.empty:
+        if "연도" in df_mal.columns:
+            df_mal["조사년도"] = df_mal["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+        if "조사년도" not in df_mal.columns: df_mal["조사년도"] = selected_year
+
+        if "월" in df_mal.columns:
+            df_mal["조사월"] = df_mal["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+        if "조사월" not in df_mal.columns: df_mal["조사월"] = selected_month
+
         mal_coords_map = {
             "춘천시 중앙동": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
             "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
@@ -419,30 +423,30 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             weeks_sorted = df_mal.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
             df_mal["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
         if "조사주" not in df_mal.columns:
-            df_mal["조사주"] = selected_week
+            df_mal["조사주"] = "1주"
 
         if "지역2" in df_mal.columns:
-            df_mal["지역2_정규화"] = df_mal["지역2"].astype(str).str.strip()
+            mal_df_loc_clean = df_mal["지역2"].astype(str).str.strip()
             
             def find_mal_coords(loc_str):
-                if "중앙" in loc_str:
-                    return mal_coords_map["춘천시 중앙동"][0], mal_coords_map["춘천시 중앙동"][1], "춘천시 중앙동"
-                if "지내" in loc_str:
-                    return mal_coords_map["춘천시 지내리"][0], mal_coords_map["춘천시 지내리"][1], "춘천시 지내리"
+                if "중앙" in loc_str: return mal_coords_map["춘천시 중앙동"][0], mal_coords_map["춘천시 중앙동"][1], "춘천시 중앙동"
+                if "지내" in loc_str: return mal_coords_map["춘천시 지내리"][0], mal_coords_map["춘천시 지내리"][1], "춘천시 지내리"
                 for k, coord in mal_coords_map.items():
                     short_k = k.split()[-1]
-                    if short_k in loc_str or loc_str in k:
-                        return coord[0], coord[1], k
+                    if short_k in loc_str or loc_str in k: return coord[0], coord[1], k
                 return 38.2543, 127.2145, "철원군 대마리"
                 
-            coords_res = df_mal["지역2_정규화"].map(find_mal_coords)
+            coords_res = mal_df_loc_clean.map(find_mal_coords)
             df_mal["위도"] = [c[0] for c in coords_res]
             df_mal["경도"] = [c[1] for c in coords_res]
             df_mal["지점명"] = [f"{c[2]} (우사 거점)" for c in coords_res]
         else:
             df_mal["지점명"] = "철원군 대마리 (우사 거점)"
 
-        f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month) & (df_mal["조사주"] == selected_week)]
+        if selected_week != "전체":
+            f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month) & (df_mal["조사주"] == selected_week)]
+        else:
+            f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month)]
         
         if not f_mal.empty:
             mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
@@ -477,7 +481,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                                 
                             st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
-                            st.markdown(f"##### 📊 {short_name} 종별 발생 현황")
+                            st.markdown(f"##### 📊 {short_name} 종별 발생 현황 (합산 및 정렬)")
                             sum_df_mal = spot_data_mal_clean.groupby("종")[val_col_mal].sum().reset_index()
                             sum_df_mal = sum_df_mal.sort_values(by=val_col_mal, ascending=True)
                             
@@ -490,10 +494,9 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             st.pyplot(fig)
                             plt.close()
                         
-                        # 💡 [요청 반영] 말라리아 거점 데이터 테이블 역시 자동 중복 합산 및 내림차순 정렬 표출
-                        spot_data_mal_grouped = spot_data_mal_clean.groupby(["지점명", "환경", "종"], as_index=False)[val_col_mal].sum()
-                        spot_data_mal_grouped = spot_data_mal_grouped.sort_values(by=val_col_mal, ascending=False)
-                        st.dataframe(spot_data_mal_grouped[["지점명", "환경", "종", val_col_mal]], hide_index=True, use_container_width=True)
+                        spot_data_mal_grouped = spot_data_mal_clean.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col_mal].sum()
+                        spot_data_mal_grouped = spot_data_mal_grouped.sort_values(by=["조사주", val_col_mal], ascending=[True, False])
+                        st.dataframe(spot_data_mal_grouped[["조사주", "지점명", "환경", "종", val_col_mal]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
                     else:
                         st.info(f"💡 {short_name} 지점의 해당 기간 채집된 매개체가 없거나 미채집 상태입니다.")
         else:
@@ -501,7 +504,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 
 # 3. 기후변화 대응 매개체 감시 레이어
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
-    st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황 [{selected_year} {selected_month}]")
+    st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     
     with st.expander(f"📥 [{selected_zone}] VectorNet 오리지널 서식 파일 업로드 및 가이드"):
@@ -538,8 +541,15 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 st.success("✅ [기후변화] 새 데이터가 기존 대장에 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
-    if "조사년도" not in df_cli.columns:
-        df_cli["조사년도"] = selected_year
+    # 💡 [전천후 시간 동기화 보장 레이어]
+    if not df_cli.empty:
+        if "연도" in df_cli.columns:
+            df_cli["조사년도"] = df_cli["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+        if "조사년도" not in df_cli.columns: df_cli["조사년도"] = selected_year
+
+        if "월" in df_cli.columns:
+            df_cli["조사월"] = df_cli["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+        if "조사월" not in df_cli.columns: df_cli["조사월"] = selected_month
 
     h_coords = {
         "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
@@ -547,30 +557,37 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583]
     }
     
+    if "주차" in df_cli.columns:
+        df_cli = df_cli.sort_values(by=["조사년도", "조사월", "주차"])
+        weeks_sorted = df_cli.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
+        df_cli["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
+    else:
+        df_cli["조사주"] = "1주"
+
     target_loc_col = "지역2" if "지역2" in df_cli.columns else "지역2.1"
     if target_loc_col in df_cli.columns:
         df_cli["지역2_정외"] = df_cli[target_loc_col].astype(str).str.strip()
-        
         default_lat = 37.88 if selected_zone == "모기 권역" else (38.24 if "털진드기" in selected_zone else 38.08)
         default_lng = 127.75 if selected_zone == "모기 권역" else (127.22 if "털진드기" in selected_zone else 127.95)
-        
         df_cli["위도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][0] if x in h_coords else default_lat)
         df_cli["경도"] = df_cli["지역2_정외"].map(lambda x: h_coords[x][1] if x in h_coords else default_lng)
         df_cli["지점명"] = df_cli["지역2_정외"] + " (" + df_cli["환경"].astype(str) + ")"
     else:
         df_cli["지점명"] = "지정 감시소"
 
-    m_data = df_cli[(df_cli["조사년도"] == selected_year) & (df_cli["조사월"] == selected_month) & (df_cli["권역"] == selected_zone)].copy()
+    if selected_week != "전체":
+        m_data = df_cli[(df_cli["조사년도"] == selected_year) & (df_cli["조사월"] == selected_month) & (df_cli["조사주"] == selected_week) & (df_cli["권역"] == selected_zone)].copy()
+    else:
+        m_data = df_cli[(df_cli["조사년도"] == selected_year) & (df_cli["조사월"] == selected_month) & (df_cli["권역"] == selected_zone)].copy()
 
     if not m_data.empty:
         val_col = "개체수" if "개체수" in m_data.columns else "채집수"
-        
         m_data_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
         
         if not m_data_clean.empty:
-            col_map, col_day = st.columns([5, 5])
+            col_map, col_day, col_trend = st.columns([4, 4, 4])
             with col_map:
-                st.markdown(f"##### 📍 {selected_month} [{selected_zone}] GIS 공간 매핑")
+                st.markdown(f"##### 🗺️ GIS 공간 매핑")
                 m_center_lat = 38.24 if "털진드기" in selected_zone else (37.88 if selected_zone == "모기 권역" else 38.08)
                 m_center_lng = 127.22 if "털진드기" in selected_zone else (127.75 if selected_zone == "모기 권역" else 127.95)
                 m_zoom = 11 if "털진드기" in selected_zone or selected_zone == "모기 권역" else 10
@@ -593,10 +610,10 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     ).add_to(m_cli)
                     
                 map_key = f"map_climate_final_{selected_year}_{selected_month}_{selected_zone}_{len(map_summary)}"
-                st_folium(m_cli, key=map_key, width="100%", height=430)
+                st_folium(m_cli, key=map_key, width="100%", height=380)
                 
             with col_day:
-                st.markdown(f"##### 📊 {selected_month} 지점별 밀도 비교")
+                st.markdown(f"##### 📊 지점별 밀도 비교 (정렬)")
                 fig, ax = plt.subplots(figsize=(6, 5.2))
                 loc_total = m_data_clean.groupby("지점명")[val_col].sum().reset_index().sort_values(by=val_col, ascending=False)
                 bars = ax.bar(loc_total["지점명"], loc_total[val_col], color='#2a9d8f', edgecolor='black')
@@ -604,16 +621,27 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 ax.set_xticklabels(loc_total["지점명"], rotation=45, ha='right')
                 for bar in bars:
                     height = bar.get_height()
-                    if height > 0: 
-                        ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
+                    if height > 0: ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
                 plt.gcf().subplots_adjust(bottom=0.35)
                 plt.tight_layout()
                 st.pyplot(fig)
                 plt.close()
+
+            with col_trend:
+                st.markdown(f"##### 📈 주차별 채집량 변동 추이 ({selected_month})")
+                weekly_trend = m_data_clean.groupby("조사주")[val_col].sum().reindex(["1주", "2주", "3주", "4주"], fill_value=0).reset_index()
+                fig2, ax2 = plt.subplots(figsize=(6, 5.2))
+                ax2.plot(weekly_trend["조사주"], weekly_trend[val_col], marker='o', color='#e76f51', linewidth=2.5, markersize=8)
+                ax2.grid(True, linestyle='--', alpha=0.5)
+                for t_idx, val in enumerate(weekly_trend[val_col]):
+                    ax2.text(t_idx, val + (max(weekly_trend[val_col])*0.03 if max(weekly_trend[val_col])>0 else 0.5), f"{int(val)}", ha='center', fontsize=9, fontweight='bold')
+                plt.tight_layout()
+                st.pyplot(fig2)
+                plt.close()
                 
-            monthly_summary_table = m_data_clean.groupby(["지점명", "환경", "종"], as_index=False)[val_col].sum()
-            monthly_summary_table = monthly_summary_table.sort_values(by=val_col, ascending=False)
-            st.dataframe(monthly_summary_table.rename(columns={"지점명": "조사지점", "환경": "환경", "종": "채집종", val_col: "채집수(개체)"})[["조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
+            monthly_summary_table = m_data_clean.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
+            monthly_summary_table = monthly_summary_table.sort_values(by=["조사주", val_col], ascending=[True, False])
+            st.dataframe(monthly_summary_table.rename(columns={"조사주": "조사주차", "지점명": "조사지점", "환경": "환경", "종": "채집종", val_col: "채집수(개체)"})[["조사주차", "조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
         else:
             st.info(f"💡 선택하신 기간의 [{selected_zone}] 관할 지점에서 채집된 생물 개체가 없습니다.")
     else: 
