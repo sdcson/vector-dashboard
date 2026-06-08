@@ -8,6 +8,8 @@ from io import BytesIO
 import matplotlib.font_manager as fm
 import urllib.request
 import os
+import requests
+import base64
 
 # 페이지 설정 (가장 상단에 위치 필수)
 st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
@@ -41,6 +43,63 @@ f_prop = init_korean_font_and_get_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드 (2026 최신화)")
 st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
+
+# -----------------------------------------------------------------
+# [💡 방법 3: GitHub API 연동 파일 영구 커밋 & 로드 클라우드 데이터베이스 엔진]
+# -----------------------------------------------------------------
+def get_github_credentials():
+    """스트림릿 Secrets 포털 환경 변수 안전 검증"""
+    try:
+        token = st.secrets["GITHUB_TOKEN"]
+        repo = st.secrets["GITHUB_REPO"]
+        return token, repo
+    except Exception:
+        return None, None
+
+def save_df_to_github(df, filename_on_github, commit_message="Update surveillance data"):
+    """업로드된 데이터 프레임을 UTF-8-SIG CSV로 인코딩하여 깃허브 저장소에 영구 커밋(Push)"""
+    token, repo = get_github_credentials()
+    if not token or not repo:
+        return False
+        
+    csv_bytes = df.to_csv(index=False).encode('utf-8-sig')
+    base64_content = base64.b64encode(csv_bytes).decode('utf-8')
+    
+    url = f"https://api.github.com/repos/{repo}/contents/{filename_on_github}"
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    
+    # 깃허브 기존 파일의 고유 SHA 값 추적 (덮어쓰기 필수 과정)
+    res = requests.get(url, headers=headers)
+    sha = None
+    if res.status_code == 200:
+        sha = res.json().get("sha")
+        
+    payload = {"message": commit_message, "content": base64_content, "branch": "main"}
+    if sha:
+        payload["sha"] = sha
+        
+    put_res = requests.put(url, headers=headers, json=payload)
+    return put_res.status_code in [200, 201]
+
+def load_df_from_github(filename_on_github, fallback_df):
+    """깃허브 원격 저장소에 보관된 파일 원본을 다운로드하고, 파일이 없을 경우 로컬 하드코딩 데이터를 리턴"""
+    token, repo = get_github_credentials()
+    if not token or not repo:
+        return fallback_df
+        
+    url = f"https://api.github.com/repos/{repo}/contents/{filename_on_github}"
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    
+    res = requests.get(url, headers=headers)
+    if res.status_code == 200:
+        try:
+            content_b64 = res.json().get("content")
+            decoded_bytes = base64.b64decode(content_b64)
+            # 스트림 데이터 복원 처리
+            return pd.read_csv(BytesIO(decoded_bytes), encoding='utf-8-sig')
+        except Exception:
+            return fallback_df
+    return fallback_df
 
 # -----------------------------------------------------------------
 # [보조 유틸리티 함수]
@@ -146,7 +205,6 @@ def get_climate_data():
     ]
     return pd.DataFrame(data)
 
-# 💡 [어린이 숲체험장 오리지널 마스터 세션 복원] range(1, 4) 적용하여 관리 1~3, 비관리 1~3 완벽 복구
 @st.cache_data
 def get_forest_playground_actual_data():
     data = []
@@ -161,7 +219,7 @@ def get_forest_playground_actual_data():
                 np.random.seed(seed_year + month_int * 13 + len(week))
                 for region in ["남산", "삼마치"]:
                     course = 1 if region == "남산" else 2
-                    for spot_num in range(1, 4):  # 1, 2, 3 지점 완벽 복원
+                    for spot_num in range(1, 4):  # 관리 1~3, 비관리 1~3 원본 보존
                         for classification in ["In", "Out"]:
                             for sp in species_map:
                                 for stg in stages:
@@ -177,10 +235,11 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
-base_je_df = rename_duplicate_columns(get_je_actual_style_data())
-base_mal_df = rename_duplicate_columns(get_malaria_actual_style_data())
-base_cli_df = rename_duplicate_columns(get_climate_data())
-base_forest_df = rename_duplicate_columns(get_forest_playground_actual_data())
+# 💡 [원격 깃허브 DB와 로컬 원본 데이터 동기화 연동 체인 생성]
+base_je_df = rename_duplicate_columns(load_df_from_github("database_je.csv", get_je_actual_style_data()))
+base_mal_df = rename_duplicate_columns(load_df_from_github("database_mal.csv", get_malaria_actual_style_data()))
+base_cli_df = rename_duplicate_columns(load_df_from_github("database_cli.csv", get_climate_data()))
+base_forest_df = rename_duplicate_columns(load_df_from_github("database_forest.csv", get_forest_playground_actual_data()))
 
 # -----------------------------------------------------------------
 # [사이드바 시간 필터 패널]
@@ -214,14 +273,19 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         st.download_button("📥 [일본뇌염] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_je_tmpl), "VectorNet_일본뇌염_양식.csv", "text/csv")
         je_file = st.file_uploader("질병청 VectorNet 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="je_up")
         
-        if je_file is None:
-            df_je = base_je_df.copy()
-        else:
+        if je_file is not None:
             uploaded_df = smart_load_uploaded_file(je_file)
             uploaded_df["조사년도"] = selected_year
             uploaded_df["조사월"] = selected_month
             uploaded_df["조사주"] = selected_week
             df_je = rename_duplicate_columns(uploaded_df)
+            
+            # 💡 [방법 3 연동] 파일 드롭 즉시 깃허브 원격 파일에 자동 커밋 영구 박제
+            if save_df_to_github(df_je, "database_je.csv", f"Auto-save Japanese Encephalitis data for {selected_year} {selected_month}"):
+                st.success("✅ [일본뇌염] 데이터가 깃허브 원격 대장에 영구 보존되었습니다 (새로고침 가능).")
+                st.cache_data.clear()
+        else:
+            df_je = base_je_df.copy()
 
     if not df_je.empty:
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
@@ -303,6 +367,11 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             uploaded_df_mal["조사월"] = selected_month
             uploaded_df_mal["조사주"] = selected_week
             df_mal = rename_duplicate_columns(uploaded_df_mal)
+            
+            # 💡 [방법 3 연동] 말라리아 깃허브 원격 영구 커밋 연동
+            if save_df_to_github(df_mal, "database_mal.csv", f"Auto-save Malaria data for {selected_year} {selected_month}"):
+                st.success("✅ [말라리아] 데이터가 깃허브 원격 대장에 영구 보존되었습니다.")
+                st.cache_data.clear()
 
     if not df_mal.empty:
         mal_coords_map = {
@@ -404,6 +473,11 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 
             uploaded_df_cli["권역"] = selected_zone
             df_cli = rename_duplicate_columns(uploaded_df_cli)
+            
+            # 💡 [방법 3 연동] 기후변화 통합 깃허브 원격 커밋 연동
+            if save_df_to_github(df_cli, "database_cli.csv", f"Auto-save Climate data for {selected_year} {selected_month}"):
+                st.success("✅ [기후변화] 데이터가 깃허브 원격 대장에 영구 저장되었습니다.")
+                st.cache_data.clear()
 
     if "조사년도" not in df_cli.columns:
         df_cli["조사년도"] = selected_year
@@ -480,7 +554,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     else: 
         st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
-# 4. 🟡 참진드기조사 어린이숲체험장 레이어 (구조 완벽 복원)
+# 4. 참진드기조사 어린이숲체험장 레이어
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
     with st.expander("📥 [어린이 숲체험장] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
@@ -496,6 +570,11 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             uploaded_df_for = smart_load_uploaded_file(forest_file)
             uploaded_df_for["조사년도"] = selected_year
             df_forest = rename_duplicate_columns(uploaded_df_for)
+            
+            # 💡 [방법 3 연동] 어린이 숲체험장 깃허브 원격 커밋 연동
+            if save_df_to_github(df_forest, "database_forest.csv", f"Auto-save Forest Playground data for {selected_year}"):
+                st.success("✅ [어린이 숲체험장] 데이터가 깃허브 원격 대장에 영구 백업되었습니다.")
+                st.cache_data.clear()
 
     try:
         month_int = int(str(selected_month).replace("월",""))
