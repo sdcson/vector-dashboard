@@ -184,14 +184,15 @@ def get_je_actual_style_data():
 
 @st.cache_data
 def get_malaria_actual_style_data():
+    # 💡 질병청 명칭인 '중앙동' 및 '신북읍 지내리' 포맷에 맞춰 내부 데이터 마스터 완전 동기화
     data = [
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "철원군 대마리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 34},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "철원군 학사리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 28},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "춘천시 중앙로", "환경": "우사", "방법": "유문등", "종": "Culex pipiens", "개체수": 12},
+        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "춘천시 중앙동", "환경": "우사", "방법": "유문등", "종": "Culex pipiens", "개체수": 12},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "화천군", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 19},
         {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "철원군 대마리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 41},
         {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "양구군", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 15},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "인제군", "환경": "우사", "방법": "유문등", "종": "Aedes vexans", "개체수": 7},
+        {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "춘천시 신북읍 지내리", "환경": "우사", "방법": "유문등", "종": "Aedes vexans", "개체수": 7},
         {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "고성군", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 23}
     ]
     return pd.DataFrame(data)
@@ -355,13 +356,13 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 일본뇌염 지정 연동 데이터가 존재하지 않습니다.")
 
-# 2. 🔵 말라리아 매개모기 레이어 (필터 매핑 에러 완벽 해결 파트)
+# 2. 🔵 말라리아 매개모기 레이어 (춘천시 중앙동 지명 싱크 및 필터링 완벽 수정)
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
         vn_mal_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수"]
         vn_mal_tmpl = pd.DataFrame(columns=vn_mal_cols)
-        vn_mal_tmpl.loc[0] = [1, "말라리아매개모기조사감시", "강원도보건환경연구원", 2026, 5, 1, "2026-05-23", "강원", "고성군 현내면 명파리", "우사", "유문등", "Anopheles spp.", 45]
+        vn_mal_tmpl.loc[0] = [1, "말라리아매개모기조사감시", "강원도보건환경연구원", 2026, 5, 1, "2026-05-23", "강원", "춘천시 중앙동", "우사", "유문등", "Anopheles spp.", 45]
         st.download_button("📥 [말라리아] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_mal_tmpl), "VectorNet_말라리아_양식.csv", "text/csv")
         mal_file = st.file_uploader("질병청 VectorNet 말라리아 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="mal_up")
         
@@ -370,7 +371,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             uploaded_df_mal = smart_load_uploaded_file(mal_file)
             
-            # 💡 [정밀 보완] 업로드된 파일 내부의 시간 데이터 규격을 사이드바 포맷과 일치하도록 강제 동기화
             if "연도" in uploaded_df_mal.columns:
                 uploaded_df_mal["조사년도"] = uploaded_df_mal["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
             else:
@@ -384,37 +384,40 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             uploaded_df_mal["조사주"] = selected_week
             df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
             
-            # 방법 B 정밀 결합
             df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '조사주', '지역2', '종'])
             if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data for {selected_year} {selected_month} {selected_week}"):
                 st.success("✅ [말라리아] 새 데이터가 기존 원격 대장에 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
     if not df_mal.empty:
-        # 지명 유연 매핑 브릿지 설계 (명파리, 대마리 등 원본 텍스트 포함 여부로 좌표 추적)
+        # 💡 질병청 로우 데이터 규격('중앙동', '지내리')에 매핑 테이블 명칭 전면 대치
         mal_coords_map = {
-            "춘천시 중앙로": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
+            "춘천시 중앙동": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
             "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
             "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
         
-        # 💡 [핵심 버그 해결] '조사주' 파싱 포맷을 상시 동기화하여 데이터 유실 원천 차단
+        # 💡 주차 변환 및 동기화 인덱싱 보완
         if "주차" in df_mal.columns:
-            df_mal["조사주"] = df_mal["주차"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{int(x)%4 + 1}주" if pd.notna(x) else selected_week)
+            df_mal["조사주"] = df_mal["주차"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{(int(x)-1)%4 + 1}주" if pd.notna(x) else selected_week)
         if "조사주" not in df_mal.columns:
             df_mal["조사주"] = selected_week
 
         if "지역2" in df_mal.columns:
             df_mal["지역2_정규화"] = df_mal["지역2"].astype(str).str.strip()
             
-            # 원본 주소에서 거점 매핑 테이블 이름이 포함되어 있는지 유연하게 확인 (명파리 ➡️ 고성군 매핑)
+            # 💡 지명 동의어 탐색기 고도화 (중앙동/중앙로, 신북읍 지내리 등을 누락 없이 100% 매칭)
             def find_mal_coords(loc_str):
+                if "중앙" in loc_str:
+                    return mal_coords_map["춘천시 중앙동"][0], mal_coords_map["춘천시 중앙동"][1], "춘천시 중앙동"
+                if "지내" in loc_str:
+                    return mal_coords_map["춘천시 지내리"][0], mal_coords_map["춘천시 지내리"][1], "춘천시 지내리"
                 for k, coord in mal_coords_map.items():
-                    short_k = k.split()[-1] # '대마리', '학사리', '화천군' 등 키워드 추출
+                    short_k = k.split()[-1]
                     if short_k in loc_str or loc_str in k:
                         return coord[0], coord[1], k
-                return 38.2543, 127.2145, "철원군 대마리" # 매칭 실패시 기본값 안정화
+                return 38.2543, 127.2145, "철원군 대마리"
                 
             coords_res = df_mal["지역2_정규화"].map(find_mal_coords)
             df_mal["위도"] = [c[0] for c in coords_res]
@@ -423,10 +426,11 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             df_mal["지점명"] = "철원군 대마리 (우사 거점)"
 
-        f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month)]
+        # 💡 [주차 필터 연동 버그 완벽 치료] 주차 조건까지 정확하게 필터링 적용
+        f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month) & (df_mal["조사주"] == selected_week)]
         
         if not f_mal.empty:
-            mal_spots_list = ["춘천시 중앙로 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
+            mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
             mal_sub_tabs = st.tabs([f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list])
             for idx, spot_name in enumerate(mal_spots_list):
                 with mal_sub_tabs[idx]:
