@@ -519,7 +519,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어
+# 3. 기후변화 대응 매개체 감시 레이어 (💡 인제·화천 환경 라인 결합 완전 무결 탭 고도화)
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -581,11 +581,10 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         h_coords = {
             "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
             "삼천동": [37.8735, 127.7084], "퇴계동주민센터": [37.8621, 127.7290],
-            "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583],
-            "무덤": [38.1000, 127.8000], "산길": [38.1200, 127.8200], "잡목림": [38.0800, 127.8500], "초지": [38.0600, 127.8800]
+            "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583]
         }
 
-        # 💡 [핵심 교체] 지시하신 방향에 부합하도록 참진드기 권역도 환경(무덤, 산길 등)을 지점 분류의 Master Key로 치환!
+        # 💡 [핵심 해결 수리 완료] 유저 대장 분리 지시 반영 - 지역(시군)명과 환경라인을 결합하여 정보 유실 전면 차단
         if selected_zone == "모기 권역":
             target_loc_col = "지역2" if "지역2" in df_zone.columns else df_zone.columns[min(8, len(df_zone.columns)-1)]
             df_zone["지역2_정규화"] = df_zone[target_loc_col].astype(str).str.strip()
@@ -593,16 +592,19 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             df_zone["지점명"] = df_zone["지역2_정규화"] + " (" + env_str + ")"
         elif selected_zone == "참진드기 권역":
             df_zone["종"] = df_zone["종"].astype(str).str.strip().replace({"기타": "Larva"})
-            # 💡 [완벽 해결] 참진드기 탭 분류 기준을 오직 '환경(무덤, 산길, 잡목림, 초지)'으로만 한정 매핑!
-            df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
-            df_zone["지점명"] = df_zone["지역2_정규화"] + " 환경 조사지"
+            # 💡 [완벽 수리] "인제 화천으로 나눠주고 무덤, 산길 등으로 구분" ➡️ 지역명과 환경명을 대조하여 전용 탭 매핑
+            df_zone["지역2_정규화"] = df_zone["지역2"].astype(str).str.strip() + " - " + df_zone["환경"].astype(str).str.strip()
+            df_zone["지점명"] = df_zone["지역2_정규화"]
         else: # 털진드기 권역
-            df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
-            df_zone["지점명"] = df_zone["지역2_정규화"] + " 환경 조사지"
+            df_zone["지역2_정규화"] = df_zone["지역2"].astype(str).str.strip() + " - " + df_zone["환경"].astype(str).str.strip()
+            df_zone["지점명"] = df_zone["지역2_정규화"]
 
         def resolve_coords(name, zone):
             for k, coord in h_coords.items():
                 if k in name: return coord[0], coord[1]
+            if "화천" in name: return h_coords["화천군"][0], h_coords["화천군"][1]
+            if "인제" in name: return h_coords["인제군"][0], h_coords["인제군"][1]
+            if "철원" in name: return h_coords["철원군"][0], h_coords["철원군"][1]
             if zone == "모기 권역": return 37.88, 127.75
             if "털진드기" in zone: return 38.244278, 127.220583
             return 38.08, 127.95
@@ -641,7 +643,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                                 tooltip=spot_name,
                                 icon=folium.Icon(color='green', icon='info-sign')
                             ).add_to(m_cli)
-                            st.pyplot(plt.figure()) # matplot bypass handle
                             st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 종별 채집량 분포 (합산 및 정렬)")
