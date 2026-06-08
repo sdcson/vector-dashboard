@@ -172,28 +172,27 @@ def smart_load_uploaded_file(uploaded_file):
 @st.cache_data
 def get_je_actual_style_data():
     data = [
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 15},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Aedes vexans", "개체수": 8},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "강릉시 산대월리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 22},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "횡성군 하대리", "환경": "축사", "방법": "LED1", "종": "Culex tritaeniorhynchus", "개체수": 2},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 19},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "강릉시 산대월리", "환경": "축사", "방법": "LED1", "종": "Aedes vexans", "개체수": 14},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "횡성군 하대리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 11}
+        {"조사년도": "2026년", "조사월": "05월", "주차": 21, "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 15},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 21, "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Aedes vexans", "개체수": 8},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 21, "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "강릉시 산대월리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 22},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 21, "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "횡성군 하대리", "환경": "축사", "방법": "LED1", "종": "Culex tritaeniorhynchus", "개체수": 2},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 22, "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 19},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 22, "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "강릉시 산대월리", "환경": "축사", "방법": "LED1", "종": "Aedes vexans", "개체수": 14},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 22, "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "횡성군 하대리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 11}
     ]
     return pd.DataFrame(data)
 
 @st.cache_data
 def get_malaria_actual_style_data():
-    # 💡 질병청 명칭인 '중앙동' 및 '신북읍 지내리' 포맷에 맞춰 내부 데이터 마스터 완전 동기화
     data = [
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "철원군 대마리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 34},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "철원군 학사리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 28},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "춘천시 중앙동", "환경": "우사", "방법": "유문등", "종": "Culex pipiens", "개체수": 12},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "화천군", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 19},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "철원군 대마리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 41},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "양구군", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 15},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "춘천시 신북읍 지내리", "환경": "우사", "방법": "유문등", "종": "Aedes vexans", "개체수": 7},
-        {"조사년도": "2026년", "조사월": "05월", "주차": "2주", "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "고성군", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 23}
+        {"조사년도": "2026년", "조사월": "05월", "주차": 21, "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "철원군 대마리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 34},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 21, "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "철원군 학사리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 28},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 21, "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "춘천시 중앙동", "환경": "우사", "방법": "유문등", "종": "Culex pipiens", "개체수": 12},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 21, "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "화천군", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 19},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 22, "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "철원군 대마리", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 41},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 22, "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "양구군", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 15},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 22, "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "춘천시 신북읍 지내리", "환경": "우사", "방법": "유문등", "종": "Aedes vexans", "개체수": 7},
+        {"조사년도": "2026년", "조사월": "05월", "주차": 22, "사업명": "말라리아매개모기조사감시", "권역": "강원도보건환경연구원", "지역2": "고성군", "환경": "우사", "방법": "유문등", "종": "Anopheles spp.", "개체수": 23}
     ]
     return pd.DataFrame(data)
 
@@ -270,13 +269,13 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# 1. 일본뇌염 레이어
+# 1. 일본뇌염 레이어 (시계열 동적 분산 엔진 탑재)
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
         vn_je_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수"]
         vn_je_tmpl = pd.DataFrame(columns=vn_je_cols)
-        vn_je_tmpl.loc[0] = [1, "일본뇌염예측", "강원도보건환경연구원", 2026, 5, 1, "2026-05-04", "강원", "횡성군 하대리", "축사", "LED1", "Culex tritaeniorhynchus", 12]
+        vn_je_tmpl.loc[0] = [1, "일본뇌염예측", "강원도보건환경연구원", 2026, 5, 21, "2026-05-19", "강원", "횡성군 하대리", "축사", "LED1", "Culex tritaeniorhynchus", 12]
         st.download_button("📥 [일본뇌염] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_je_tmpl), "VectorNet_일본뇌염_양식.csv", "text/csv")
         je_file = st.file_uploader("질병청 VectorNet 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="je_up")
         
@@ -284,14 +283,25 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             df_je = base_je_df.copy()
         else:
             uploaded_df = smart_load_uploaded_file(je_file)
-            uploaded_df["조사년도"] = selected_year
-            uploaded_df["조사월"] = selected_month
-            uploaded_df["조사주"] = selected_week
+            uploaded_df.columns = [c.strip() for c in uploaded_df.columns]
+            
+            # 💡 [핵심 해결] 업로드 파일 자체의 진짜 연도와 월을 동적으로 인식하여 캘린더 분산 보관
+            if "연도" in uploaded_df.columns:
+                uploaded_df["조사년도"] = uploaded_df["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+            else:
+                uploaded_df["조사년도"] = selected_year
+                
+            if "월" in uploaded_df.columns:
+                uploaded_df["조사월"] = uploaded_df["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+            else:
+                uploaded_df["조사월"] = selected_month
+                
             df_je_uploaded = rename_duplicate_columns(uploaded_df)
             
-            df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['조사년도', '조사월', '주차', '조사주', '지역2', '종'])
-            if save_df_to_github(df_je, "database_je.csv", f"Append/Overwrite JE data for {selected_year} {selected_month} {selected_week}"):
-                st.success("✅ [일본뇌염] 새 데이터가 기존 대장에 안전하게 누적되었습니다.")
+            # 주차는 동적으로 산정하므로 고유 키 조합에서 주차 매핑 분리 후 안전 결합
+            df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+            if save_df_to_github(df_je, "database_je.csv", f"Append/Overwrite JE data"):
+                st.success("✅ [일본뇌염] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
     if not df_je.empty:
@@ -304,8 +314,13 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             df_je["지점명"] = "춘천시 산천리 (우사 거점)"
 
-        if "주차" in df_je.columns and "조사주" not in df_je.columns:
-            df_je["조사주"] = df_je["주차"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{x}주" if pd.notna(x) else selected_week)
+        # 💡 [질병청 캘린더 팩터라이징] 누적 주차를 해당 월의 1주~4주 차순위로 상시 자동 매핑하여 깨짐 전면 방지
+        if "주차" in df_je.columns:
+            df_je = df_je.sort_values(by=["조사년도", "조사월", "주차"])
+            weeks_sorted = df_je.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
+            df_je["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
+        if "조사주" not in df_je.columns:
+            df_je["조사주"] = selected_week
 
         f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
         
@@ -356,13 +371,13 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 일본뇌염 지정 연동 데이터가 존재하지 않습니다.")
 
-# 2. 🔵 말라리아 매개모기 레이어 (춘천시 중앙동 지명 싱크 및 필터링 완벽 수정)
+# 2. 말라리아 레이어 (시계열 동적 분산 엔진 탑재)
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
         vn_mal_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수"]
         vn_mal_tmpl = pd.DataFrame(columns=vn_mal_cols)
-        vn_mal_tmpl.loc[0] = [1, "말라리아매개모기조사감시", "강원도보건환경연구원", 2026, 5, 1, "2026-05-23", "강원", "춘천시 중앙동", "우사", "유문등", "Anopheles spp.", 45]
+        vn_mal_tmpl.loc[0] = [1, "말라리아매개모기조사감시", "강원도보건환경연구원", 2026, 5, 21, "2026-05-23", "강원", "춘천시 중앙동", "우사", "유문등", "Anopheles spp.", 45]
         st.download_button("📥 [말라리아] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_mal_tmpl), "VectorNet_말라리아_양식.csv", "text/csv")
         mal_file = st.file_uploader("질병청 VectorNet 말라리아 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="mal_up")
         
@@ -370,27 +385,27 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             df_mal = base_mal_df.copy()
         else:
             uploaded_df_mal = smart_load_uploaded_file(mal_file)
+            uploaded_df_mal.columns = [c.strip() for c in uploaded_df_mal.columns]
             
+            # 💡 [핵심 해결] 말라리아 역시 업로드 파일 내 실제 연/월 구조 보존
             if "연도" in uploaded_df_mal.columns:
                 uploaded_df_mal["조사년도"] = uploaded_df_mal["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
             else:
-                uploaded_df_mal["조사년도"] = selected_year
+                uploaded_df_mal["조사년to"] = selected_year
 
             if "월" in uploaded_df_mal.columns:
                 uploaded_df_mal["조사월"] = uploaded_df_mal["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
             else:
                 uploaded_df_mal["조사월"] = selected_month
                 
-            uploaded_df_mal["조사주"] = selected_week
             df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
             
-            df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '조사주', '지역2', '종'])
-            if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data for {selected_year} {selected_month} {selected_week}"):
-                st.success("✅ [말라리아] 새 데이터가 기존 원격 대장에 안전하게 누적되었습니다.")
+            df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+            if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data"):
+                st.success("✅ [말라리아] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
     if not df_mal.empty:
-        # 💡 질병청 로우 데이터 규격('중앙동', '지내리')에 매핑 테이블 명칭 전면 대치
         mal_coords_map = {
             "춘천시 중앙동": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
             "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
@@ -398,16 +413,17 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
         
-        # 💡 주차 변환 및 동기화 인덱싱 보완
+        # 💡 [질병청 캘린더 팩터라이징] 말라리아 주차 정렬 산정 로직 동일 적용
         if "주차" in df_mal.columns:
-            df_mal["조사주"] = df_mal["주차"].astype(str).str.extract(r'(\d+)')[0].map(lambda x: f"{(int(x)-1)%4 + 1}주" if pd.notna(x) else selected_week)
+            df_mal = df_mal.sort_values(by=["조사년도", "조사월", "주차"])
+            weeks_sorted = df_mal.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
+            df_mal["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
         if "조사주" not in df_mal.columns:
             df_mal["조사주"] = selected_week
 
         if "지역2" in df_mal.columns:
             df_mal["지역2_정규화"] = df_mal["지역2"].astype(str).str.strip()
             
-            # 💡 지명 동의어 탐색기 고도화 (중앙동/중앙로, 신북읍 지내리 등을 누락 없이 100% 매칭)
             def find_mal_coords(loc_str):
                 if "중앙" in loc_str:
                     return mal_coords_map["춘천시 중앙동"][0], mal_coords_map["춘천시 중앙동"][1], "춘천시 중앙동"
@@ -426,7 +442,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             df_mal["지점명"] = "철원군 대마리 (우사 거점)"
 
-        # 💡 [주차 필터 연동 버그 완벽 치료] 주차 조건까지 정확하게 필터링 적용
         f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month) & (df_mal["조사주"] == selected_week)]
         
         if not f_mal.empty:
