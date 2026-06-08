@@ -112,27 +112,16 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8-sig')
 
 def merge_and_overwrite(old_df, new_df, keys):
-    """💡 [유저 요청 완벽 반영] 새 파일 내부에서 동일 주차/종이 있으면 합산(Sum)하고 기존 대장을 덮어씀"""
+    if old_df.empty:
+        return new_df
     if new_df.empty:
         return old_df
-        
-    val_col = "개체수" if "개체수" in new_df.columns else ("채집수" if "채집수" in new_df.columns else "개체수")
-    groupby_keys = [k for k in keys if k in new_df.columns]
+    valid_keys = [k for k in keys if k in old_df.columns and k in new_df.columns]
+    if not valid_keys:
+        valid_keys = [c for c in old_df.columns if c in new_df.columns and c not in ['개체수', '번호', '연번', '조사주']]
     
-    # 새 파일 내부의 동일 주차, 지점, 모기종 개체수 합산 바인딩
-    agg_dict = {}
-    for col in new_df.columns:
-        if col == val_col:
-            agg_dict[col] = 'sum'
-        elif col not in groupby_keys and col not in ['번호', '연번']:
-            agg_dict[col] = 'first'
-    new_df_aggregated = new_df.groupby(groupby_keys, as_index=False).agg(agg_dict)
-    
-    if old_df.empty:
-        return new_df_aggregated
-        
-    combined = pd.concat([old_df, new_df_aggregated], ignore_index=True)
-    return combined.drop_duplicates(subset=groupby_keys, keep='last')
+    combined = pd.concat([old_df, new_df], ignore_index=True)
+    return combined.drop_duplicates(subset=valid_keys, keep='last')
 
 def smart_load_uploaded_file(uploaded_file):
     if uploaded_file is None:
@@ -178,7 +167,7 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 로컬 정식 파일 연동 자동화]
+# [첨부파일 기반 정식 데이터 마스터 세션 빌더]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
@@ -229,7 +218,8 @@ def get_forest_playground_actual_data():
     stages = ["Female", "Male", "Nymph", "Larvae"]
     for year in ["2026년", "2025년", "2024년"]:
         seed_year = int(year.replace("년",""))
-        for month_int in range(4, 11): 
+        # 💡 [요청 반영] 어린이숲 기본 시뮬레이션 세션 월 범위도 3월~11월(range 3~12)로 완전 통일
+        for month_int in range(3, 12): 
             month_str = f"{month_int:02d}월"
             for week in ["1주", "2주", "3주", "4주"]:
                 np.random.seed(seed_year + month_int * 13 + len(week))
@@ -262,7 +252,8 @@ base_forest_df = rename_duplicate_columns(load_df_from_github("database_forest.c
 # -----------------------------------------------------------------
 st.sidebar.markdown("### 📅 통합 시간 동기화 필터")
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년"])
-selected_month = st.sidebar.selectbox("조사월 선택", ["05월", "04월", "06월", "07월", "08월", "09월", "10월"])
+# 💡 [요청 반영] 마스터 조사월 선택 셀렉트박스를 03월부터 11월까지 연동 누락 없이 완벽 통일 및 정렬
+selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월"], index=2)
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)"]
@@ -287,13 +278,22 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             uploaded_df = smart_load_uploaded_file(je_file)
             uploaded_df.columns = [c.strip() for c in uploaded_df.columns]
             
+            if "연도" in uploaded_df.columns:
+                uploaded_df["조사년도"] = uploaded_df["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+            else:
+                uploaded_df["조사년도"] = selected_year
+                
+            if "월" in uploaded_df.columns:
+                uploaded_df["조사월"] = uploaded_df["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+            else:
+                uploaded_df["조사월"] = selected_month
+                
             df_je_uploaded = rename_duplicate_columns(uploaded_df)
-            df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['연도', '월', '주차', '지역2', '종'])
+            df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
             if save_df_to_github(df_je, "database_je.csv", f"Append/Overwrite JE data"):
                 st.success("✅ [일본뇌염] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
-    # 💡 [전천후 시간 동기화 보장 레이어] 파일 미업로드 시에도 사이드바 달력 필터가 원천 작동하도록 고정
     if not df_je.empty:
         if "연도" in df_je.columns:
             df_je["조사년도"] = df_je["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
@@ -332,7 +332,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     spot_data = f_je[f_je["지점명"] == spot_name]
                     val_col_je = "개체수" if "개체수" in spot_data.columns else "채집수"
                     
-                    # 💡 미채집 및 0건 레코드를 완벽히 정제하여 순수 Culex pipiens 채집 내역만 부각
                     spot_data_clean = spot_data[(spot_data["종"] != "미채집") & (spot_data[val_col_je] > 0)]
                     
                     if not spot_data_clean.empty:
@@ -396,12 +395,11 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             uploaded_df_mal.columns = [c.strip() for c in uploaded_df_mal.columns]
             
             df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
-            df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['연도', '월', '주차', '지역2', '종'])
+            df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
             if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data"):
                 st.success("✅ [말라리아] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
-    # 💡 [전천후 시간 동기화 보장 레이어]
     if not df_mal.empty:
         if "연도" in df_mal.columns:
             df_mal["조사년도"] = df_mal["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
@@ -541,7 +539,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 st.success("✅ [기후변화] 새 데이터가 기존 대장에 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
-    # 💡 [전천후 시간 동기화 보장 레이어]
     if not df_cli.empty:
         if "연도" in df_cli.columns:
             df_cli["조사년도"] = df_cli["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
@@ -621,7 +618,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 ax.set_xticklabels(loc_total["지점명"], rotation=45, ha='right')
                 for bar in bars:
                     height = bar.get_height()
-                    if height > 0: ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
+                    if height > 0: bars = ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
                 plt.gcf().subplots_adjust(bottom=0.35)
                 plt.tight_layout()
                 st.pyplot(fig)
