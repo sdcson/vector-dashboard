@@ -106,7 +106,7 @@ def smart_load_uploaded_file(uploaded_file):
 @st.cache_data
 def get_je_actual_style_data():
     data = [
-        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 15},
+        {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 15},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "춘천시 산천리", "환경": "축사", "방법": "LED1", "종": "Aedes vexans", "개체수": 8},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "강릉시 산대월리", "환경": "축사", "방법": "LED1", "종": "Culex pipiens", "개체수": 22},
         {"조사년도": "2026년", "조사월": "05월", "주차": "1주", "사업명": "일본뇌염예측", "권역": "강원도보건환경연구원", "지역2": "횡성군 하대리", "환경": "축사", "방법": "LED1", "종": "Culex tritaeniorhynchus", "개체수": 2},
@@ -365,7 +365,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
 # -----------------------------------------------------------------
-# 3. 기후변화 대응 매개체 감시 레이어 (정밀 수정 및 보완 파트)
+# 3. 🟢 기후변화 대응 매개체 감시 레이어 (버그 전면 수정 완료)
 # -----------------------------------------------------------------
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황 [{selected_year} {selected_month}]")
@@ -384,15 +384,26 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             df_cli = base_cli_df.copy()
         else:
             uploaded_df_cli = smart_load_uploaded_file(cli_file)
-            uploaded_df_cli["조사년도"] = selected_year
-            uploaded_df_cli["조사월"] = selected_month
-            uploaded_df_cli["권역"] = selected_zone  # 💡 파일 업로드 시 필터 매칭 깨짐 원인 해결
+            
+            # 파일 데이터 구조의 날짜 파싱 고도화 (월 데이터 포맷 매칭 불일치 완벽 방어)
+            if "연도" in uploaded_df_cli.columns:
+                uploaded_df_cli["조사년도"] = uploaded_df_cli["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+            elif "년도" in uploaded_df_cli.columns:
+                uploaded_df_cli["조사년도"] = uploaded_df_cli["년도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
+            else:
+                uploaded_df_cli["조사년도"] = selected_year
+
+            if "월" in uploaded_df_cli.columns:
+                uploaded_df_cli["조사월"] = uploaded_df_cli["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
+            else:
+                uploaded_df_cli["조사월"] = selected_month
+                
+            uploaded_df_cli["권역"] = selected_zone
             df_cli = rename_duplicate_columns(uploaded_df_cli)
 
     if "조사년도" not in df_cli.columns:
         df_cli["조사년도"] = selected_year
 
-    # 💡 신규 모기 감시 지점(삼천동, 퇴계동주민센터) 좌표 추가 등록
     h_coords = {
         "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
         "삼천동": [37.8735, 127.7084], "퇴계동주민센터": [37.8621, 127.7290],
@@ -403,7 +414,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     if target_loc_col in df_cli.columns:
         df_cli["지역2_정외"] = df_cli[target_loc_col].astype(str).str.strip()
         
-        # 권역별 중심 좌표 자동 분기 추적
         default_lat = 37.88 if selected_zone == "모기 권역" else (38.24 if "털진드기" in selected_zone else 38.08)
         default_lng = 127.75 if selected_zone == "모기 권역" else (127.22 if "털진드기" in selected_zone else 127.95)
         
@@ -417,7 +427,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
 
     if not m_data.empty:
         val_col = "개체수" if "개체수" in m_data.columns else "채집수"
-        monthly_summary = m_data.groupby(["지점명", "위도", "경도", "종", "환경"], as_index=False)[val_col].sum()
         
         col_map, col_day = st.columns([5, 5])
         with col_map:
@@ -426,20 +435,47 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             m_center_lng = 127.22 if "털진드기" in selected_zone else (127.75 if selected_zone == "모기 권역" else 127.95)
             m_zoom = 11 if "털진드기" in selected_zone or selected_zone == "모기 권역" else 10
             
+            # 💡 [지도 파괴 방지 핵심 로직] 지점당 단 1개의 고유 마커만 생성하여 folium 충돌 차단
+            map_summary = m_data.groupby(["지점명", "위도", "경도", "환경"], as_index=False)[val_col].sum()
             m_cli = folium.Map(location=[m_center_lat, m_center_lng], zoom_start=m_zoom)
-            for _, r in monthly_summary.iterrows(): 
-                folium.Marker(location=[float(r['위도']), float(r['경도'])], tooltip=r['지점명'], popup=f"월간 누적 채집수: {r[val_col]}개체").add_to(m_cli)
-            st_folium(m_cli, key=f"map_climate_static_node_{selected_year}_{selected_month}_{selected_zone}", width="100%", height=430)
+            
+            for _, r in map_summary.iterrows():
+                # 해당 지점에 존재하는 종별 상세 수치들을 합산하여 말풍선 팝업 하나로 합쳐서 제공
+                spec_data = m_data[m_data["지점명"] == r["지점명"]].groupby("종")[val_col].sum().reset_index()
+                popup_html = f"<div style='font-family:NanumGothic, sans-serif; font-size:12px;'><b>🏢 {r['지점명']}</b><br><hr style='margin:5px 0;'>"
+                for _, s_row in spec_data.iterrows():
+                    popup_html += f"• {s_row['종']}: {int(s_row[val_col])}마리<br>"
+                popup_html += f"<hr style='margin:5px 0;'><b>총 채집수: {int(r[val_col])}개체</b></div>"
+                
+                folium.Marker(
+                    location=[float(r['위도']), float(r['경도'])], 
+                    tooltip=r['지점명'], 
+                    popup=folium.Popup(popup_html, max_width=300),
+                    icon=folium.Icon(color='green', icon='info-sign')
+                ).add_to(m_cli)
+                
+            # 데이터 수량 변화를 반영한 고유 키를 매핑하여 지도가 굳거나 백화되는 현상 제어
+            map_key = f"map_climate_final_{selected_year}_{selected_month}_{selected_zone}_{len(map_summary)}"
+            st_folium(m_cli, key=map_key, width="100%", height=430)
             
         with col_day:
             st.markdown(f"##### 📊 {selected_month} 지점별 밀도 비교")
             fig, ax = plt.subplots(figsize=(6, 5.2))
-            monthly_summary.set_index("지점명")[val_col].plot(kind='bar', ax=ax, color='#2a9d8f', edgecolor='black')
+            loc_total = m_data.groupby("지점명")[val_col].sum().reset_index().sort_values(by=val_col, ascending=False)
+            bars = ax.bar(loc_total["지점명"], loc_total[val_col], color='#2a9d8f', edgecolor='black')
+            ax.set_xticks(range(len(loc_total)))
+            ax.set_xticklabels(loc_total["지점명"], rotation=45, ha='right')
+            for bar in bars:
+                height = bar.get_height()
+                if height > 0: 
+                    ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
             plt.gcf().subplots_adjust(bottom=0.35)
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
-        st.dataframe(monthly_summary.rename(columns={"지점명": "조사지점", "환경": "환경", "종": "채집종", val_col: "채집수(개체)"})[["조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
+            
+        monthly_summary_table = m_data.groupby(["지점명", "환경", "종"], as_index=False)[val_col].sum()
+        st.dataframe(monthly_summary_table.rename(columns={"지점명": "조사지점", "환경": "환경", "종": "채집종", val_col: "채집수(개체)"})[["조사지점", "환경", "채집종", "채집수(개체)"]], hide_index=True, use_container_width=True)
     else: 
         st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
@@ -482,7 +518,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         forest_summary = m_forest.pivot_table(index=["채집지역2", "gu분지점", "위도", "경도"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
         
         if not forest_summary.empty:
-            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진기"] if s in forest_summary.columns]
+            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기"] if s in forest_summary.columns]
             forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
             
             col_f_map, col_f_graph = st.columns([5, 5])
