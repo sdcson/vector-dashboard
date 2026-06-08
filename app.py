@@ -307,7 +307,7 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# 1. 일본뇌염 레이어
+# 1. 일본뇌염 레이어 (💡 중복 else 구문 완벽 제거 완료)
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -328,8 +328,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             if save_df_to_github(df_je, "database_je.csv", f"Append/Overwrite JE data"):
                 st.success("✅ [일본뇌염] 새 데이터가 기존 통합 대장에 합산 및 정형화 누적되었습니다.")
                 st.cache_data.clear()
-        else:
-            df_je = base_je_df.copy()
 
     if not df_je.empty:
         df_je = parse_vectornet_dataframe(df_je, selected_year, selected_month)
@@ -408,7 +406,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 일본뇌염 지정 연동 데이터가 존재하지 않습니다.")
 
-# 2. 말라리아 레이어
+# 2. 말라리아 레이어 (💡 중복 else 구문 완벽 제거 완료)
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -429,8 +427,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data"):
                 st.success("✅ [말라리아] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
                 st.cache_data.clear()
-        else:
-            df_mal = base_mal_df.copy()
 
     if not df_mal.empty:
         df_mal = parse_vectornet_dataframe(df_mal, selected_year, selected_month)
@@ -445,7 +441,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             df_mal = df_mal.sort_values(by=["조사년도", "조사월", "주차"])
             weeks_sorted = df_mal.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
             df_mal["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
-        if "조사주 notched" not in df_mal.columns:
+        if "조사주" not in df_mal.columns:
             df_mal["조사주"] = "1주"
 
         if "지역2" in df_mal.columns:
@@ -525,7 +521,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어
+# 3. 기후변화 대응 매개체 감시 레이어 (💡 중복 else 구문 완벽 제거 완료)
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -551,8 +547,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             if save_df_to_github(df_cli, "database_cli.csv", f"Auto-save Climate data"):
                 st.success("✅ [기후변화] 새 데이터가 기존 대장에 안전하게 누적되었습니다.")
                 st.cache_data.clear()
-        else:
-            df_cli = base_cli_df.copy()
 
     if not df_cli.empty:
         df_cli = parse_vectornet_dataframe(df_cli, selected_year, selected_month)
@@ -625,7 +619,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 bars = ax.bar(loc_total["지점명"], loc_total[val_col], color='#2a9d8f', edgecolor='black')
                 ax.set_xticks(range(len(loc_total)))
                 ax.set_xticklabels(loc_total["지점명"], rotation=45, ha='right')
-                # 💡 [섀도잉 전면 해결] loop 재선언 충돌 버그 수정
+                # 💡 중복 변수 선언 해제로 루프 충돌 완벽 방어
                 for bar in bars:
                     height = bar.get_height()
                     if height > 0: ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f"{int(height)}", ha='center', va='bottom', fontsize=8)
@@ -697,7 +691,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         
         forest_summary = m_forest.pivot_table(index=["채집지역2", "gu분지점", "위도", "경도"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
         
-        # 💡 [SyntaxError 완벽 차단] 줄바꿈 및 데이터 인덱싱 체인 정밀 튜닝
         if not forest_summary.empty:
             avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기"] if s in forest_summary.columns]
             forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
