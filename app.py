@@ -42,7 +42,7 @@ def init_korean_font_and_get_prop():
 f_prop = init_korean_font_and_get_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드 (2026 최신화)")
-st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
+st.markdown("질병조과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
 
 # -----------------------------------------------------------------
 # [💡 방법 3: GitHub API 연동 파일 영구 커밋 & 로드 클라우드 데이터베이스 엔진]
@@ -95,7 +95,6 @@ def load_df_from_github(filename_on_github, fallback_df):
         try:
             content_b64 = res.json().get("content")
             decoded_bytes = base64.b64decode(content_b64)
-            # 스트림 데이터 복원 처리
             return pd.read_csv(BytesIO(decoded_bytes), encoding='utf-8-sig')
         except Exception:
             return fallback_df
@@ -115,6 +114,20 @@ def rename_duplicate_columns(df):
 
 def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8-sig')
+
+def merge_and_overwrite(old_df, new_df, keys):
+    """💡 [방법 B 핵심 엔진] 기존 데이터 뒤에 결합하되, 지정 키가 중복되면 새 데이터로 덮어씀"""
+    if old_df.empty:
+        return new_df
+    if new_df.empty:
+        return old_df
+    valid_keys = [k for k in keys if k in old_df.columns and k in new_df.columns]
+    if not valid_keys:
+        valid_keys = [c for c in old_df.columns if c in new_df.columns and c not in ['개체수', '번호', '연번']]
+    
+    combined = pd.concat([old_df, new_df], ignore_index=True)
+    # keep='last'를 통해 뒤에 추가된 최신 업로드 주차 데이터만 남기고 기존 중복행 제거
+    return combined.drop_duplicates(subset=valid_keys, keep='last')
 
 def smart_load_uploaded_file(uploaded_file):
     if uploaded_file is None:
@@ -235,7 +248,7 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
-# 💡 [원격 깃허브 DB와 로컬 원본 데이터 동기화 연동 체인 생성]
+# 원격 깃허브 DB와 로컬 원본 데이터 동기화 연동 체인 생성
 base_je_df = rename_duplicate_columns(load_df_from_github("database_je.csv", get_je_actual_style_data()))
 base_mal_df = rename_duplicate_columns(load_df_from_github("database_mal.csv", get_malaria_actual_style_data()))
 base_cli_df = rename_duplicate_columns(load_df_from_github("database_cli.csv", get_climate_data()))
@@ -263,7 +276,7 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# 1. 일본뇌염 레이어
+# 1. 일본뇌염 레이어 (누적 및 중복 덮어쓰기 적용)
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -278,11 +291,13 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             uploaded_df["조사년도"] = selected_year
             uploaded_df["조사월"] = selected_month
             uploaded_df["조사주"] = selected_week
-            df_je = rename_duplicate_columns(uploaded_df)
+            df_je_uploaded = rename_duplicate_columns(uploaded_df)
             
-            # 💡 [방법 3 연동] 파일 드롭 즉시 깃허브 원격 파일에 자동 커밋 영구 박제
-            if save_df_to_github(df_je, "database_je.csv", f"Auto-save Japanese Encephalitis data for {selected_year} {selected_month}"):
-                st.success("✅ [일본뇌염] 데이터가 깃허브 원격 대장에 영구 보존되었습니다 (새로고침 가능).")
+            # 💡 [방법 B] 기존 원격 대장에 합치고, 동일 지점/종/주차 중복건은 덮어씀
+            df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['조사년도', '조사월', '주차', '조사주', '지역2', '종'])
+            
+            if save_df_to_github(df_je, "database_je.csv", f"Append/Overwrite JE data for {selected_year} {selected_month} {selected_week}"):
+                st.success("✅ [일본뇌염] 새 데이터가 기존 대장에 안전하게 누적(중복 항목은 최신 덮어쓰기)되었습니다.")
                 st.cache_data.clear()
         else:
             df_je = base_je_df.copy()
@@ -349,7 +364,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 일본뇌염 지정 연동 데이터가 존재하지 않습니다.")
 
-# 2. 말라리아 레이어
+# 2. 말라리아 레이어 (누적 및 중복 덮어쓰기 적용)
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -366,11 +381,13 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             uploaded_df_mal["조사년도"] = selected_year
             uploaded_df_mal["조사월"] = selected_month
             uploaded_df_mal["조사주"] = selected_week
-            df_mal = rename_duplicate_columns(uploaded_df_mal)
+            df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
             
-            # 💡 [방법 3 연동] 말라리아 깃허브 원격 영구 커밋 연동
-            if save_df_to_github(df_mal, "database_mal.csv", f"Auto-save Malaria data for {selected_year} {selected_month}"):
-                st.success("✅ [말라리아] 데이터가 깃허브 원격 대장에 영구 보존되었습니다.")
+            # 💡 [방법 B] 말라리아 자동 누적 및 중복 오버라이트 처리
+            df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '조사주', '지역2', '종'])
+            
+            if save_df_to_github(df_mal, "database_mal.csv", f"Append/Overwrite Malaria data for {selected_year} {selected_month} {selected_week}"):
+                st.success("✅ [말라리아] 새 데이터가 기존 대장에 안전하게 누적(중복 항목은 최신 덮어쓰기)되었습니다.")
                 st.cache_data.clear()
 
     if not df_mal.empty:
@@ -440,7 +457,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어
+# 3. 기후변화 대응 매개체 감시 레이어 (누적 및 중복 덮어쓰기 적용)
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황 [{selected_year} {selected_month}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -472,11 +489,13 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 uploaded_df_cli["조사월"] = selected_month
                 
             uploaded_df_cli["권역"] = selected_zone
-            df_cli = rename_duplicate_columns(uploaded_df_cli)
+            df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
             
-            # 💡 [방법 3 연동] 기후변화 통합 깃허브 원격 커밋 연동
+            # 💡 [방법 B] 기후변화 대응 대장 데이터 축적 및 과부하 덮어쓰기
+            df_cli = merge_and_overwrite(base_cli_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종', '권역'])
+            
             if save_df_to_github(df_cli, "database_cli.csv", f"Auto-save Climate data for {selected_year} {selected_month}"):
-                st.success("✅ [기후변화] 데이터가 깃허브 원격 대장에 영구 저장되었습니다.")
+                st.success("✅ [기후변화] 새 데이터가 기존 대장에 안전하게 누적(중복 항목은 최신 덮어쓰기)되었습니다.")
                 st.cache_data.clear()
 
     if "조사년도" not in df_cli.columns:
@@ -554,7 +573,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     else: 
         st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
-# 4. 참진드기조사 어린이숲체험장 레이어
+# 4. 참진드기조사 어린이숲체험장 레이어 (누적 및 중복 덮어쓰기 적용)
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
     with st.expander("📥 [어린이 숲체험장] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
@@ -569,11 +588,13 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         else:
             uploaded_df_for = smart_load_uploaded_file(forest_file)
             uploaded_df_for["조사년도"] = selected_year
-            df_forest = rename_duplicate_columns(uploaded_df_for)
+            df_forest_uploaded = rename_duplicate_columns(uploaded_df_for)
             
-            # 💡 [방법 3 연동] 어린이 숲체험장 깃허브 원격 커밋 연동
+            # 💡 [방법 B] 어린이 숲체험장 누적 및 중복 덮어쓰기
+            df_forest = merge_and_overwrite(base_forest_df, df_forest_uploaded, keys=['조사년도', '월', '조사월', '조사주', '채집지역2', '지점번호', '분류', '종', 'Stage'])
+            
             if save_df_to_github(df_forest, "database_forest.csv", f"Auto-save Forest Playground data for {selected_year}"):
-                st.success("✅ [어린이 숲체험장] 데이터가 깃허브 원격 대장에 영구 백업되었습니다.")
+                st.success("✅ [어린이 숲체험장] 새 데이터가 기존 대장에 안전하게 누적(중복 항목은 최신 덮어쓰기)되었습니다.")
                 st.cache_data.clear()
 
     try:
