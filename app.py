@@ -195,13 +195,16 @@ def get_climate_data():
             month_str = f"{month_num:02d}월"
             for week_num in range(1, 5):
                 np.random.seed(seed_year + month_num * 7)
+                # 1. 권역 모기
                 for loc2, coords in chuncheon_mosquito_locs.items():
                     data.append({"조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num, "권역": "모기 권역", "지역2": loc2, "환경": coords[2], "위도": coords[0], "경도": coords[1], "종": "Culex pipiens", "개체수": int(np.random.poisson(22))})
                     data.append({"조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num, "권역": "모기 권역", "지역2": loc2, "환경": coords[2], "위도": coords[0], "경도": coords[1], "종": "Aedes vexans", "개체수": int(np.random.poisson(6))})
+                # 2. 참진드기 권역
                 for loc2, coords in inje_hwacheon_locs.items():
                     for env in ["초지", "잡목림", "산길", "무덤"]:
                         lat_offset = 0.0002 * ["초지", "잡목림", "산길", "무덤"].index(env)
                         data.append({"조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num, "권역": "참진드기 권역", "지역2": loc2, "환경": env, "위도": coords[0]+lat_offset, "경도": coords[1], "종": "Haemaphysalis longicornis", "개체수": int(np.random.poisson(14))})
+                # 3. 털진드기 권역 (분포 및 발생감시)
                 for env in ["논", "밭", "저수지", "야산"]:
                     data.append({"조사년도": year, "조사월": month_str, "월": month_num, "주차": week_num, "권역": "털진드기 분포감시", "지역2": "철원군", "환경": env, "위도": 38.244278, "경도": 127.220583, "종": "mite(털진드기)", "개체수": int(np.random.poisson(30))})
                 for env in ["논", "밭", "초지"]:
@@ -267,7 +270,7 @@ st.session_state.current_tab = selected_tab
 st.markdown("---")
 
 # -----------------------------------------------------------------
-# 1. 일본뇌염 매개모기 감시 레이어
+# 1. 일본뇌염 매개모기 감시 레이어 (지도 마커 상시 표시 및 선택 지점 강조 수정)
 # -----------------------------------------------------------------
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
@@ -311,9 +314,27 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     if not spot_data.empty:
                         c1, c2 = st.columns([5, 5])
                         with c1:
-                            st.markdown(f"##### 🗺️ GIS 거점센터 지도")
-                            m_je = folium.Map(location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], zoom_start=11)
-                            folium.Marker([float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='red', icon='home')).add_to(m_je)
+                            st.markdown(f"##### 🗺️ GIS 거점센터 지도 (전체 지점 표시 / 선택: 🧡주황색)")
+                            # 현재 선택된 탭 지점의 위치를 지도의 중심으로 설정
+                            m_je = folium.Map(location=[float(spot_data['위도'].iloc[0]), float(spot_data['경도'].iloc[0])], zoom_start=9)
+                            
+                            # 고정된 3개 지점의 마커를 상시 루프 생성
+                            for target_spot_name, coords in je_coords_map.items():
+                                full_target_name = f"{target_spot_name} (우사 거점)"
+                                # 현재 선택되어 활성화된 지점 탭은 'orange'(주황색), 나머지는 기존의 'red'(빨간색)로 분기 표시
+                                if full_target_name == spot_name:
+                                    marker_color = 'orange'
+                                    marker_icon = 'star'
+                                else:
+                                    marker_color = 'red'
+                                    marker_icon = 'home'
+                                    
+                                folium.Marker(
+                                    [coords[0], coords[1]], 
+                                    tooltip=full_target_name, 
+                                    icon=folium.Icon(color=marker_color, icon=marker_icon)
+                                ).add_to(m_je)
+                                
                             st_folium(m_je, key=f"map_je_final_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 채집량 분포")
@@ -335,7 +356,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             st.info("💡 선택하신 기간의 일본뇌염 지정 연동 데이터가 존재하지 않습니다.")
 
 # -----------------------------------------------------------------
-# 2. 말라리아 매개모기 감시 레이어
+# 2. 말라리아 매개모기 감시 레이어 (지도 마커 상시 표시 및 선택 지점 강조 수정)
 # -----------------------------------------------------------------
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
@@ -385,9 +406,26 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     if not spot_data_mal.empty:
                         c1, c2 = st.columns([5, 5])
                         with c1:
-                            st.markdown(f"##### 🗺️ GIS 말라리아 거점 지도")
-                            m_mal = folium.Map(location=[float(spot_data_mal['위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], zoom_start=11)
-                            folium.Marker([float(spot_data_mal['위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal)
+                            st.markdown(f"##### 🗺️ GIS 말라리아 거점 지도 (전체 지점 표시 / 선택: 💜보라색)")
+                            # 선택된 거점 센터 위치를 지도의 중심으로 설정
+                            m_mal = folium.Map(location=[float(spot_data_mal['위도'].iloc[0]), float(spot_data_mal['경도'].iloc[0])], zoom_start=9)
+                            
+                            # 관할 전체 8개 감시 거점을 지도상에 상시 뿌려줌
+                            for target_mal_name, coords in mal_coords_map.items():
+                                # 현재 사용자가 선택하여 활성화된 하위 탭은 'purple'(보라색), 선택되지 않은 거점은 기존 'blue'(파란색) 처리
+                                if target_mal_name == short_name:
+                                    marker_color = 'purple'
+                                    marker_icon = 'star'
+                                else:
+                                    marker_color = 'blue'
+                                    marker_icon = 'flag'
+                                    
+                                folium.Marker(
+                                    [coords[0], coords[1]], 
+                                    tooltip=f"{target_mal_name} (우사 거점)", 
+                                    icon=folium.Icon(color=marker_color, icon=marker_icon)
+                                ).add_to(m_mal)
+                                
                             st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 {short_name} 종별 발생 현황")
@@ -407,7 +445,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
 # -----------------------------------------------------------------
-# 3. 기후변화 대응 매개체 감시 레이어 (모기/참진드기/털진드기 통합)
+# 3. 기후변화 대응 매개체 감시 레이어 (기존 로직 보존)
 # -----------------------------------------------------------------
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 월간 통합 현황 [{selected_year} {selected_month}]")
@@ -478,7 +516,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
 # -----------------------------------------------------------------
-# 4. 참진드기조사 어린이숲체험장 레이어
+# 4. 참진드기조사 어린이숲체험장 레이어 (기존 로직 보존)
 # -----------------------------------------------------------------
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
