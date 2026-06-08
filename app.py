@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st  # 💡 첫 줄 패키지 임포트 오타(as st 누락) 완벽 수리 완료
 import pandas as pd
 import numpy as np
 import folium
@@ -222,7 +222,7 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 3대 파일 전용 로더 격리]
+# [첨부파일 기반 정식 데이터 마스터 세션 빌더]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
@@ -289,7 +289,7 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
-# 💡 원격 깃허브 개별 계정 대장 엔진 세션 분리 매핑
+# 원격 깃허브 개별 계정 대장 엔진 세션 분리 매핑
 base_je_df = rename_duplicate_columns(load_df_from_github("database_je.csv", get_je_actual_style_data()))
 base_mal_df = rename_duplicate_columns(load_df_from_github("database_mal.csv", get_malaria_actual_style_data()))
 base_cli_moq_df = rename_duplicate_columns(load_df_from_github("database_cli_moq.csv", get_cli_moq_data()))
@@ -553,7 +553,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 if save_df_to_github(df_zone, "database_cli_tick.csv", "Update Climate Tick data"):
                     st.success("✅ [참진드기 권역] 새 데이터가 전용 대장(database_cli_tick.csv)에 안전하게 누적되었습니다.")
                     st.cache_data.clear()
-        else: # 털진드기 분포감시 또는 발생감시 트랙
+        else: 
             if cli_file is None:
                 df_zone = base_cli_mite_df.copy()
             else:
@@ -581,25 +581,22 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.244278, 127.220583]
         }
 
-        # 💡 [요청 사항 완전 구현] 털진드기 선택 시 환경(야산, 수로 등)을 지점 탭으로 자동 인식하도록 매핑 치환
         if "털진드기" in selected_zone:
-            df_zone["지역2_정외"] = df_zone["환경"].astype(str).str.strip()
-            df_zone["지점명"] = df_zone["지역2_정외"] + " 환경 조사지"
+            df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
+            df_zone["지점명"] = df_zone["지역2_정규화"] + " 환경 조사지"
         else:
             target_loc_col = "지역2" if "지역2" in df_zone.columns else ("지역2.1" if "지역2.1" in df_zone.columns else df_zone.columns[min(8, len(df_zone.columns)-1)])
-            df_zone["지역2_정외"] = df_zone[target_loc_col].astype(str).str.strip()
+            df_zone["지역2_정규화"] = df_zone[target_loc_col].astype(str).str.strip()
             env_str = df_zone["환경"].astype(str) if "환경" in df_zone.columns else "감시소"
-            df_zone["지점명"] = df_zone["지역2_정외"] + " (" + env_str + ")"
+            df_zone["지점명"] = df_zone["지역2_정규화"] + " (" + env_str + ")"
 
         default_lat = 37.88 if selected_zone == "모기 권역" else (38.244278 if "털진드기" in selected_zone else 38.08)
         default_lng = 127.75 if selected_zone == "모기 권역" else (127.220583 if "털진드기" in selected_zone else 127.95)
-        df_zone["위도"] = df_zone["지역2_정외"].map(lambda x: h_coords[x][0] if x in h_coords else default_lat)
-        df_zone["경도"] = df_zone["지역2_정외"].map(lambda x: h_coords[x][1] if x in h_coords else default_lng)
+        df_zone["위도"] = df_zone["지역2_정규화"].map(lambda x: h_coords[x][0] if x in h_coords else default_lat)
+        df_zone["경도"] = df_zone["지역2_정규화"].map(lambda x: h_coords[x][1] if x in h_coords else default_lng)
 
-        # 달력 기본 연/월 매핑 필터링
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
         
-        # 💡 [요청 사항 완전 구현] 방법(Sherman trap / 털진드기 채집기) 컬럼 기준으로 분포/발생감시 데이터 분산 정형화
         if selected_zone in ["털진드기 분포감시", "털진드기 발생감시"]:
             if "방법" in m_data.columns:
                 m_data["권역_필터"] = m_data["방법"].apply(lambda x: "털진드기 발생감시" if "채집기" in str(x) else "털진드기 분포감시")
@@ -615,11 +612,11 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             m_data_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
             
             if not m_data_clean.empty:
-                unique_spots = sorted(m_data_clean["지역2_정외"].unique())
+                unique_spots = sorted(m_data_clean["지역2_정규화"].unique())
                 cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in unique_spots])
                 for idx, spot_name in enumerate(unique_spots):
                     with cli_sub_tabs[idx]:
-                        spot_data = m_data_clean[m_data_clean["지역2_정외"] == spot_name]
+                        spot_data = m_data_clean[m_data_clean["지역2_정규화"] == spot_name]
                         c1, c2 = st.columns([5, 5])
                         with c1:
                             st.markdown(f"##### 🗺️ GIS 감시 지점 지도")
@@ -630,26 +627,26 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                                 icon=folium.Icon(color='green', icon='info-sign')
                             ).add_to(m_cli)
                             st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
-                        with c2:
-                            st.markdown(f"##### 📊 종별 채집량 분포 (합산 및 정렬)")
-                            sum_df = spot_data.groupby("종")[val_col].sum().reset_index()
-                            sum_df = sum_df.sort_values(by=val_col, ascending=True)
-                            
-                            fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
-                            for bar in bars:
-                                width = bar.get_width()
-                                if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
-                            st.pyplot(fig)
-                            plt.close()
+                    with c2:
+                        st.markdown(f"##### 📊 종별 채집량 분포 (합산 및 정렬)")
+                        sum_df = spot_data.groupby("종")[val_col].sum().reset_index()
+                        sum_df = sum_df.sort_values(by=val_col, ascending=True)
                         
-                        spot_data_grouped = spot_data.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
-                        spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
-                        st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
-            else:
-                st.info(f"💡 선택하신 기간의 [{selected_zone}] 관할 지점에서 채집된 생물 개체가 없습니다.")
-        else: 
-            st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
+                        fig, plt_ax = plt.subplots(figsize=(6, 5.2))
+                        bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
+                        for bar in bars:
+                            width = bar.get_width()
+                            if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
+                        st.pyplot(fig)
+                        plt.close()
+                    
+                    spot_data_grouped = spot_data.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
+                    spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
+                    st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
+        else:
+            st.info(f"💡 선택하신 기간의 [{selected_zone}] 관할 지점에서 채집된 생물 개체가 없습니다.")
+    else: 
+        st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
 # 4. 참진드기조사 어린이숲체험장 레이어
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
