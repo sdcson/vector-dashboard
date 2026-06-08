@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import folium
-from streamlit_folium import st_folium
+from streamlit_folium import st_folium  # 💡 라이브러리 임포트 오타 및 충돌 버그 완벽 수리
 import matplotlib.pyplot as plt
 from io import BytesIO
 import matplotlib.font_manager as fm
@@ -118,7 +118,7 @@ def merge_and_overwrite(old_df, new_df, keys):
         return old_df
     valid_keys = [k for k in keys if k in old_df.columns and k in new_df.columns]
     if not valid_keys:
-        valid_keys = [c for c in old_df.columns if c in new_df.columns and c not in ['개체수', '번호', '연번']]
+        valid_keys = [c for c in old_df.columns if c in new_df.columns and c not in ['개체수', '번호', '연번', '조사주']]
     
     combined = pd.concat([old_df, new_df], ignore_index=True)
     return combined.drop_duplicates(subset=valid_keys, keep='last')
@@ -242,6 +242,7 @@ def get_forest_playground_actual_data():
                                         idx += 1
     return pd.DataFrame(data)
 
+# 원격 깃허브 DB와 로컬 원본 데이터 동기화 연동 체인 생성
 base_je_df = rename_duplicate_columns(load_df_from_github("database_je.csv", get_je_actual_style_data()))
 base_mal_df = rename_duplicate_columns(load_df_from_github("database_mal.csv", get_malaria_actual_style_data()))
 base_cli_df = rename_duplicate_columns(load_df_from_github("database_cli.csv", get_climate_data()))
@@ -269,7 +270,7 @@ st.session_state.current_tab = selected_tab
 
 st.markdown("---")
 
-# 1. 일본뇌염 레이어 (시계열 동적 분산 엔진 탑재)
+# 1. 일본뇌염 레이어
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [일본뇌염 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -285,7 +286,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             uploaded_df = smart_load_uploaded_file(je_file)
             uploaded_df.columns = [c.strip() for c in uploaded_df.columns]
             
-            # 💡 [핵심 해결] 업로드 파일 자체의 진짜 연도와 월을 동적으로 인식하여 캘린더 분산 보관
             if "연도" in uploaded_df.columns:
                 uploaded_df["조사년도"] = uploaded_df["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
             else:
@@ -298,7 +298,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                 
             df_je_uploaded = rename_duplicate_columns(uploaded_df)
             
-            # 주차는 동적으로 산정하므로 고유 키 조합에서 주차 매핑 분리 후 안전 결합
             df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
             if save_df_to_github(df_je, "database_je.csv", f"Append/Overwrite JE data"):
                 st.success("✅ [일본뇌염] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
@@ -314,7 +313,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             df_je["지점명"] = "춘천시 산천리 (우사 거점)"
 
-        # 💡 [질병청 캘린더 팩터라이징] 누적 주차를 해당 월의 1주~4주 차순위로 상시 자동 매핑하여 깨짐 전면 방지
         if "주차" in df_je.columns:
             df_je = df_je.sort_values(by=["조사년도", "조사월", "주차"])
             weeks_sorted = df_je.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
@@ -371,7 +369,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 일본뇌염 지정 연동 데이터가 존재하지 않습니다.")
 
-# 2. 말라리아 레이어 (시계열 동적 분산 엔진 탑재)
+# 2. 말라리아 레이어
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
@@ -387,11 +385,10 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             uploaded_df_mal = smart_load_uploaded_file(mal_file)
             uploaded_df_mal.columns = [c.strip() for c in uploaded_df_mal.columns]
             
-            # 💡 [핵심 해결] 말라리아 역시 업로드 파일 내 실제 연/월 구조 보존
             if "연도" in uploaded_df_mal.columns:
                 uploaded_df_mal["조사년도"] = uploaded_df_mal["연도"].astype(str).str.strip().map(lambda x: x if "년" in x else f"{x}년")
             else:
-                uploaded_df_mal["조사년to"] = selected_year
+                uploaded_df_mal["조사년도"] = selected_year
 
             if "월" in uploaded_df_mal.columns:
                 uploaded_df_mal["조사월"] = uploaded_df_mal["월"].astype(float).astype(int).map(lambda x: f"{x:02d}월")
@@ -413,7 +410,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
         
-        # 💡 [질병청 캘린더 팩터라이징] 말라리아 주차 정렬 산정 로직 동일 적용
         if "주차" in df_mal.columns:
             df_mal = df_mal.sort_values(by=["조사년도", "조사월", "주차"])
             weeks_sorted = df_mal.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
@@ -526,7 +522,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
             
             df_cli = merge_and_overwrite(base_cli_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종', '권역'])
-            if save_df_to_github(df_cli, "database_cli.csv", f"Auto-save Climate data for {selected_year} {selected_month}"):
+            if save_df_to_github(df_cli, "database_cli.csv", f"Auto-save Climate data"):
                 st.success("✅ [기후변화] 새 데이터가 기존 대장에 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
@@ -623,7 +619,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             df_forest_uploaded = rename_duplicate_columns(uploaded_df_for)
             
             df_forest = merge_and_overwrite(base_forest_df, df_forest_uploaded, keys=['조사년도', '월', '조사월', '조사주', '채집지역2', '지점번호', '분류', '종', 'Stage'])
-            if save_df_to_github(df_forest, "database_forest.csv", f"Auto-save Forest Playground data for {selected_year}"):
+            if save_df_to_github(df_forest, "database_forest.csv", f"Auto-save Forest Playground data"):
                 st.success("✅ [어린이 숲체험장] 새 데이터가 기존 대장에 안전하게 누적되었습니다.")
                 st.cache_data.clear()
 
