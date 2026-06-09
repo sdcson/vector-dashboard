@@ -352,7 +352,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
 
         if "주차" in df_je.columns:
             df_je = df_je.sort_values(by=["조사년도", "조사월", "주차"])
-            # 💡 [문법 오류 수리 완료] 지시하신 대로 "조사년to" 오타를 완전 소멸시키고 "조사년도" 정규 인덱스로 매핑 완료!
             weeks_sorted = df_je.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
             df_je["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
         else:
@@ -570,7 +569,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             for target_mal_name, coords in mal_coords_map.items():
                                 marker_color = 'purple' if target_mal_name == short_name else 'blue'
                                 marker_icon = 'star' if target_mal_name == short_name else 'flag'
-                                folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color=marker_color, icon=marker_icon)).add_to(m_mal)
+                                folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color='purple' if target_mal_name == short_name else 'blue', icon='star' if target_mal_name == short_name else 'flag')).add_to(m_mal)
                             st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 {short_name} 종별 발생 현황 (합산 및 정렬)")
@@ -650,6 +649,10 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     if not df_zone.empty:
         df_zone = parse_vectornet_dataframe(df_zone, selected_year, selected_month)
         
+        # 💡 [잡목림 줄바꿈 및 공백 오류 원천 치료 필터] 환경 컬럼 내 미세 공백, 줄바꿈 기호(\n, \r) 완전 제거 전처리 엔진 가동
+        if "환경" in df_zone.columns:
+            df_zone["환경"] = df_zone["환경"].astype(str).str.replace(r'[\r\n\t]', '', regex=True).str.strip()
+
         if "주차" in df_zone.columns:
             df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
             def assign_survey_week(row):
@@ -682,7 +685,8 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             master_spots_list = ["춘천시보건소", "백로서식지", "주택", "종가오리", "삼천동", "퇴계동주민센터"]
         elif selected_zone == "참진드기 권역":
             df_zone["종"] = df_zone["종"].astype(str).str.strip().replace({"기타": "Larva"})
-            df_zone["지역2_정규화"] = df_zone["지역2"].astype(str).str.strip() + " - " + df_zone["환경"].astype(str).str.strip()
+            # 💡 [정밀 매핑 싱크 동기화] 지역2와 전처리된 환경 컬럼을 정확히 바인딩
+            df_zone["지역2_정규화"] = df_zone["지역2"].astype(str).str.strip() + " - " + df_zone["환경"].astype(str)
             master_spots_list = ["화천군 - 무덤", "화천군 - 산길", "화천군 - 잡목림", "화천군 - 초지", "인제군 - 무덤", "인제군 - 산길", "인제군 - 잡목림", "인제군 - 초지"]
         elif selected_zone == "털진드기 분포감시":
             df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
