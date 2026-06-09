@@ -276,13 +276,13 @@ def get_forest_playground_actual_data():
     stages = ["Female", "Male", "Nymph", "Larvae"]
     for year in ["2026년", "2025년", "2024년", "2023년", "2021년", "2020년"]:
         seed_year = int(year.replace("년",""))
-        regions = ["홍천", "정선"] if seed_year == 2025 else ["남산", "삼마치"]
+        regions = ["홍천", "정선"] if seed_year == 2025 else (["춘천", "인제"] if seed_year == 2024 else ["남산", "삼마치"])
         for month_int in range(3, 12): 
             month_str = f"{month_int:02d}월"
             for week in ["1주", "2주", "3주", "4주"]:
                 np.random.seed(seed_year + month_int * 13 + len(week))
                 for region in regions:
-                    course = 1 if region in ["남산", "홍천"] else 2
+                    course = 1 if region in ["남산", "홍천", "춘천"] else 2
                     for spot_num in range(1, 4):
                         for classification in ["In", "Out"]:
                             for sp in species_map:
@@ -427,7 +427,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                                 full_target_name = f"{target_spot_name} (우사 거점)"
                                 marker_color = 'orange' if target_spot_name in spot_name or spot_name in full_target_name else 'red'
                                 marker_icon = 'star' if target_spot_name in spot_name or spot_name in full_target_name else 'home'
-                                folium.Marker([coords[0], coords[1]], tooltip=full_target_name, icon=folium.Icon(color=marker_color, icon=marker_icon)).add_to(m_je)
+                                folium.Marker([coords[0], coords[1]], tooltip=full_target_name, icon=folium.Icon(color='orange' if target_spot_name in spot_name or spot_name in full_target_name else 'red', icon='star' if target_spot_name in spot_name or spot_name in full_target_name else 'home')).add_to(m_je)
                             st_folium(m_je, key=f"map_je_final_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 채집량 분포 (합산 및 정렬)")
@@ -568,6 +568,8 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             st.markdown(f"##### 🗺️ GIS 말라리아 거점 지도 (전체 지점 표시 / 선택: 💜보라색)")
                             m_mal = folium.Map(location=[float(spot_data_mal_clean['위도'].iloc[0]), float(spot_data_mal_clean['경도'].iloc[0])], zoom_start=9)
                             for target_mal_name, coords in mal_coords_map.items():
+                                marker_color = 'purple' if target_mal_name == short_name else 'blue'
+                                marker_icon = 'star' if target_mal_name == short_name else 'flag'
                                 folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color='purple' if target_mal_name == short_name else 'blue', icon='star' if target_mal_name == short_name else 'flag')).add_to(m_mal)
                             st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
@@ -812,13 +814,13 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                             plt.close()
                         
                         env_col = "환경" if "환경" in spot_data_clean.columns else "조사지"
-                        spot_data_grouped = spot_data_clean.groupby(["조사월", "지역2_정규화", env_col, "종"], as_index=False)[val_col].sum()
+                        spot_data_grouped = spot_data_clean.groupby(["조사월", "지역2_정규화", "환경", "종"], as_index=False)[val_col].sum()
                         spot_data_grouped = spot_data_grouped.sort_values(by=[val_col], ascending=False)
-                        st.dataframe(spot_data_grouped[["조사월", "지역2_정규화", env_col, "종", val_col]].rename(columns={"조사월": "조사월", "지역2_정규화": "조사지점"}), hide_index=True, use_container_width=True)
+                        st.dataframe(spot_data_grouped[["조사월", "지역2_정규화", "환경", "종", val_col]].rename(columns={"조사월": "조사월", "지역2_정규화": "조사지점"}), hide_index=True, use_container_width=True)
                     else:
                         st.info(f"💡 선택하신 {selected_year} {selected_month}에 [{spot_name}] 관할 지점의 매개체 데이터가 비어있습니다. (0개체)")
                         
-# 4. 참진드기조사 어린이숲체험장 레이어
+# 4. 참진드기조사 어린이숲체험장 레이어 (💡 년도별 조사 지점 완전 자동 유연 변환 파트)
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
     
@@ -854,11 +856,15 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
         m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
         
-        # 💡 년도별 조사 지점 완전 자동 유연 변환 파트
+        # 💡 [지점 전면 수정] 2024년 춘천: 국립춘천숲체원, 인제: 갯골유아숲체험원 좌표계 최신화 적용
         if "2025" in selected_year:
             h_coords_forest = {"홍천": [37.7336, 127.8547], "정선": [37.4922, 128.9814]}
             map_center_forest = [37.61, 128.42]
             map_zoom_forest = 9
+        elif "2024" in selected_year:
+            h_coords_forest = {"춘천": [37.9799, 127.7718], "인제": [38.0620, 128.1560]}
+            map_center_forest = [38.02, 127.96]
+            map_zoom_forest = 10
         else:
             h_coords_forest = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
             map_center_forest = [37.665, 127.900]
@@ -879,7 +885,13 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 m_f = folium.Map(location=map_center_forest, zoom_start=map_zoom_forest)
                 for r_name, latlng in h_coords_forest.items():
                     r_summary = forest_summary[forest_summary["채집지역2"] == r_name]
-                    full_title = f"홍천 {r_name} (자연환경연구공원)" if r_name=="홍천" else (f"정선 {r_name} (백두대간생태수목원)" if r_name=="정선" else f"홍천군 {r_name} 유아숲")
+                    if "2025" in selected_year:
+                        full_title = f"홍천 {r_name} (자연환경연구공원)" if r_name=="홍천" else f"정선 {r_name} (백두대간생태수목원)"
+                    elif "2024" in selected_year:
+                        full_title = f"춘천 {r_name} (국립춘천숲체원)" if r_name=="춘천" else f"인제 {r_name} (갯골어린이숲체험원)"
+                    else:
+                        full_title = f"홍천군 {r_name} 유아숲"
+                        
                     popup_text = f"<b>🌲 {full_title}</b><br><hr style='margin:5px 0;'>"
                     for _, r in r_summary.iterrows(): 
                         popup_text += f"• {r['gu분지점']}: 월간 누적 {r['합계']}개체<br>"
@@ -890,6 +902,13 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 st.markdown(f"##### 📊 {selected_year} {selected_month} 구역별 실시간 채집량 비교")
                 fig, ax = plt.subplots(figsize=(6, 5))
                 chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum").fillna(0)
+                
+                # 💡 세세한 라벨링 전환 시스템 처리
+                if "2024" in selected_year:
+                    chart_df = chart_df.rename(columns={"춘천": "춘천(국립숲체원)", "인제": "인제(갯골어린이숲체험원)"})
+                elif "2025" in selected_year:
+                    chart_df = chart_df.rename(columns={"홍천": "홍천(자연환경연구공원)", "정선": "정선(백두대간생태수목원)"})
+                    
                 chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black', width=0.6)
                 plt.xticks(rotation=0)
                 plt.tight_layout()
