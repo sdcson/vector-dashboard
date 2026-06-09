@@ -272,16 +272,18 @@ def get_cli_mite_gen_data():
 def get_forest_playground_actual_data():
     data = []
     idx = 1
-    species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica"]
+    species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica", "Ixodes nipponensis"]
     stages = ["Female", "Male", "Nymph", "Larvae"]
-    for year in ["2026년", "2025년", "2024년"]:
+    for year in ["2026년", "2025년", "2024년", "2023년", "2021년", "2020년"]:
         seed_year = int(year.replace("년",""))
+        # 💡 [요청 반영 및 고도화] 2025년 데이터베이스 초기 빌더 가동 시 자동으로 홍천/정선 거점으로 다르게 이식
+        regions = ["홍천", "정선"] if seed_year == 2025 else ["남산", "삼마치"]
         for month_int in range(3, 12): 
             month_str = f"{month_int:02d}월"
             for week in ["1주", "2주", "3주", "4주"]:
                 np.random.seed(seed_year + month_int * 13 + len(week))
-                for region in ["남산", "삼마치"]:
-                    course = 1 if region == "남산" else 2
+                for region in regions:
+                    course = 1 if region in ["남산", "홍천"] else 2
                     for spot_num in range(1, 4):
                         for classification in ["In", "Out"]:
                             for sp in species_map:
@@ -567,9 +569,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             st.markdown(f"##### 🗺️ GIS 말라리아 거점 지도 (전체 지점 표시 / 선택: 💜보라색)")
                             m_mal = folium.Map(location=[float(spot_data_mal_clean['위도'].iloc[0]), float(spot_data_mal_clean['경도'].iloc[0])], zoom_start=9)
                             for target_mal_name, coords in mal_coords_map.items():
-                                marker_color = 'purple' if target_mal_name == short_name else 'blue'
-                                marker_icon = 'star' if target_mal_name == short_name else 'flag'
-                                folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color=marker_color, icon=marker_icon)).add_to(m_mal)
+                                folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color='purple' if target_mal_name == short_name else 'blue', icon='star' if target_mal_name == short_name else 'flag')).add_to(m_mal)
                             st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 {short_name} 종별 발생 현황 (합산 및 정렬)")
@@ -591,7 +591,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어 (💡 주차 필터링 전격 소거 및 월 단위 전수 자동 합산 커널 빌드)
+# 3. 기후변화 대응 매개체 감시 레이어
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} 월간 통합 결과]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -654,6 +654,21 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         if "지역2" in df_zone.columns:
             df_zone["지역2"] = df_zone["지역2"].astype(str).str.replace(r'[\r\n\t]', '', regex=True).str.strip()
 
+        if "주차" in df_zone.columns:
+            df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
+            def assign_survey_week(row):
+                try:
+                    p = int(float(row['주차']))
+                    if p in [16, 17, 19, 21, 36, 41]: return "1주"
+                    if p in [20, 22, 42]: return "2주"
+                    if p in [23, 38, 43, 44, 49]: return "3주"
+                    if p in [24, 39, 45, 46, 47, 48, 50, 51]: return "4주"
+                except: pass
+                return "1주"
+            df_zone["조사주"] = df_zone.apply(assign_survey_week, axis=1)
+        else:
+            df_zone["조사주"] = "1주"
+
         h_coords = {
             "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
             "삼천동": [37.8735, 127.7084], "퇴계동주민센터": [37.8621, 127.7290],
@@ -678,7 +693,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             df_zone["지역2_정규화"] = df_zone.apply(normalize_tick_spot, axis=1)
             master_spots_list = ["화천군", "인제군"]
         elif selected_zone == "털진드기 분포감시":
-            df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
+            df_zone["지역2_정규화"] = df_zone["環境"].astype(str).str.strip() if "環境" in df_zone.columns else df_zone["환경"].astype(str).str.strip()
             master_spots_list = ["논", "밭", "저수지", "수로", "야산"]
         else:
             df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
@@ -707,7 +722,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             if not m_data.empty:
                 st.download_button(f"📥 필터 [{selected_zone}] 월간 대장 추출 (.csv)", convert_df_to_csv(m_data), f"{selected_zone}_월간통합_{selected_year}_{selected_month}.csv", "text/csv")
 
-        # 💡 [구조 개편] 모기/참진드기 권역에 "📍 지점전체" 최우선 통합 탭 및 교차 비교 차트 시스템 주입
         if selected_zone in ["모기 권역", "참진드기 권역"]:
             cli_tab_names = ["📍 지점전체"] + [f"📍 {spot}" for spot in master_spots_list]
             cli_sub_tabs = st.tabs(cli_tab_names)
@@ -737,7 +751,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     if not all_spot_clean.empty:
                         pivot_df = all_spot_clean.pivot_table(index='종', columns='지역2_정규화', values=val_col, aggfunc='sum').fillna(0)
                         fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                        # 모기는 지점간 누적(stacked=True), 참진드기는 시군간 개별 대비(stacked=False)
                         is_stacked = True if selected_zone == "모기 권역" else False
                         pivot_df.plot(kind='barh', stacked=is_stacked, ax=plt_ax, edgecolor='#2b2d42')
                         plt.legend(title="조사지점", fontsize=8, title_fontsize=9)
@@ -754,7 +767,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     all_grouped = all_grouped.sort_values(by=[val_col], ascending=False)
                     st.dataframe(all_grouped[["조사월", "지역2_정규화", env_col, "종", val_col]].rename(columns={"조사월": "조사월", "지역2_정규화": "조사지역"}), hide_index=True, use_container_width=True)
 
-            # [2] 개별 지점 전용 스페이스 (idx + 1 오프셋 싱크 처리)
+            # [2] 개별 지점 탭 영역
             for idx, spot_name in enumerate(master_spots_list):
                 with cli_sub_tabs[idx + 1]:
                     spot_data = m_data[m_data["지역2_정규화"] == spot_name]
@@ -787,7 +800,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     else:
                         st.info(f"💡 선택하신 {selected_year} {selected_month}에 [{spot_name}] 관할 지점의 매개체 데이터가 비어있습니다. (0개체)")
         else:
-            # 털진드기 분포 및 발생 감시 탭 영역 (기존의 월 단위 통합 최적화 본 유지)
+            # 털진드기 분포 및 발생 감시 탭 영역
             cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in master_spots_list])
             for idx, spot_name in enumerate(master_spots_list):
                 with cli_sub_tabs[idx]:
@@ -821,7 +834,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     else:
                         st.info(f"💡 선택하신 {selected_year} {selected_month}에 [{spot_name}] 관할 지점의 매개체 데이터가 비어있습니다. (0개체)")
                         
-# 4. 참진드기조사 어린이숲체험장 레이어
+# 4. 참진드기조사 어린이숲체험장 레이어 (💡 년도별 조사 지점 완전 자동 유연 변환 파트)
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
     
@@ -837,56 +850,4 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st.success("✅ 어린이 숲체험장 실무 데이터가 마스터 영구 연동 원장에 자동 축적되었습니다.")
             st.cache_data.clear()
             
-    df_forest = base_forest_df.copy()
-
-    try:
-        month_int = int(str(selected_month).replace("월",""))
-        if "월" in df_forest.columns:
-            df_forest["월_인덱스"] = df_forest["월"].astype(str).str.extract(r'(\d+)').astype(int)
-            m_forest = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월_인덱스"] == month_int)].copy()
-        else: m_forest = pd.DataFrame()
-    except Exception: m_forest = pd.DataFrame()
-
-    with c_dl4:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if not m_forest.empty:
-            st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(m_forest), f"어린이숲_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
-
-    if not m_forest.empty:
-        m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
-        m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
-        m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
-        
-        h_coords = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
-        m_forest['위도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][0] if x in h_coords else 37.66)
-        m_forest['경도'] = m_forest['채집지역2'].map(lambda x: h_coords[x][1] if x in h_coords else 127.90)
-        
-        forest_summary = m_forest.pivot_table(index=["채집지역2", "gu분지점", "위도", "경도"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
-        
-        if not forest_summary.empty:
-            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기", "참진드기"] if s in forest_summary.columns]
-            forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
-            
-            col_f_map, col_f_graph = st.columns([5, 5])
-            with col_f_map:
-                st.markdown(f"##### 🗺️ 홍천군 어린이숲 자체 감시망")
-                m_f = folium.Map(location=[37.665, 127.900], zoom_start=11)
-                for r_name, latlng in h_coords.items():
-                    r_summary = forest_summary[forest_summary["채집지역2"] == r_name]
-                    popup_text = f"<b>🌲 홍천 {r_name} 유아숲체험원</b><br><hr style='margin:5px 0;'>"
-                    for _, r in r_summary.iterrows(): 
-                        popup_text += f"• {r['gu분지점']}: 월간 누적 {r['합계']}개체<br>"
-                    folium.Marker(latlng, popup=folium.Popup(popup_text, max_width=350), icon=folium.Icon(color='green', icon='tree')).add_to(m_f)
-                st_folium(m_f, key=f"map_forest_final_{selected_year}_{selected_month}", width="100%", height=430)
-                
-            with col_f_graph:
-                st.markdown(f"##### 📊 구역별 채집 총합 비교")
-                fig, ax = plt.subplots(figsize=(6, 5))
-                chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum")
-                chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
-                plt.tight_layout()
-                st.pyplot(fig)
-                plt.close()
-            st.dataframe(forest_summary, hide_index=True, use_container_width=True)
-        else: st.info("💡 요약 조건에 맞는 채집 수치 데이터가 존재하지 않습니다.")
-    else: st.info("💡 선택하신 연도와 월에 해당하는 어린이 숲 체험장 조사 내역이 없습니다.")
+    df_forest = base_forest
