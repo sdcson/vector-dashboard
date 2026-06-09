@@ -220,7 +220,7 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 털진드기 2대 대장 격리 분할]
+# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 털진드기 대장 독립 격리]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
@@ -504,7 +504,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어 (💡 주차 매핑 및 상시 고정형 5대 필수 탭 빌더 주입 완료)
+# 3. 기후변화 대응 매개체 감시 레이어 (💡 인덱스 조회 버그 완전 수정 마스터 커널)
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -547,7 +547,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
                 df_zone = merge_and_overwrite(base_cli_mite_dist_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '환경', '종'])
                 if save_df_to_github(df_zone, "database_cli_mite_dist.csv", "Update Climate Mite Dist data"):
-                    st.success("✅ [털진드기 분포감시] 새 데이터가 안전하게 누적 연동되었습니다.")
+                    st.success("✅ [털진드기 분포감시] 새 데이터가 보관 및 백업 연동되었습니다.")
                     st.cache_data.clear()
         else:
             if cli_file is None: df_zone = base_cli_mite_gen_df.copy()
@@ -563,16 +563,17 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     if not df_zone.empty:
         df_zone = parse_vectornet_dataframe(df_zone, selected_year, selected_month)
         
-        # 💡 [쯔쯔가무시증 주차 파싱 원천 차단] 질병청 고유 원본 파일의 시계열 주차 정렬 결합
+        # 💡 [주차 매핑 유실 완벽 제어 엔진] 파일 고유의 주차 코드와 대조 매핑
         if "주차" in df_zone.columns:
             df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
-            # 주차 매칭 누락을 방지하기 위해 41~51주 등 원본 숫자를 1~4주 팩터 외에 조건절로 상시 추적 가동
             def assign_survey_week(row):
-                p = int(float(row['주차']))
-                if p in [16, 17, 19, 21, 36, 41]: return "1주"
-                if p in [20, 22, 42]: return "2주"
-                if p in [23, 38, 43, 44, 49]: return "3주"
-                if p in [24, 39, 45, 46, 47, 48, 50, 51]: return "4주"
+                try:
+                    p = int(float(row['주차']))
+                    if p in [16, 17, 19, 21, 36, 41]: return "1주"
+                    if p in [20, 22, 42]: return "2주"
+                    if p in [23, 38, 43, 44, 49]: return "3주"
+                    if p in [24, 39, 45, 46, 47, 48, 50, 51]: return "4주"
+                except: pass
                 return "1주"
             df_zone["조사주"] = df_zone.apply(assign_survey_week, axis=1)
         else:
@@ -584,40 +585,29 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             "인제군": [38.0650, 128.1611], "화천군": [38.1062, 127.7034], "철원군": [38.2442, 127.2205]
         }
 
-        # 결과보고서 수록 전용 학저수지 일대 환경별 독립 고유 정밀 GPS 컴포넌트
         mite_precise_gps = {
-            "털진드기 발생감시": {
-                "논": [38.239167, 127.214444], "밭": [38.244278, 127.220583],
-                "수로": [38.237333, 127.227806], "초지": [38.239722, 127.220278]
-            },
-            "털진드기 분포감시": {
-                "논": [38.237583, 127.226167], "밭": [38.227861, 127.220306],
-                "저수지": [38.236833, 127.227028], "수로": [38.239583, 127.216833], "야산": [38.383333, 127.224722]
-            }
+            "털진드기 발생감시": {"논": [38.2391, 127.2144], "밭": [38.2442, 127.2205], "수로": [38.2373, 127.2278], "초지": [38.2397, 127.2202]},
+            "털진드기 분포감시": {"논": [38.2375, 127.2261], "밭": [38.2278, 127.2203], "저수지": [38.2368, 127.2270], "수로": [38.2395, 127.2168], "야산": [38.3833, 127.2247]}
         }
 
-        # 💡 [과장님 가이드 지점 마스터 마스킹] 유무 상관없이 보고서 고유 상시 고정 탭 선언
+        # 마스터 지점명 강제 주입형 포맷팅 교정
         if selected_zone == "모기 권역":
             target_loc_col = "지역2" if "지역2" in df_zone.columns else df_zone.columns[min(8, len(df_zone.columns)-1)]
             df_zone["지역2_정규화"] = df_zone[target_loc_col].astype(str).str.strip()
-            df_zone["지점명"] = df_zone["지역2_정규화"]
             master_spots_list = ["춘천시보건소", "백로서식지", "주택", "종가오리", "삼천동", "퇴계동주민센터"]
         elif selected_zone == "참진드기 권역":
+            df_zone["종"] = df_zone["종"].astype(str).str.strip().replace({"기타": "Larva"})
             df_zone["지역2_정규화"] = df_zone["지역2"].astype(str).str.strip() + " - " + df_zone["환경"].astype(str).str.strip()
-            df_zone["지점명"] = df_zone["지역2_정규화"]
             master_spots_list = ["화천군 - 무덤", "화천군 - 산길", "화천군 - 잡목림", "화천군 - 초지", "인제군 - 무덤", "인제군 - 산길", "인제군 - 잡목림", "인제군 - 초지"]
         elif selected_zone == "털진드기 분포감시":
             df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
-            df_zone["지점명"] = df_zone["지역2_정규화"] + " 환경 조사지"
-            master_spots_list = ["논", "밭", "저수지", "수로", "야산"]  # 💡 5대 필수 지점 상시 오픈
-        else: # 털진드기 발생감시
+            master_spots_list = ["논", "밭", "저수지", "수로", "야산"]
+        else:
             df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
-            df_zone["지점명"] = df_zone["지역2_정규화"] + " 환경 조사지"
-            master_spots_list = ["논", "밭", "수로", "초지"]  # 💡 4대 필수 지점 상시 오픈
+            master_spots_list = ["논", "밭", "수로", "초지"]
 
-        # GPS 바인딩 처리
         def resolve_coords(name, zone):
-            if zone in ["털진드기 분포감시", "털진드기 발생감시"]:
+            if "털진드기" in zone:
                 sub_m = mite_precise_gps.get(zone, mite_precise_gps["털진드기 분포감시"])
                 if name in sub_m: return sub_m[name][0], sub_m[name][1]
                 return 38.2442, 127.2205
@@ -630,29 +620,23 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         df_zone["위도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[0])
         df_zone["경도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[1])
 
-        # 시계열 동기화 필터링
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
         if selected_week != "전체":
             m_data = m_data[m_data["조사주"] == selected_week]
 
         val_col = "개체수" if "개체수" in df_zone.columns else "채집수"
         
-        # 💡 [원천적 해결] 데이터가 있든 없든 마스터 탭을 100% 강제 생성하여 정보 유실 전면 방어
         cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in master_spots_list])
         for idx, spot_name in enumerate(master_spots_list):
             with cli_sub_tabs[idx]:
-                # 해당 지점에 해당하는 진짜 데이터 슬라이싱
-                if selected_zone in ["모기 권역", "참진드기 권역"]:
-                    spot_data = m_data[m_data["지점명"] == spot_name]
-                else:
-                    spot_data = m_data[m_data["지역2_정규화"] == spot_name]
-                
+                # 💡 [인덱스 싱크 버그 치료] m_data와 spot_name을 정확히 '지역2_정규화' 컬럼 기준으로 슬라이싱 매치
+                spot_data = m_data[m_data["지역2_정규화"] == spot_name]
                 spot_data_clean = spot_data[(spot_data["종"] != "미채집") & (spot_data[val_col] > 0)]
                 
                 if not spot_data_clean.empty:
                     c1, c2 = st.columns([5, 5])
                     with c1:
-                        st.markdown(f"##### 🗺️ GIS 감시 지점 지도 (결과보고서 정밀 규격)")
+                        st.markdown(f"##### 🗺️ GIS 감시 지점 지도 (결과보고서 규격)")
                         m_cli = folium.Map(location=[float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], zoom_start=13)
                         folium.Marker([float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='green', icon='info-sign')).add_to(m_cli)
                         st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
@@ -669,11 +653,11 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         st.pyplot(fig)
                         plt.close()
                     
-                    spot_data_grouped = spot_data_clean.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col].sum()
+                    spot_data_grouped = spot_data_clean.groupby(["조사주", "지역2_정규화", "환경", "종"], as_index=False)[val_col].sum()
                     spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
-                    st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
+                    st.dataframe(spot_data_grouped[["조사주", "지역2_정규화", "환경", "종", val_col]].rename(columns={"조사주": "조사주차", "지역2_정규화": "조사지점"}), hide_index=True, use_container_width=True)
                 else:
-                    st.info(f"💡 선택하신 기간 {selected_year} {selected_month} {selected_week}에 [{spot_name}] 지점에서 채집된 매개체가 없거나 대장 기록이 비어있습니다. (0개체 표출)")
+                    st.info(f"💡 {selected_year} {selected_month}에 [{spot_name}] 지점에서 채집된 매개체가 없거나 대장 기록이 비어있습니다. (0개체 표출)")
     else: 
         st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
