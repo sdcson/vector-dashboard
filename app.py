@@ -17,7 +17,6 @@ st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템"
 # -----------------------------------------------------------------
 # [💡 영구 차트 한글 깨짐 방지: 구글 나눔고딕 커널 엔진 강제 주입형 로더]
 # -----------------------------------------------------------------
-@st.set_user_font if 'init_korean_font_and_get_prop' not in globals() else lambda: None
 @st.cache_resource
 def init_korean_font_and_get_prop():
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
@@ -221,7 +220,7 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 털진드기 2대 대장 격리 분할]
+# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 털진드기 대장 독립 격리]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
@@ -313,7 +312,7 @@ base_forest_df = rename_duplicate_columns(load_df_from_github("database_forest.c
 # -----------------------------------------------------------------
 st.sidebar.markdown("### 📅 통합 시간 동기화 필터")
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년", "2021년", "2020년"])
-selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"], index=1) # 분포감시 기본 타겟 4월
+selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"], index=2)
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)"]
@@ -411,7 +410,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
         vn_mal_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수"]
-        vn_mal_tmpl = pd.DataFrame(columns=vn_cols)
+        vn_mal_tmpl = pd.DataFrame(columns=vn_mal_cols)
         vn_mal_tmpl.loc[0] = [1, "말라리아매개모기조사감시", "강원도보건환경연구원", 2026, 5, 21, "2026-05-23", "강원", "춘천시 중앙동", "우사", "유문등", "Anopheles spp.", 45]
         st.download_button("📥 [말라리아] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_mal_tmpl), "VectorNet_말라리아_양식.csv", "text/csv")
         mal_file = st.file_uploader("질병청 VectorNet 말라리아 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="mal_up")
@@ -484,6 +483,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                                 marker_color = 'purple' if target_mal_name == short_name else 'blue'
                                 marker_icon = 'star' if target_mal_name == short_name else 'flag'
                                 folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color=marker_color, icon=marker_icon)).add_to(m_mal)
+                            st.pyplot(plt.figure())
                             st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 {short_name} 종별 발생 현황 (합산 및 정렬)")
@@ -505,7 +505,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어 (💡 시계열 결합 및 상시 5대 지점 탭 강제 인덱싱 구현 완료)
+# 3. 기후변화 대응 매개체 감시 레이어
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -564,7 +564,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     if not df_zone.empty:
         df_zone = parse_vectornet_dataframe(df_zone, selected_year, selected_month)
         
-        # 💡 [쯔쯔가무시증 주차 파싱 완전 치료] 연도/월 문자열 매칭 시 주차 필터가 유실되던 현상을 원천 방어
+        # 주차 팩터라이이징 동기화 파싱
         if "주차" in df_zone.columns:
             df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
             def assign_survey_week(row):
@@ -591,7 +591,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             "털진드기 분포감시": {"논": [38.2375, 127.2261], "밭": [38.2278, 127.2203], "저수지": [38.2368, 127.2270], "수로": [38.2395, 127.2168], "야산": [38.3833, 127.2247]}
         }
 
-        # 💡 지점 마스터 마스킹 리스트 고정 선언
         if selected_zone == "모기 권역":
             target_loc_col = "지역2" if "지역2" in df_zone.columns else df_zone.columns[min(8, len(df_zone.columns)-1)]
             df_zone["지역2_정규화"] = df_zone[target_loc_col].astype(str).str.strip()
@@ -602,10 +601,10 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             master_spots_list = ["화천군 - 무덤", "화천군 - 산길", "화천군 - 잡목림", "화천군 - 초지", "인제군 - 무덤", "인제군 - 산길", "인제군 - 잡목림", "인제군 - 초지"]
         elif selected_zone == "털진드기 분포감시":
             df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
-            master_spots_list = ["논", "밭", "저수지", "수로", "야산"] # 💡 [원천 수정] 5대 필수 탭 상시 배치 고정
+            master_spots_list = ["논", "밭", "저수지", "수로", "야산"]
         else:
             df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
-            master_spots_list = ["논", "밭", "수로", "초지"] # 💡 4대 발생감시 탭 고정
+            master_spots_list = ["논", "밭", "수로", "초지"]
 
         def resolve_coords(name, zone):
             if "털진드기" in zone:
@@ -621,18 +620,15 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         df_zone["위도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[0])
         df_zone["경도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[1])
 
-        # 시계열 동기화 필터 결합
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
         if selected_week != "전체":
             m_data = m_data[m_data["조사주"] == selected_week]
 
         val_col = "개체수" if "개체수" in df_zone.columns else "채집수"
         
-        # 하위 지점 탭 강제 렌더링 시작 (KeyError 및 동기화 에러 차단)
         cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in master_spots_list])
         for idx, spot_name in enumerate(master_spots_list):
             with cli_sub_tabs[idx]:
-                # 💡 [버그 완전 치료] m_data와 spot_name을 정확히 '지역2_정규화' 컬럼 기준으로 직결 슬라이싱 매치
                 spot_data = m_data[m_data["지역2_정규화"] == spot_name]
                 spot_data_clean = spot_data[(spot_data["종"] != "미채집") & (spot_data[val_col] > 0)]
                 
@@ -644,7 +640,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         folium.Marker([float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='green', icon='info-sign')).add_to(m_cli)
                         st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
                     with c2:
-                        # 💡 [지시 전면 이식] 지점 탭 격리 하에 동일 종 완벽 합산 집계 및 정렬 표출
                         st.markdown(f"##### 📊 종별 채집량 분포 (자동 합산 및 정렬)")
                         sum_df = spot_data_clean.groupby("종")[val_col].sum().reset_index()
                         sum_df = sum_df.sort_values(by=val_col, ascending=True)
