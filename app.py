@@ -316,7 +316,7 @@ selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)"]
-selected_tab = st.radio("📡 감시사업 카테고리 선택", tabs, horizontal=True)
+selected_tab = st.radio("📡 감시사업 카시테고리 선택", tabs, horizontal=True)
 st.session_state.current_tab = selected_tab
 
 st.markdown("---")
@@ -591,9 +591,10 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어 (💡 참진드기 권역 인제군·화천군 2대 마스터 탭 전면 결합 수리)
+# 3. 기후변화 대응 매개체 감시 레이어 (💡 주차 필터링 전격 소거 및 월 단위 전수 자동 합산 커널 빌드)
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
-    st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
+    # 💡 세세한 부분 수정: 기후변화 대응 카테고리는 주차 표시를 지우고 순수 월간 결과로 시각화
+    st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} 월간 통합 결과]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     
     c_up3, c_dl3 = st.columns([8, 4])
@@ -654,21 +655,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         if "지역2" in df_zone.columns:
             df_zone["지역2"] = df_zone["지역2"].astype(str).str.replace(r'[\r\n\t]', '', regex=True).str.strip()
 
-        if "주차" in df_zone.columns:
-            df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
-            def assign_survey_week(row):
-                try:
-                    p = int(float(row['주차']))
-                    if p in [16, 17, 19, 21, 36, 41]: return "1주"
-                    if p in [20, 22, 42]: return "2주"
-                    if p in [23, 38, 43, 44, 49]: return "3주"
-                    if p in [24, 39, 45, 46, 47, 48, 50, 51]: return "4주"
-                except: pass
-                return "1주"
-            df_zone["조사주"] = df_zone.apply(assign_survey_week, axis=1)
-        else:
-            df_zone["조사주"] = "1주"
-
         h_coords = {
             "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
             "삼천동": [37.8735, 127.7084], "퇴계동주민센터": [37.8621, 127.7290],
@@ -686,12 +672,10 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             master_spots_list = ["춘천시보건소", "백로서식지", "주택", "종가오리", "삼천동", "퇴계동주민센터"]
         elif selected_zone == "참진드기 권역":
             df_zone["종"] = df_zone["종"].astype(str).str.strip().replace({"기타": "Larva"})
-            # 💡 [요청 사항 전면 구현] 세부 지점(환경) 구분을 지우고 오직 시군 단위인 '화천군', '인제군'으로만 묶도록 매핑 키 단일화
             def normalize_tick_spot(row):
                 loc = str(row["지역2"])
                 cleaned_loc = "화천군" if "화천" in loc else ("인제군" if "인제" in loc else loc)
                 return cleaned_loc
-                
             df_zone["지역2_정규화"] = df_zone.apply(normalize_tick_spot, axis=1)
             master_spots_list = ["화천군", "인제군"]
         elif selected_zone == "털진드기 분포감시":
@@ -715,16 +699,15 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         df_zone["위도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[0])
         df_zone["경도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[1])
 
+        # 💡 [주차 필터 원천 제외] 오직 선택된 연도와 월 조건만 추출하여 한 달 치 주차 전수 합산 기반 마련
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
-        if selected_week != "전체":
-            m_data = m_data[m_data["조사주"] == selected_week]
 
         val_col = "개체수" if "개체수" in df_zone.columns else "채집수"
         
         with c_dl3:
             st.markdown("<br>", unsafe_allow_html=True)
             if not m_data.empty:
-                st.download_button(f"📥 필터 [{selected_zone}] 데이터 원본 추출 (.csv)", convert_df_to_csv(m_data), f"{selected_zone}_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
+                st.download_button(f"📥 필터 [{selected_zone}] 월간 대장 추출 (.csv)", convert_df_to_csv(m_data), f"{selected_zone}_월간통합_{selected_year}_{selected_month}.csv", "text/csv")
 
         cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in master_spots_list])
         for idx, spot_name in enumerate(master_spots_list):
@@ -740,8 +723,8 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         folium.Marker([float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='green', icon='info-sign')).add_to(m_cli)
                         st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
                     with c2:
-                        # 💡 [요청 사항 반영 완료] 화천군 / 인제군 내의 모든 하위 지점 데이터를 종명 기준으로 통틀어 합산 정렬 표출!
-                        st.markdown(f"##### 📊 종별 채집량 분포 (자동 합산 및 정렬)")
+                        # 💡 [월간 전수 합산] 한 달 치의 쪼개진 행들이 종(Species)명 기준으로 누적 합산 및 정렬 연동 표출
+                        st.markdown(f"##### 📊 월간 종별 채집밀도 총합 (합산 및 정렬)")
                         sum_df = spot_data_clean.groupby("종")[val_col].sum().reset_index()
                         sum_df = sum_df.sort_values(by=val_col, ascending=True)
                         
@@ -753,11 +736,12 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         st.pyplot(fig)
                         plt.close()
                     
-                    spot_data_grouped = spot_data_clean.groupby(["조사주", "지역2_정규화", "환경", "종"], as_index=False)[val_col].sum()
-                    spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
-                    st.dataframe(spot_data_grouped[["조사주", "지역2_정규화", "환경", "종", val_col]].rename(columns={"조사주": "조사주차", "지역2_정규화": "조사지역"}), hide_index=True, use_container_width=True)
+                    # 💡 하단 대장 표출 부문에서도 주차 차수를 지우고 월 단위로 병합 요약 정형화
+                    spot_data_grouped = spot_data_clean.groupby(["조사월", "지역2_정규화", "환경", "종"], as_index=False)[val_col].sum()
+                    spot_data_grouped = spot_data_grouped.sort_values(by=[val_col], ascending=False)
+                    st.dataframe(spot_data_grouped[["조사월", "지역2_정규화", "환경", "종", val_col]].rename(columns={"조사월": "조사월", "지역2_정규화": "조사지역"}), hide_index=True, use_container_width=True)
                 else:
-                    st.info(f"💡 선택하신 기간 {selected_year} {selected_month} {selected_week}에 [{spot_name}] 관할 하에 채집된 매개체가 없거나 대장 기록이 비어있습니다. (0개체 표출)")
+                    st.info(f"💡 선택하신 {selected_year} {selected_month}에 [{spot_name}] 관할 데이터가 없거나 대장 기록이 비어있습니다. (월간 통합 0개체)")
     else: 
         st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
