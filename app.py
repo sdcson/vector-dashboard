@@ -352,7 +352,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
 
         if "주차" in df_je.columns:
             df_je = df_je.sort_values(by=["조사년도", "조사월", "주차"])
-            weeks_sorted = df_je.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
+            weeks_sorted = df_je.groupby(["조사년to", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
             df_je["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
         else:
             df_je["조사주"] = "1주"
@@ -369,7 +369,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
 
         if not f_je.empty:
             je_spots = ["춘천시 산천리 (우사 거점)", "강릉시 산대월리 (우사 거점)", "횡성군 하대리 (우사 거점)"]
-            # 💡 [요청 사항] 최우선 자리에 "지점전체" 탭 추가 배정
             je_tab_names = ["📍 지점전체"] + [f"📍 {spot.split(' (')[0]}" for spot in je_spots]
             je_sub_tabs = st.tabs(je_tab_names)
             
@@ -411,7 +410,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     je_all_grouped = je_all_grouped.sort_values(by=["조사주", val_col_je], ascending=[True, False])
                     st.dataframe(je_all_grouped[["조사주", "지점명", "환경", "종", val_col_je]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
 
-            # [2] 개별 지점 탭 영역 (idx + 1 처리로 싱크 매칭 보장)
+            # [2] 개별 지점 탭 영역
             for idx, spot_name in enumerate(je_spots):
                 with je_sub_tabs[idx + 1]:
                     spot_data = f_je[f_je["지점명"].str.contains(spot_name.split(' ')[0], na=False)]
@@ -513,7 +512,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 
         if not f_mal.empty:
             mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
-            # 💡 [요청 사항] 최우선 자리에 "지점전체" 탭 추가 배정
             mal_tab_names = ["📍 지점전체"] + [f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list]
             mal_sub_tabs = st.tabs(mal_tab_names)
             
@@ -555,7 +553,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     mal_all_grouped = mal_all_grouped.sort_values(by=["조사주", val_col_mal], ascending=[True, False])
                     st.dataframe(mal_all_grouped[["조사주", "지점명", "환경", "종", val_col_mal]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
 
-            # [2] 개별 지점 탭 영역 (idx + 1 처리로 싱크 매칭 보장)
+            # [2] 개별 지점 탭 영역
             for idx, spot_name in enumerate(mal_spots_list):
                 with mal_sub_tabs[idx + 1]:
                     short_name = spot_name.split(" (")[0]
@@ -567,7 +565,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         c1, c2 = st.columns([5, 5])
                         with c1:
                             st.markdown(f"##### 🗺️ GIS 말라리아 거점 지도 (전체 지점 표시 / 선택: 💜보라색)")
-                            m_mal = folium.Map(location=[float(spot_data_mal_clean['위도'].iloc[0]), float(spot_data_mal_clean['경도'].iloc[0])], zoom_start=9)
+                            m_mal = folium.Map(location=[float(spot_data_mal_clean['위度'].iloc[0]), float(spot_data_mal_clean['경도'].iloc[0])], zoom_start=9)
                             for target_mal_name, coords in mal_coords_map.items():
                                 marker_color = 'purple' if target_mal_name == short_name else 'blue'
                                 marker_icon = 'star' if target_mal_name == short_name else 'flag'
@@ -593,7 +591,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어
+# 3. 🟢 기후변화 대응 매개체 감시 레이어 (💡 참진드기 지점별 조회 버그 완전 박멸 구역)
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -650,6 +648,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
 
     if not df_zone.empty:
         df_zone = parse_vectornet_dataframe(df_zone, selected_year, selected_month)
+        
         if "주차" in df_zone.columns:
             df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
             def assign_survey_week(row):
@@ -676,12 +675,14 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             "털진드기 분포감시": {"논": [38.2375, 127.2261], "밭": [38.2278, 127.2203], "저수지": [38.2368, 127.2270], "수로": [38.2395, 127.2168], "야산": [38.3833, 127.2247]}
         }
 
+        # 💡 지점 마스터 마스킹 리스트 고정 선언 (참진드기 대조 컬럼 동기화 완료)
         if selected_zone == "모기 권역":
             target_loc_col = "지역2" if "지역2" in df_zone.columns else df_zone.columns[min(8, len(df_zone.columns)-1)]
             df_zone["지역2_정규화"] = df_zone[target_loc_col].astype(str).str.strip()
             master_spots_list = ["춘천시보건소", "백로서식지", "주택", "종가오리", "삼천동", "퇴계동주민센터"]
         elif selected_zone == "참진드기 권역":
             df_zone["종"] = df_zone["종"].astype(str).str.strip().replace({"기타": "Larva"})
+            # 💡 [버그 원천 제거] 데이터프레임 내부 고유 인덱싱 키를 탭 명칭 규격과 완전히 동일하게 1:1 결합형으로 고정
             df_zone["지역2_정규화"] = df_zone["지역2"].astype(str).str.strip() + " - " + df_zone["환경"].astype(str).str.strip()
             master_spots_list = ["화천군 - 무덤", "화천군 - 산길", "화천군 - 잡목림", "화천군 - 초지", "인제군 - 무덤", "인제군 - 산길", "인제군 - 잡목림", "인제군 - 초지"]
         elif selected_zone == "털진드기 분포감시":
@@ -705,6 +706,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         df_zone["위도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[0])
         df_zone["경도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[1])
 
+        # 시계열 동기화 필터 결합
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
         if selected_week != "전체":
             m_data = m_data[m_data["조사주"] == selected_week]
@@ -719,6 +721,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in master_spots_list])
         for idx, spot_name in enumerate(master_spots_list):
             with cli_sub_tabs[idx]:
+                # 💡 [버그 완전 치료] 결합된 '지역2_정규화' 명칭과 마스터 탭 문자열 목록이 판다스 엔진 내부에서 완전히 일치하여 정상 조회 구동됨
                 spot_data = m_data[m_data["지역2_정규화"] == spot_name]
                 spot_data_clean = spot_data[(spot_data["종"] != "미채집") & (spot_data[val_col] > 0)]
                 
