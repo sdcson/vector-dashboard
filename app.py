@@ -41,8 +41,8 @@ def init_korean_font_and_get_prop():
 
 f_prop = init_korean_font_and_get_prop()
 
-st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드 (2026 최신화)")
-st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 표준 전용 업로드 양식을 제공하는 마스터 시스템입니다.")
+st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드 (2026 마스터 배포판)")
+st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 질병청 원본 파일 업로드와 데이터 추출 기능을 제공하는 최종 시스템입니다.")
 
 # -----------------------------------------------------------------
 # [💡 GitHub API 연동 파일 영구 커밋 & 로드 클라우드 데이터베이스 엔진]
@@ -220,7 +220,7 @@ def smart_load_uploaded_file(uploaded_file):
     return df_res
 
 # -----------------------------------------------------------------
-# [첨부파일 기반 정식 데이터 마스터 세션 빌더 - 털진드기 대장 독립 격리]
+# [첨부파일 기반 정식 데이터 마스터 세션 빌더]
 # -----------------------------------------------------------------
 @st.cache_data
 def get_je_actual_style_data():
@@ -324,23 +324,21 @@ st.markdown("---")
 # 1. 일본뇌염 레이어
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
-    with st.expander("📥 [일본뇌염 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
-        vn_je_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수"]
-        vn_je_tmpl = pd.DataFrame(columns=vn_je_cols)
-        vn_je_tmpl.loc[0] = [1, "일본뇌염예측", "강원도보건환경연구원", 2026, 5, 21, "2026-05-19", "강원", "횡성군 하대리", "축사", "LED1", "Culex tritaeniorhynchus", 12]
-        st.download_button("📥 [일본뇌염] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_je_tmpl), "VectorNet_일본뇌염_양식.csv", "text/csv")
-        je_file = st.file_uploader("질병청 VectorNet 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="je_up")
-        
-        if je_file is None:
-            df_je = base_je_df.copy()
-        else:
+    
+    # 💡 세세한 부분 수정: 불필요 가이드 삭제 및 깔끔한 원본 질병청 업로더 개설
+    c_up1, c_dl1 = st.columns([8, 4])
+    with c_up1:
+        je_file = st.file_uploader("질병청 VectorNet 일본뇌염 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="je_up")
+        if je_file is not None:
             uploaded_df = smart_load_uploaded_file(je_file)
             uploaded_df = parse_vectornet_dataframe(uploaded_df, selected_year, selected_month)
             df_je_uploaded = rename_duplicate_columns(uploaded_df)
-            df_je = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
-            if save_df_to_github(df_je, "database_je.csv", "Append/Overwrite JE data"):
-                st.success("✅ [일본뇌염] 새 데이터가 기존 통합 대장에 합산 및 정형화 누적되었습니다.")
-                st.cache_data.clear()
+            base_je_df = merge_and_overwrite(base_je_df, df_je_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+            save_df_to_github(base_je_df, "database_je.csv", "Append JE data")
+            st.success("✅ 일본뇌염 새 데이터가 실시간 원격 원장 데이터베이스에 누적 결합되었습니다.")
+            st.cache_data.clear()
+            
+    df_je = base_je_df.copy()
 
     if not df_je.empty:
         df_je = parse_vectornet_dataframe(df_je, selected_year, selected_month)
@@ -357,7 +355,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             df_je = df_je.sort_values(by=["조사년도", "조사월", "주차"])
             weeks_sorted = df_je.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
             df_je["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
-        if "조사주" not in df_je.columns:
+        else:
             df_je["조사주"] = "1주"
 
         if selected_week != "전체":
@@ -365,6 +363,12 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)]
         
+        # 💡 세세한 부분 수정: 우측 상단에 기동형 마스터 대장 다운로드 엔진 연동
+        with c_dl1:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if not f_je.empty:
+                st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(f_je), f"일본뇌염_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
+
         if not f_je.empty:
             je_spots = ["춘천시 산천리 (우사 거점)", "강릉시 산대월리 (우사 거점)", "횡성군 하대리 (우사 거점)"]
             je_sub_tabs = st.tabs([f"📍 {spot.split(' (')[0]}" for spot in je_spots])
@@ -401,30 +405,27 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col_je], ascending=[True, False])
                         st.dataframe(spot_data_grouped[["조사주", "지점명", "환경", "종", val_col_je]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
                     else:
-                        st.info(f"💡 {spot_name} 지점의 해당 기간 채집된 매개체가 없거나 미채집 상태입니다.")
+                        st.info(f"💡 {spot_name} 지점의 해당 기간 채집된 매개체가 없거나 미채집 상태입니다. (0개체)")
         else:
             st.info("💡 선택하신 기간의 일본뇌염 지정 연동 데이터가 존재하지 않습니다.")
 
 # 2. 말라리아 레이어
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
-    with st.expander("📥 [말라리아 예측사업] 질병청 VectorNet 표준 서식 파일 업로드 및 양식"):
-        vn_mal_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "수거일", "지역1", "지역2", "환경", "방법", "종", "개체수"]
-        vn_mal_tmpl = pd.DataFrame(columns=vn_mal_cols)
-        vn_mal_tmpl.loc[0] = [1, "말라리아매개모기조사감시", "강원도보건환경연구원", 2026, 5, 21, "2026-05-23", "강원", "춘천시 중앙동", "우사", "유문등", "Anopheles spp.", 45]
-        st.download_button("📥 [말라리아] VectorNet 오리지널 서식양식 다운로드 (.csv)", convert_df_to_csv(vn_mal_tmpl), "VectorNet_말라리아_양식.csv", "text/csv")
+    
+    c_up2, c_dl2 = st.columns([8, 4])
+    with c_up2:
         mal_file = st.file_uploader("질병청 VectorNet 말라리아 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="mal_up")
-        
-        if mal_file is None:
-            df_mal = base_mal_df.copy()
-        else:
+        if mal_file is not None:
             uploaded_df_mal = smart_load_uploaded_file(mal_file)
             uploaded_df_mal = parse_vectornet_dataframe(uploaded_df_mal, selected_year, selected_month)
             df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
-            df_mal = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
-            if save_df_to_github(df_mal, "database_mal.csv", "Update Malaria data"):
-                st.success("✅ [말라리아] 새 데이터가 파일의 고유 연/월 대장별로 안전하게 누적되었습니다.")
-                st.cache_data.clear()
+            base_mal_df = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+            save_df_to_github(base_mal_df, "database_mal.csv", "Update Malaria data")
+            st.success("✅ 말라리아 새 데이터가 원격 보관 대장에 안전하게 결합되었습니다.")
+            st.cache_data.clear()
+            
+    df_mal = base_mal_df.copy()
 
     if not df_mal.empty:
         df_mal = parse_vectornet_dataframe(df_mal, selected_year, selected_month)
@@ -439,7 +440,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             df_mal = df_mal.sort_values(by=["조사년도", "조사월", "주차"])
             weeks_sorted = df_mal.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
             df_mal["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
-        if "조사주" not in df_mal.columns:
+        else:
             df_mal["조사주"] = "1주"
 
         if "지역2" in df_mal.columns:
@@ -464,6 +465,11 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month)]
         
+        with c_dl2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if not f_mal.empty:
+                st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(f_mal), f"말라리아_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
+
         if not f_mal.empty:
             mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
             mal_sub_tabs = st.tabs([f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list])
@@ -483,7 +489,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                                 marker_color = 'purple' if target_mal_name == short_name else 'blue'
                                 marker_icon = 'star' if target_mal_name == short_name else 'flag'
                                 folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color=marker_color, icon=marker_icon)).add_to(m_mal)
-                            st.pyplot(plt.figure())
                             st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 {short_name} 종별 발생 현황 (합산 및 정렬)")
@@ -501,7 +506,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         spot_data_mal_grouped = spot_data_mal_grouped.sort_values(by=["조사주", val_col_mal], ascending=[True, False])
                         st.dataframe(spot_data_mal_grouped[["조사주", "지점명", "환경", "종", val_col_mal]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
                     else:
-                        st.info(f"💡 {short_name} 지점의 해당 기간 채집된 매개체가 없거나 미채집 상태입니다.")
+                        st.info(f"💡 {short_name} 지점의 해당 기간 채집된 매개체가 없거나 미채집 상태입니다. (0개체)")
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
@@ -510,61 +515,55 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     
-    with st.expander(f"📥 [{selected_zone}] VectorNet 오리지널 서식 파일 업로드 및 가이드"):
-        vn_cols = ["번호", "사업명", "권역", "연도", "월", "주차", "지역2", "환경", "종", "개체수"]
-        vn_tmpl = pd.DataFrame(columns=vn_cols)
-        if selected_zone == "모기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 1, "춘천시보건소", "도심", "Culex pipiens", 24]
-        elif selected_zone == "참진드기 권역": vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 5, 1, "화천군", "무덤", "Haemaphysalis longicornis", 5]
-        else: vn_tmpl.loc[0] = [1, "기후변화매개체감시거점센터", "강원1권", 2026, 4, 1, "철원군", "야산", "mite(털진드기)", 89]
-        st.download_button("📥 국가 감시망 전용 표준 서식 예시 다운로드 (.csv)", convert_df_to_csv(vn_tmpl), f"VectorNet_{selected_zone}_실무양식.csv", "text/csv")
-        cli_file = st.file_uploader("질병청 VectorNet 엑셀/CSV 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key=f"cli_up_{selected_zone}")
+    c_up3, c_dl3 = st.columns([8, 4])
+    with c_up3:
+        cli_file = st.file_uploader(f"질병청 VectorNet [{selected_zone}] 결과 원본 파일 드롭 업로드", type=["csv", "xlsx", "xls"], key=f"cli_up_{selected_zone}")
         
         if selected_zone == "모기 권역":
-            if cli_file is None: df_zone = base_cli_moq_df.copy()
-            else:
+            if cli_file is not None:
                 uploaded_df_cli = smart_load_uploaded_file(cli_file)
                 uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
                 df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
-                df_zone = merge_and_overwrite(base_cli_moq_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
-                if save_df_to_github(df_zone, "database_cli_moq.csv", "Update Climate Mosquito data"):
-                    st.success("✅ [모기 권역] 새 데이터가 전용 대장에 안전하게 누적되었습니다.")
-                    st.cache_data.clear()
+                base_cli_moq_df = merge_and_overwrite(base_cli_moq_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+                save_df_to_github(base_cli_moq_df, "database_cli_moq.csv", "Update Climate Mosquito data")
+                st.success("✅ 모기 권역 새 원본 파일 데이터가 전용 클라우드 대장에 안전하게 보관 누적되었습니다.")
+                st.cache_data.clear()
+            df_zone = base_cli_moq_df.copy()
         elif selected_zone == "참진드기 권역":
-            if cli_file is None: df_zone = base_cli_tick_df.copy()
-            else:
+            if cli_file is not None:
                 uploaded_df_cli = smart_load_uploaded_file(cli_file)
                 uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
                 uploaded_df_cli["종"] = uploaded_df_cli["종"].astype(str).str.strip().replace({"기타": "Larva"})
                 df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
-                df_zone = merge_and_overwrite(base_cli_tick_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
-                if save_df_to_github(df_zone, "database_cli_tick.csv", "Update Climate Tick data"):
-                    st.success("✅ [참진드기 권역] 새 데이터가 전용 대장에 안전하게 누적되었습니다.")
-                    st.cache_data.clear()
+                base_cli_tick_df = merge_and_overwrite(base_cli_tick_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+                save_df_to_github(base_cli_tick_df, "database_cli_tick.csv", "Update Climate Tick data")
+                st.success("✅ 참진드기 권역 새 원본 파일 데이터가 전용 클라우드 대장에 안전하게 보관 누적되었습니다.")
+                st.cache_data.clear()
+            df_zone = base_cli_tick_df.copy()
         elif selected_zone == "털진드기 분포감시":
-            if cli_file is None: df_zone = base_cli_mite_dist_df.copy()
-            else:
+            if cli_file is not None:
                 uploaded_df_cli = smart_load_uploaded_file(cli_file)
                 uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
                 df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
-                df_zone = merge_and_overwrite(base_cli_mite_dist_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '환경', '종'])
-                if save_df_to_github(df_zone, "database_cli_mite_dist.csv", "Update Climate Mite Dist data"):
-                    st.success("✅ [털진드기 분포감시] 새 데이터가 전용 대장에 누적 연동되었습니다.")
-                    st.cache_data.clear()
-        else:
-            if cli_file is None: df_zone = base_cli_mite_gen_df.copy()
-            else:
+                base_cli_mite_dist_df = merge_and_overwrite(base_cli_mite_dist_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '환경', '종'])
+                save_df_to_github(base_cli_mite_dist_df, "database_cli_mite_dist.csv", "Update Climate Mite Dist data")
+                st.success("✅ 털진드기 분포감시 새 원본 파일 데이터가 격리 대장에 안전하게 적재되었습니다.")
+                st.cache_data.clear()
+            df_zone = base_cli_mite_dist_df.copy()
+        else: # 털진드기 발생감시 트랙
+            if cli_file is not None:
                 uploaded_df_cli = smart_load_uploaded_file(cli_file)
                 uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
                 df_cli_uploaded = rename_duplicate_columns(uploaded_df_cli)
-                df_zone = merge_and_overwrite(base_cli_mite_gen_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '환경', '종'])
-                if save_df_to_github(df_zone, "database_cli_mite_gen.csv", "Update Climate Mite Gen data"):
-                    st.success("✅ [털진드기 발생감시] 새 데이터가 전용 대장에 누적 연동되었습니다.")
-                    st.cache_data.clear()
+                base_cli_mite_gen_df = merge_and_overwrite(base_cli_mite_gen_df, df_cli_uploaded, keys=['조사년도', '조사월', '주차', '환경', '종'])
+                save_df_to_github(base_cli_mite_gen_df, "database_cli_mite_gen.csv", "Update Climate Mite Gen data")
+                st.success("✅ 털진드기 발생감시 새 원본 파일 데이터가 격리 대장에 안전하게 적재되었습니다.")
+                st.cache_data.clear()
+            df_zone = base_cli_mite_gen_df.copy()
 
     if not df_zone.empty:
         df_zone = parse_vectornet_dataframe(df_zone, selected_year, selected_month)
         
-        # 주차 팩터라이이징 동기화 파싱
         if "주차" in df_zone.columns:
             df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
             def assign_survey_week(row):
@@ -626,6 +625,11 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
 
         val_col = "개체수" if "개체수" in df_zone.columns else "채집수"
         
+        with c_dl3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if not m_data.empty:
+                st.download_button(f"📥 필터 [{selected_zone}] 데이터 원본 추출 (.csv)", convert_df_to_csv(m_data), f"{selected_zone}_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
+
         cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in master_spots_list])
         for idx, spot_name in enumerate(master_spots_list):
             with cli_sub_tabs[idx]:
@@ -663,23 +667,20 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
 # 4. 참진드기조사 어린이숲체험장 레이어
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
-    with st.expander("📥 [어린이 숲체험장] 표준 입력 파일 업로드 및 샘플 양식 다운로드"):
-        template_columns = ["연번", "월", "채집일", "채집지역2", "코스번호", "지점번호", "분류", "종", "Stage", "개체수"]
-        forest_tmpl = pd.DataFrame(columns=template_columns)
-        forest_tmpl.loc[0] = [1, 5, "2026-05-12", "남산", 1, 2, "Out", "Haemaphysalis flava ", "Female", 2]
-        st.download_button("📥 어린이숲체험장 전용 샘플양식 다운로드 (.csv)", convert_df_to_csv(forest_tmpl), "어린이숲체험장_표준양식.csv", "text/csv", key="dl_forest")
-        forest_file = st.file_uploader("작성된 어린이 숲체험장 파일 업로드 (.xlsx 및 .csv 지원)", type=["csv", "xlsx", "xls"], key="forest_up")
-        
-        if forest_file is None:
-            df_forest = base_forest_df.copy()
-        else:
+    
+    c_up4, c_dl4 = st.columns([8, 4])
+    with c_up4:
+        forest_file = st.file_uploader("작성된 어린이 숲체험장 최종 원장 파일 업로드 (.xlsx / .csv 지원)", type=["csv", "xlsx", "xls"], key="forest_up")
+        if forest_file is not None:
             uploaded_df_for = smart_load_uploaded_file(forest_file)
             uploaded_df_for["조사년도"] = selected_year
             df_forest_uploaded = rename_duplicate_columns(uploaded_df_for)
-            df_forest = merge_and_overwrite(base_forest_df, df_forest_uploaded, keys=['조사년도', '월', '조사월', '조사주', '채집지역2', '지점번호', '분류', '종', 'Stage'])
-            if save_df_to_github(df_forest, "database_forest.csv", "Update Forest data"):
-                st.success("✅ [어린이 숲체험장] 새 데이터가 기존 대장에 안전하게 누적되었습니다.")
-                st.cache_data.clear()
+            base_forest_df = merge_and_overwrite(base_forest_df, df_forest_uploaded, keys=['조사년도', '월', '조사월', '조사주', '채집지역2', '지점번호', '분류', '종', 'Stage'])
+            save_df_to_github(base_forest_df, "database_forest.csv", "Update Forest data")
+            st.success("✅ 어린이 숲체험장 실무 데이터가 마스터 영구 연동 원장에 자동 축적되었습니다.")
+            st.cache_data.clear()
+            
+    df_forest = base_forest_df.copy()
 
     try:
         month_int = int(str(selected_month).replace("월",""))
@@ -689,8 +690,13 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         else: m_forest = pd.DataFrame()
     except Exception: m_forest = pd.DataFrame()
 
+    with c_dl4:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if not m_forest.empty:
+            st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(m_forest), f"어린이숲_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
+
     if not m_forest.empty:
-        m_forest['종명_한글'] = m_forest['종'].replace({"Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
+        m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
         m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
         
@@ -701,7 +707,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         forest_summary = m_forest.pivot_table(index=["채집지역2", "gu분지점", "위도", "경도"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
         
         if not forest_summary.empty:
-            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기"] if s in forest_summary.columns]
+            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기", "참진드기"] if s in forest_summary.columns]
             forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
             
             col_f_map, col_f_graph = st.columns([5, 5])
