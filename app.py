@@ -316,7 +316,7 @@ selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)"]
-selected_tab = st.radio("📡 감시사업 카시테고리 선택", tabs, horizontal=True)
+selected_tab = st.radio("📡 감시사업 카테고리 선택", tabs, horizontal=True)
 st.session_state.current_tab = selected_tab
 
 st.markdown("---")
@@ -511,7 +511,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                 st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(f_mal), f"말라리아_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
 
         if not f_mal.empty:
-            mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
+            mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "춘천시 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
             mal_tab_names = ["📍 지점전체"] + [f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list]
             mal_sub_tabs = st.tabs(mal_tab_names)
             
@@ -593,7 +593,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 
 # 3. 기후변화 대응 매개체 감시 레이어 (💡 주차 필터링 전격 소거 및 월 단위 전수 자동 합산 커널 빌드)
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
-    # 💡 세세한 부분 수정: 기후변화 대응 카테고리는 주차 표시를 지우고 순수 월간 결과로 시각화
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} 월간 통합 결과]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     
@@ -699,7 +698,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         df_zone["위도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[0])
         df_zone["경도"] = df_zone["지역2_정규화"].apply(lambda x: resolve_coords(x, selected_zone)[1])
 
-        # 💡 [주차 필터 원천 제외] 오직 선택된 연도와 월 조건만 추출하여 한 달 치 주차 전수 합산 기반 마련
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
 
         val_col = "개체수" if "개체수" in df_zone.columns else "채집수"
@@ -709,42 +707,120 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             if not m_data.empty:
                 st.download_button(f"📥 필터 [{selected_zone}] 월간 대장 추출 (.csv)", convert_df_to_csv(m_data), f"{selected_zone}_월간통합_{selected_year}_{selected_month}.csv", "text/csv")
 
-        cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in master_spots_list])
-        for idx, spot_name in enumerate(master_spots_list):
-            with cli_sub_tabs[idx]:
-                spot_data = m_data[m_data["지역2_정규화"] == spot_name]
-                spot_data_clean = spot_data[(spot_data["종"] != "미채집") & (spot_data[val_col] > 0)]
-                
-                if not spot_data_clean.empty:
-                    c1, c2 = st.columns([5, 5])
-                    with c1:
-                        st.markdown(f"##### 🗺️ GIS 감시 지점 지도 (결과보고서 규격)")
-                        m_cli = folium.Map(location=[float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], zoom_start=11)
-                        folium.Marker([float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='green', icon='info-sign')).add_to(m_cli)
-                        st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
-                    with c2:
-                        # 💡 [월간 전수 합산] 한 달 치의 쪼개진 행들이 종(Species)명 기준으로 누적 합산 및 정렬 연동 표출
-                        st.markdown(f"##### 📊 월간 종별 채집밀도 총합 (합산 및 정렬)")
-                        sum_df = spot_data_clean.groupby("종")[val_col].sum().reset_index()
-                        sum_df = sum_df.sort_values(by=val_col, ascending=True)
+        # 💡 [구조 개편] 모기/참진드기 권역에 "📍 지점전체" 최우선 통합 탭 및 교차 비교 차트 시스템 주입
+        if selected_zone in ["모기 권역", "참진드기 권역"]:
+            cli_tab_names = ["📍 지점전체"] + [f"📍 {spot}" for spot in master_spots_list]
+            cli_sub_tabs = st.tabs(cli_tab_names)
+            
+            # [1] 지점전체 탭 내용 (모든 지점 지도 마커 및 지점별 같은 종 합산 비교 차트)
+            with cli_sub_tabs[0]:
+                c1, c2 = st.columns([5, 5])
+                with c1:
+                    st.markdown("##### 🗺️ GIS 감시 지점 지도 (전체 지점 표시)")
+                    center_lat = 37.88 if selected_zone == "모기 권역" else 38.08
+                    center_lng = 127.75 if selected_zone == "모기 권역" else 127.95
+                    m_cli_all = folium.Map(location=[center_lat, center_lng], zoom_start=11 if selected_zone == "모기 권역" else 9)
+                    
+                    for spot in master_spots_list:
+                        lat_s, lng_s = resolve_coords(spot, selected_zone)
+                        folium.Marker([lat_s, lng_s], tooltip=spot, icon=folium.Icon(color='green', icon='info-sign')).add_to(m_cli_all)
+                    st_folium(m_cli_all, key=f"map_cli_all_{selected_zone}_{selected_year}_{selected_month}", width="100%", height=380)
+                with c2:
+                    if selected_zone == "모기 권역":
+                        st.markdown("##### 📊 각 지점별 모기 종별 채집량 비교 (지점별 누적 합산)")
+                    else:
+                        st.markdown("##### 📊 화천군 vs 인제군 참진드기 종별 채집량 비교")
                         
+                    all_spot_data = m_data[m_data["지역2_정규화"].isin(master_spots_list)]
+                    all_spot_clean = all_spot_data[(all_spot_data["종"] != "미채집") & (all_spot_data[val_col] > 0)]
+                    
+                    if not all_spot_clean.empty:
+                        pivot_df = all_spot_clean.pivot_table(index='종', columns='지역2_정규화', values=val_col, aggfunc='sum').fillna(0)
                         fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                        bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
-                        for bar in bars:
-                            width = bar.get_width()
-                            if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
+                        # 모기는 지점간 누적(stacked=True), 참진드기는 시군간 개별 대비(stacked=False)
+                        is_stacked = True if selected_zone == "모기 권역" else False
+                        pivot_df.plot(kind='barh', stacked=is_stacked, ax=plt_ax, edgecolor='#2b2d42')
+                        plt.legend(title="조사지점", fontsize=8, title_fontsize=9)
+                        plt.tight_layout()
                         st.pyplot(fig)
                         plt.close()
-                    
-                    # 💡 하단 대장 표출 부문에서도 주차 차수를 지우고 월 단위로 병합 요약 정형화
-                    spot_data_grouped = spot_data_clean.groupby(["조사월", "지역2_정규화", "환경", "종"], as_index=False)[val_col].sum()
-                    spot_data_grouped = spot_data_grouped.sort_values(by=[val_col], ascending=False)
-                    st.dataframe(spot_data_grouped[["조사월", "지역2_정규화", "환경", "종", val_col]].rename(columns={"조사월": "조사월", "지역2_정규화": "조사지역"}), hide_index=True, use_container_width=True)
-                else:
-                    st.info(f"💡 선택하신 {selected_year} {selected_month}에 [{spot_name}] 관할 데이터가 없거나 대장 기록이 비어있습니다. (월간 통합 0개체)")
-    else: 
-        st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
+                    else:
+                        st.info("💡 선택하신 기간에 합산 표출할 매개체 채집 데이터가 존재하지 않습니다.")
+                        
+                all_spot_data_clean = m_data[m_data["지역2_정규화"].isin(master_spots_list) & (m_data["종"] != "미채집") & (m_data[val_col] > 0)]
+                if not all_spot_data_clean.empty:
+                    env_col = "환경" if "환경" in all_spot_data_clean.columns else "조사지"
+                    all_grouped = all_spot_data_clean.groupby(["조사월", "지역2_정규화", env_col, "종"], as_index=False)[val_col].sum()
+                    all_grouped = all_grouped.sort_values(by=[val_col], ascending=False)
+                    st.dataframe(all_grouped[["조사월", "지역2_정규화", env_col, "종", val_col]].rename(columns={"조사월": "조사월", "지역2_정규화": "조사지역"}), hide_index=True, use_container_width=True)
 
+            # [2] 개별 지점 전용 스페이스 (idx + 1 오프셋 싱크 처리)
+            for idx, spot_name in enumerate(master_spots_list):
+                with cli_sub_tabs[idx + 1]:
+                    spot_data = m_data[m_data["지역2_정규화"] == spot_name]
+                    spot_data_clean = spot_data[(spot_data["종"] != "미채집") & (spot_data[val_col] > 0)]
+                    
+                    if not spot_data_clean.empty:
+                        c1, c2 = st.columns([5, 5])
+                        with c1:
+                            st.markdown(f"##### 🗺️ GIS 감시 지점 지도 (결과보고서 규격)")
+                            m_cli = folium.Map(location=[float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], zoom_start=11)
+                            folium.Marker([float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='green', icon='info-sign')).add_to(m_cli)
+                            st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_zone}", width="100%", height=380)
+                        with c2:
+                            st.markdown(f"##### 📊 종별 채집량 분포 (자동 합산 및 정렬)")
+                            sum_df = spot_data_clean.groupby("종")[val_col].sum().reset_index()
+                            sum_df = sum_df.sort_values(by=val_col, ascending=True)
+                            
+                            fig, plt_ax = plt.subplots(figsize=(6, 5.2))
+                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
+                            for bar in bars:
+                                width = bar.get_width()
+                                if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
+                            st.pyplot(fig)
+                            plt.close()
+                        
+                        env_col = "환경" if "환경" in spot_data_clean.columns else "조사지"
+                        spot_data_grouped = spot_data_clean.groupby(["조사월", "지역2_정규화", env_col, "종"], as_index=False)[val_col].sum()
+                        spot_data_grouped = spot_data_grouped.sort_values(by=[val_col], ascending=False)
+                        st.dataframe(spot_data_grouped[["조사월", "지역2_정규화", env_col, "종", val_col]].rename(columns={"조사월": "조사월", "지역2_정규화": "조사지점"}), hide_index=True, use_container_width=True)
+                    else:
+                        st.info(f"💡 선택하신 {selected_year} {selected_month}에 [{spot_name}] 관할 지점의 매개체 데이터가 비어있습니다. (0개체)")
+        else:
+            # 털진드기 분포 및 발생 감시 탭 영역 (기존의 월 단위 통합 최적화 본 유지)
+            cli_sub_tabs = st.tabs([f"📍 {spot}" for spot in master_spots_list])
+            for idx, spot_name in enumerate(master_spots_list):
+                with cli_sub_tabs[idx]:
+                    spot_data = m_data[m_data["지역2_정규화"] == spot_name]
+                    spot_data_clean = spot_data[(spot_data["종"] != "미채집") & (spot_data[val_col] > 0)]
+                    
+                    if not spot_data_clean.empty:
+                        c1, c2 = st.columns([5, 5])
+                        with c1:
+                            st.markdown(f"##### 🗺️ GIS 감시 지점 지도 (결과보고서 규격)")
+                            m_cli = folium.Map(location=[float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], zoom_start=13)
+                            folium.Marker([float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='green', icon='info-sign')).add_to(m_cli)
+                            st_folium(m_cli, key=f"map_cli_spot_mite_{spot_name}_{selected_year}_{selected_month}_{selected_zone}", width="100%", height=380)
+                        with c2:
+                            st.markdown(f"##### 📊 종별 채집량 분포 (자동 합산 및 정렬)")
+                            sum_df = spot_data_clean.groupby("종")[val_col].sum().reset_index()
+                            sum_df = sum_df.sort_values(by=val_col, ascending=True)
+                            
+                            fig, plt_ax = plt.subplots(figsize=(6, 5.2))
+                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col].values, color='#2a9d8f', edgecolor='#2b2d42', height=0.7)
+                            for bar in bars:
+                                width = bar.get_width()
+                                if width > 0: plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}개체", va='center', ha='left', fontsize=8)
+                            st.pyplot(fig)
+                            plt.close()
+                        
+                        env_col = "환경" if "환경" in spot_data_clean.columns else "조사지"
+                        spot_data_grouped = spot_data_clean.groupby(["조사월", "지역2_정규화", env_col, "종"], as_index=False)[val_col].sum()
+                        spot_data_grouped = spot_data_grouped.sort_values(by=[val_col], ascending=False)
+                        st.dataframe(spot_data_grouped[["조사월", "지역2_정규화", env_col, "종", val_col]].rename(columns={"조사월": "조사월", "지역2_정규화": "조사지점"}), hide_index=True, use_container_width=True)
+                    else:
+                        st.info(f"💡 선택하신 {selected_year} {selected_month}에 [{spot_name}] 관할 지점의 매개체 데이터가 비어있습니다. (0개체)")
+                        
 # 4. 참진드기조사 어린이숲체험장 레이어
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
