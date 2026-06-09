@@ -512,7 +512,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                 st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(f_mal), f"말라리아_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
 
         if not f_mal.empty:
-            mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "철원군 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
+            mal_spots_list = ["춘천시 중앙동 (우사 거점)", "춘천시 지내리 (우사 거점)", "철원군 대마리 (우사 거점)", "춘천시 학사리 (우사 거점)", "화천군 (우사 거점)", "양구군 (우사 거점)", "인제군 (우사 거점)", "고성군 (우사 거점)"]
             mal_tab_names = ["📍 지점전체"] + [f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list]
             mal_sub_tabs = st.tabs(mal_tab_names)
             
@@ -568,9 +568,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             st.markdown(f"##### 🗺️ GIS 말라리아 거점 지도 (전체 지점 표시 / 선택: 💜보라색)")
                             m_mal = folium.Map(location=[float(spot_data_mal_clean['위도'].iloc[0]), float(spot_data_mal_clean['경도'].iloc[0])], zoom_start=9)
                             for target_mal_name, coords in mal_coords_map.items():
-                                marker_color = 'purple' if target_mal_name == short_name else 'blue'
-                                marker_icon = 'star' if target_mal_name == short_name else 'flag'
-                                folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color=marker_color, icon=marker_icon)).add_to(m_mal)
+                                folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color='purple' if target_mal_name == short_name else 'blue', icon='star' if target_mal_name == short_name else 'flag')).add_to(m_mal)
                             st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 {short_name} 종별 발생 현황 (합산 및 정렬)")
@@ -654,21 +652,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             df_zone["환경"] = df_zone["환경"].astype(str).str.replace(r'[\r\n\t]', '', regex=True).str.strip()
         if "지역2" in df_zone.columns:
             df_zone["지역2"] = df_zone["지역2"].astype(str).str.replace(r'[\r\n\t]', '', regex=True).str.strip()
-
-        if "주차" in df_zone.columns:
-            df_zone = df_zone.sort_values(by=["조사년도", "조사월", "주차"])
-            def assign_survey_week(row):
-                try:
-                    p = int(float(row['주차']))
-                    if p in [16, 17, 19, 21, 36, 41]: return "1주"
-                    if p in [20, 22, 42]: return "2주"
-                    if p in [23, 38, 43, 44, 49]: return "3주"
-                    if p in [24, 39, 45, 46, 47, 48, 50, 51]: return "4주"
-                except: pass
-                return "1주"
-            df_zone["조사주"] = df_zone.apply(assign_survey_week, axis=1)
-        else:
-            df_zone["조사주"] = "1주"
 
         h_coords = {
             "춘천시보건소": [37.8756, 127.7204], "백로서식지": [37.8805, 127.7713], "주택": [37.8811, 127.7711], "종가오리": [37.8822, 127.7730],
@@ -871,7 +854,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
         m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
         
-        # 💡 [검증 완료] NameError를 유발했던 base_forest 변수명을 base_forest_df로 철저하게 고정 완료
+        # 💡 년도별 조사 지점 완전 자동 유연 변환 파트
         if "2025" in selected_year:
             h_coords_forest = {"홍천": [37.7336, 127.8547], "정선": [37.4922, 128.9814]}
             map_center_forest = [37.61, 128.42]
@@ -904,10 +887,11 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 st_folium(m_f, key=f"map_forest_final_{selected_year}_{selected_month}", width="100%", height=430)
                 
             with col_f_graph:
-                st.markdown(f"##### 📊 구역별 채집 총합 비교 (연도별 지점 자동 매핑)")
+                st.markdown(f"##### 📊 {selected_year} {selected_month} 구역별 실시간 채집량 비교")
                 fig, ax = plt.subplots(figsize=(6, 5))
-                chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum")
-                chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black')
+                chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum").fillna(0)
+                chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black', width=0.6)
+                plt.xticks(rotation=0)
                 plt.tight_layout()
                 st.pyplot(fig)
                 plt.close()
