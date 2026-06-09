@@ -567,7 +567,9 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             st.markdown(f"##### 🗺️ GIS 말라리아 거점 지도 (전체 지점 표시 / 선택: 💜보라색)")
                             m_mal = folium.Map(location=[float(spot_data_mal_clean['위도'].iloc[0]), float(spot_data_mal_clean['경도'].iloc[0])], zoom_start=9)
                             for target_mal_name, coords in mal_coords_map.items():
-                                folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color='purple' if target_mal_name == short_name else 'blue', icon='star' if target_mal_name == short_name else 'flag')).add_to(m_mal)
+                                marker_color = 'purple' if target_mal_name == short_name else 'blue'
+                                marker_icon = 'star' if target_mal_name == short_name else 'flag'
+                                folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color=marker_color, icon=marker_icon)).add_to(m_mal)
                             st_folium(m_mal, key=f"map_mal_final_node_{idx}_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                         with c2:
                             st.markdown(f"##### 📊 {short_name} 종별 발생 현황 (합산 및 정렬)")
@@ -589,7 +591,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         else:
             st.info("💡 선택하신 기간의 말라리아 연동 데이터가 매칭되지 않습니다.")
 
-# 3. 기후변화 대응 매개체 감시 레이어 (💡 참진드기 미세 공백·행정구역 오타 방어 시스템 가동)
+# 3. 기후변화 대응 매개체 감시 레이어 (💡 참진드기 권역 인제군·화천군 2대 마스터 탭 전면 결합 수리)
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
@@ -647,7 +649,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     if not df_zone.empty:
         df_zone = parse_vectornet_dataframe(df_zone, selected_year, selected_month)
         
-        # 💡 [잡목림 줄바꿈 및 특수 공백 예외 처리 엔진 장착형 정제 파이프라인]
         if "환경" in df_zone.columns:
             df_zone["환경"] = df_zone["환경"].astype(str).str.replace(r'[\r\n\t]', '', regex=True).str.strip()
         if "지역2" in df_zone.columns:
@@ -685,17 +686,14 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             master_spots_list = ["춘천시보건소", "백로서식지", "주택", "종가오리", "삼천동", "퇴계동주민센터"]
         elif selected_zone == "참진드기 권역":
             df_zone["종"] = df_zone["종"].astype(str).str.strip().replace({"기타": "Larva"})
-            
-            # 💡 [정밀 수리 핵심 마스터 매퍼] 행정구역 오타 및 미세공백 오염 행을 원천 파괴하는 동적 매핑 연동
+            # 💡 [요청 사항 전면 구현] 세부 지점(환경) 구분을 지우고 오직 시군 단위인 '화천군', '인제군'으로만 묶도록 매핑 키 단일화
             def normalize_tick_spot(row):
                 loc = str(row["지역2"])
-                env = str(row["환경"])
-                # '화천' 문장 포함 시 화천군으로 통일, '인제' 포함 시 인제군으로 강제 변환 연동
                 cleaned_loc = "화천군" if "화천" in loc else ("인제군" if "인제" in loc else loc)
-                return f"{cleaned_loc} - {env}"
+                return cleaned_loc
                 
             df_zone["지역2_정규화"] = df_zone.apply(normalize_tick_spot, axis=1)
-            master_spots_list = ["화천군 - 무덤", "화천군 - 산길", "화천군 - 잡목림", "화천군 - 초지", "인제군 - 무덤", "인제군 - 산길", "인제군 - 잡목림", "인제군 - 초지"]
+            master_spots_list = ["화천군", "인제군"]
         elif selected_zone == "털진드기 분포감시":
             df_zone["지역2_정규화"] = df_zone["환경"].astype(str).str.strip()
             master_spots_list = ["논", "밭", "저수지", "수로", "야산"]
@@ -738,10 +736,11 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     c1, c2 = st.columns([5, 5])
                     with c1:
                         st.markdown(f"##### 🗺️ GIS 감시 지점 지도 (결과보고서 규격)")
-                        m_cli = folium.Map(location=[float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], zoom_start=13)
+                        m_cli = folium.Map(location=[float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], zoom_start=11)
                         folium.Marker([float(spot_data_clean['위도'].iloc[0]), float(spot_data_clean['경도'].iloc[0])], tooltip=spot_name, icon=folium.Icon(color='green', icon='info-sign')).add_to(m_cli)
                         st_folium(m_cli, key=f"map_cli_spot_{spot_name}_{selected_year}_{selected_month}_{selected_week}_{selected_zone}", width="100%", height=380)
                     with c2:
+                        # 💡 [요청 사항 반영 완료] 화천군 / 인제군 내의 모든 하위 지점 데이터를 종명 기준으로 통틀어 합산 정렬 표출!
                         st.markdown(f"##### 📊 종별 채집량 분포 (자동 합산 및 정렬)")
                         sum_df = spot_data_clean.groupby("종")[val_col].sum().reset_index()
                         sum_df = sum_df.sort_values(by=val_col, ascending=True)
@@ -756,9 +755,9 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     
                     spot_data_grouped = spot_data_clean.groupby(["조사주", "지역2_정규화", "환경", "종"], as_index=False)[val_col].sum()
                     spot_data_grouped = spot_data_grouped.sort_values(by=["조사주", val_col], ascending=[True, False])
-                    st.dataframe(spot_data_grouped[["조사주", "지역2_정규화", "환경", "종", val_col]].rename(columns={"조사주": "조사주차", "지역2_정규화": "조사지점"}), hide_index=True, use_container_width=True)
+                    st.dataframe(spot_data_grouped[["조사주", "지역2_정규화", "환경", "종", val_col]].rename(columns={"조사주": "조사주차", "지역2_정규화": "조사지역"}), hide_index=True, use_container_width=True)
                 else:
-                    st.info(f"💡 선택하신 기간 {selected_year} {selected_month} {selected_week}에 [{spot_name}] 지점에서 채집된 매개체가 없거나 대장 기록이 비어있습니다. (0개체 표출)")
+                    st.info(f"💡 선택하신 기간 {selected_year} {selected_month} {selected_week}에 [{spot_name}] 관할 하에 채집된 매개체가 없거나 대장 기록이 비어있습니다. (0개체 표출)")
     else: 
         st.info(f"💡 선택하신 {selected_year} {selected_month} 기간의 [{selected_zone}] 관할 데이터가 대장에 존재하지 않습니다.")
 
