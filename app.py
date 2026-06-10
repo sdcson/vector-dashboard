@@ -830,7 +830,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         
 # 4. 참진드기조사 어린이숲체험장 레이어 (💡 년도별 조사 지점 완전 자동 유연 변환 파트)
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
-    st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황")
+    st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 월간 통합 현황 [{selected_year} {selected_month}]")
     
     c_up4, c_dl4 = st.columns([8, 4])
     with c_up4:
@@ -859,9 +859,147 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st.cache_data.clear()
             
     df_forest = base_forest_df.copy()
-    
-    # 💡 탭 분리
-    forest_tabs = st.tabs(["📅 선택 월간 상세 현황", "🌍 전체 년도 통합 현황"])
-    
-    with forest_tabs[0]:
-        st
+
+    try:
+        month_int = int(str(selected_month).replace("월",""))
+        if "월" in df_forest.columns:
+            if "is_uploaded" not in df_forest.columns:
+                df_forest["is_uploaded"] = False
+                
+            def get_month_num(val):
+                try:
+                    return int(float(str(val).replace("월","").strip()))
+                except:
+                    return 0
+            df_forest["월_인덱스"] = df_forest["월"].apply(get_month_num)
+            
+            df_forest["조사년도_str"] = df_forest["조사년도"].astype(str).str.strip()
+            df_forest["조사년도_str"] = df_forest["조사년도_str"].apply(lambda x: x if "년" in x else x + "년")
+            
+            current_data = df_forest[(df_forest["조사년도_str"] == selected_year) & (df_forest["월_인덱스"] == month_int)].copy()
+            
+            # 💡 [핵심 패치] 지정된 연도의 공식 거점만 남겨서 타 연도 데이터 섞임 현상 원천 차단
+            if "2025" in selected_year:
+                valid_regions = ["홍천", "정선"]
+            elif "2024" in selected_year:
+                valid_regions = ["춘천", "인제"]
+            elif "2023" in selected_year:
+                valid_regions = ["속초", "양양", "인제"]
+            else:
+                valid_regions = ["남산", "삼마치"]
+                
+            if not current_data.empty and "채집지역2" in current_data.columns:
+                current_data['채집지역2'] = current_data['채집지역2'].astype(str).str.strip()
+                current_data = current_data[current_data['채집지역2'].isin(valid_regions)]
+            
+            if current_data["is_uploaded"].sum() > 0:
+                m_forest = current_data[current_data["is_uploaded"] == True].copy()
+            else:
+                m_forest = current_data.copy()
+        else: m_forest = pd.DataFrame()
+    except Exception: m_forest = pd.DataFrame()
+
+    with c_dl4:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if not m_forest.empty:
+            st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(m_forest), f"어린이숲_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
+
+    if not m_forest.empty:
+        m_forest = m_forest.dropna(subset=['채집지역2'])
+        m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Hard tick(참진드기)": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
+        
+        def safe_int(x):
+            try:
+                return int(float(x))
+            except:
+                return 1
+                
+        m_forest['지점번호'] = m_forest['지점번호'].apply(safe_int)
+        
+        def calc_gu_spot(x):
+            cls = str(x['분류']).strip().lower()
+            num = x['지점번호']
+            is_in = cls in ["in", "탐방로"]
+            
+            if num in [1, 2, 3, 4, 5, 6]:
+                mapped_num = 1 if num in [1, 2] else (2 if num in [3, 4] else 3)
+            else:
+                mapped_num = num if num > 0 else 1
+                
+            prefix = "관리지점" if is_in else "비관리지점"
+            return f"{prefix} {mapped_num}"
+            
+        m_forest['gu분지점'] = m_forest.apply(calc_gu_spot, axis=1)
+        
+        if "2025" in selected_year:
+            h_coords_forest = {"홍천": [37.7336, 127.8547], "정선": [37.4922, 128.9814]}
+            map_center_forest = [37.61, 128.42]
+            map_zoom_forest = 9
+        elif "2024" in selected_year:
+            h_coords_forest = {"춘천": [37.9799, 127.7718], "인제": [38.0620, 128.1560]}
+            map_center_forest = [38.02, 127.96]
+            map_zoom_forest = 10
+        elif "2023" in selected_year:
+            h_coords_forest = {"속초": [38.2043, 128.5919], "양양": [38.0754, 128.6195], "인제": [38.0620, 128.1560]}
+            map_center_forest = [38.10, 128.45]
+            map_zoom_forest = 10
+        else:
+            h_coords_forest = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
+            map_center_forest = [37.665, 127.900]
+            map_zoom_forest = 11
+
+        m_forest['위도'] = m_forest['채집지역2'].map(lambda x: h_coords_forest[x][0] if x in h_coords_forest else map_center_forest[0])
+        m_forest['경도'] = m_forest['채집지역2'].map(lambda x: h_coords_forest[x][1] if x in h_coords_forest else map_center_forest[1])
+        
+        forest_summary = m_forest.pivot_table(index=["채집지역2", "gu분지점", "위도", "경도"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
+        
+        if not forest_summary.empty:
+            avail_species = [s for s in ["작은소피참진드기", "개피참진드기", "일본참진드기", "참진드기"] if s in forest_summary.columns]
+            forest_summary['합계'] = forest_summary[avail_species].sum(axis=1)
+            
+            col_f_map, col_f_graph = st.columns([5, 5])
+            with col_f_map:
+                st.markdown(f"##### 🗺️ 강원 관내 유아숲 자체 감시망 (년도별 동적 연동)")
+                m_f = folium.Map(location=map_center_forest, zoom_start=map_zoom_forest)
+                for r_name, latlng in h_coords_forest.items():
+                    r_summary = forest_summary[forest_summary["채집지역2"] == r_name]
+                    if "2025" in selected_year:
+                        full_title = f"홍천 {r_name} (자연환경연구공원)" if r_name=="홍천" else f"정선 {r_name} (백두대간생태수목원)"
+                    elif "2024" in selected_year:
+                        full_title = f"춘천 {r_name} (국립춘천숲체원)" if r_name=="춘천" else f"인제 {r_name} (갯골어린이숲체험원)"
+                    elif "2023" in selected_year:
+                        full_title = f"{r_name} 유아숲체험원"
+                    else:
+                        full_title = f"홍천군 {r_name} 유아숲"
+                        
+                    popup_text = f"<b>🌲 {full_title}</b><br><hr style='margin:5px 0;'>"
+                    for _, r in r_summary.iterrows(): 
+                        popup_text += f"• {r['gu분지점']}: 월간 누적 {r['합계']}개체<br>"
+                    folium.Marker(latlng, popup=folium.Popup(popup_text, max_width=350), icon=folium.Icon(color='green', icon='tree')).add_to(m_f)
+                st_folium(m_f, key=f"map_forest_final_{selected_year}_{selected_month}", width="100%", height=430)
+                
+            with col_f_graph:
+                st.markdown(f"##### 📊 {selected_year} {selected_month} 구역별 실시간 채집량 비교")
+                fig, ax = plt.subplots(figsize=(6, 5))
+                chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum").fillna(0)
+                
+                target_indices = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
+                chart_df = chart_df.reindex(target_indices).fillna(0)
+                
+                if "2024" in selected_year:
+                    chart_df = chart_df.rename(columns={"춘천": "춘천(국립숲체원)", "인제": "인제(갯골어린이숲체험원)"})
+                elif "2025" in selected_year:
+                    chart_df = chart_df.rename(columns={"홍천": "홍천(자연환경연구공원)", "정선": "정선(백두대간생태수목원)"})
+                elif "2023" in selected_year:
+                    chart_df = chart_df.rename(columns={"속초": "속초", "양양": "양양", "인제": "인제"})
+                else:
+                    chart_df = chart_df.rename(columns={"남산": "홍천 남산 유아숲", "삼마치": "홍천 삼마치 유아숲"})
+                    
+                chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c', '#2a9d8f'][:len(chart_df.columns)], edgecolor='black', width=0.6)
+                plt.xticks(rotation=0)
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close()
+            st.dataframe(forest_summary, hide_index=True, use_container_width=True)
+        else: st.info("💡 요약 조건에 맞는 채집 수치 데이터가 존재하지 않습니다.")
+    else: st.info("💡 선택하신 연도와 월에 해당하는 어린이 숲 체험장 조사 내역이 없습니다.")
