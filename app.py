@@ -272,17 +272,26 @@ def get_cli_mite_gen_data():
 def get_forest_playground_actual_data():
     data = []
     idx = 1
-    species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica", "Ixodes nipponensis"]
+    species_map = ["Hard tick", "Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica", "Ixodes nipponensis"]
     stages = ["Female", "Male", "Nymph", "Larvae"]
     for year in ["2026년", "2025년", "2024년", "2023년", "2021년", "2020년"]:
         seed_year = int(year.replace("년",""))
-        regions = ["홍천", "정선"] if seed_year == 2025 else (["춘천", "인제"] if seed_year == 2024 else ["남산", "삼마치"])
+        # 💡 [23년도 실제 지점 반영] 23년도는 속초, 양양, 인제 지점으로 기본 가상 데이터 셋 빌드 구조 동기화
+        if seed_year == 2025:
+            regions = ["홍천", "정선"]
+        elif seed_year == 2024:
+            regions = ["춘천", "인제"]
+        elif seed_year == 2023:
+            regions = ["속초", "양양", "인제"]
+        else:
+            regions = ["남산", "삼마치"]
+            
         for month_int in range(3, 12): 
             month_str = f"{month_int:02d}월"
             for week in ["1주", "2주", "3주", "4주"]:
                 np.random.seed(seed_year + month_int * 13 + len(week))
                 for region in regions:
-                    course = 1 if region in ["남산", "홍천", "춘천"] else 2
+                    course = 1 if region in ["남산", "홍천", "춘천", "속초"] else (2 if region in ["삼마치", "정선", "인제"] else 3)
                     for spot_num in range(1, 4):
                         for classification in ["In", "Out"]:
                             for sp in species_map:
@@ -831,7 +840,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         if forest_file is not None:
             uploaded_df_for = smart_load_uploaded_file(forest_file)
             uploaded_df_for["조사년도"] = selected_year
-            uploaded_df_for["is_uploaded"] = True  # 업로드한 실무 데이터임을 명시하는 격리 플래그 강제 주입
+            uploaded_df_for["is_uploaded"] = True  
             df_forest_uploaded = rename_duplicate_columns(uploaded_df_for)
             base_forest_df = merge_and_overwrite(base_forest_df, df_forest_uploaded, keys=['조사년도', '월', '조사월', '조사주', '채집지역2', '지점번호', '분류', '종', 'Stage'])
             save_df_to_github(base_forest_df, "database_forest.csv", "Update Forest data")
@@ -853,10 +862,8 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                     return 0
             df_forest["월_인덱스"] = df_forest["월"].apply(get_month_num)
             
-            # 💡 [정밀 필터링 구현] 해당 년도 및 해당 월의 가상+실제 데이터를 완전 추출
             current_data = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월_인덱스"] == month_int)]
             
-            # 💡 사용자가 직접 업로드한 실제 행이 해당 연월에 단 하나라도 존재한다면 가상 데이터를 완벽히 배제하고 실무 데이터만 그래프에 반영
             if current_data["is_uploaded"].sum() > 0:
                 m_forest = current_data[current_data["is_uploaded"] == True].copy()
             else:
@@ -874,6 +881,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
         m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
         
+        # 💡 [23년도 속초/양양/인제 지점 및 좌표계 매핑 최신화 완료]
         if "2025" in selected_year:
             h_coords_forest = {"홍천": [37.7336, 127.8547], "정선": [37.4922, 128.9814]}
             map_center_forest = [37.61, 128.42]
@@ -881,6 +889,10 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         elif "2024" in selected_year:
             h_coords_forest = {"춘천": [37.9799, 127.7718], "인제": [38.0620, 128.1560]}
             map_center_forest = [38.02, 127.96]
+            map_zoom_forest = 10
+        elif "2023" in selected_year:
+            h_coords_forest = {"속초": [38.2043, 128.5919], "양양": [38.0754, 128.6195], "인제": [38.0620, 128.1560]}
+            map_center_forest = [38.10, 128.45]
             map_zoom_forest = 10
         else:
             h_coords_forest = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
@@ -906,6 +918,8 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                         full_title = f"홍천 {r_name} (자연환경연구공원)" if r_name=="홍천" else f"정선 {r_name} (백두대간생태수목원)"
                     elif "2024" in selected_year:
                         full_title = f"춘천 {r_name} (국립춘천숲체원)" if r_name=="춘천" else f"인제 {r_name} (갯골어린이숲체험원)"
+                    elif "2023" in selected_year:
+                        full_title = f"{r_name} 유아숲체험원"
                     else:
                         full_title = f"홍천군 {r_name} 유아숲"
                         
@@ -920,19 +934,20 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 fig, ax = plt.subplots(figsize=(6, 5))
                 chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum").fillna(0)
                 
-                # 💡 [원상 복구 완벽 완료] 관리지점 1,2,3 / 비관리지점 1,2,3이 순서대로 온전히 찍히도록 강제 재배치(reindex)
                 target_indices = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
                 chart_df = chart_df.reindex(target_indices).fillna(0)
                 
-                # 세세한 라벨링 전환 시스템 처리
                 if "2024" in selected_year:
                     chart_df = chart_df.rename(columns={"춘천": "춘천(국립숲체원)", "인제": "인제(갯골어린이숲체험원)"})
                 elif "2025" in selected_year:
                     chart_df = chart_df.rename(columns={"홍천": "홍천(자연환경연구공원)", "정선": "정선(백두대간생태수목원)"})
+                elif "2023" in selected_year:
+                    # 💡 23년 지점 레이블 정상 매핑 명시화
+                    chart_df = chart_df.rename(columns={"속초": "속초", "양양": "양양", "인제": "인제"})
                 else:
                     chart_df = chart_df.rename(columns={"남산": "홍천 남산 유아숲", "삼마치": "홍천 삼마치 유아숲"})
                     
-                chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black', width=0.6)
+                chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c', '#2a9d8f'][:len(chart_df.columns)], edgecolor='black', width=0.6)
                 plt.xticks(rotation=0)
                 plt.tight_layout()
                 st.pyplot(fig)
