@@ -559,7 +559,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     
                 df_mal_all_clean = f_mal[(f_mal["종"] != "미채집") & (f_mal[val_col_mal] > 0)]
                 if not df_mal_all_clean.empty:
-                    mal_all_grouped = df_mal_all_clean.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col_mal].sum()
                     mal_all_grouped = mal_all_grouped.sort_values(by=["조사주", val_col_mal], ascending=[True, False])
                     st.dataframe(mal_all_grouped[["조사주", "지점명", "환경", "종", val_col_mal]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
 
@@ -838,9 +837,23 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         forest_file = st.file_uploader("작성된 어린이 숲체험장 최종 원장 파일 업로드 (.xlsx / .csv 지원)", type=["csv", "xlsx", "xls"], key="forest_up")
         if forest_file is not None:
             uploaded_df_for = smart_load_uploaded_file(forest_file)
+            
+            # 💡 [핵심 패치 1] 완벽한 데이터베이스 동기화 보장. 누락된 열을 생성하여 DB 병합 시 깨지는 에러 방지
+            uploaded_df_for = parse_vectornet_dataframe(uploaded_df_for, selected_year, selected_month)
             uploaded_df_for["조사년도"] = selected_year
+            uploaded_df_for["조사월"] = selected_month
+            
+            if "월" not in uploaded_df_for.columns:
+                uploaded_df_for["월"] = int(selected_month.replace("월", ""))
+            else:
+                uploaded_df_for["월"] = uploaded_df_for["월"].fillna(int(selected_month.replace("월", "")))
+                
+            if "조사주" not in uploaded_df_for.columns:
+                uploaded_df_for["조사주"] = selected_week if selected_week != "전체" else "1주"
+                
             uploaded_df_for["is_uploaded"] = True  
             df_forest_uploaded = rename_duplicate_columns(uploaded_df_for)
+            
             base_forest_df = merge_and_overwrite(base_forest_df, df_forest_uploaded, keys=['조사년도', '월', '조사월', '조사주', '채집지역2', '지점번호', '분류', '종', 'Stage'])
             save_df_to_github(base_forest_df, "database_forest.csv", "Update Forest data")
             st.success("✅ 어린이 숲체험장 실무 데이터가 마스터 영구 연동 원장에 자동 축적되었습니다.")
@@ -861,7 +874,11 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                     return 0
             df_forest["월_인덱스"] = df_forest["월"].apply(get_month_num)
             
-            current_data = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월_인덱스"] == month_int)]
+            # 💡 [핵심 패치 2] 필터링 시 년도 조건 매칭 오류 방지 (예: 2023 vs 2023년)
+            df_forest["조사년도_str"] = df_forest["조사년도"].astype(str).str.strip()
+            df_forest["조사년도_str"] = df_forest["조사년도_str"].apply(lambda x: x if "년" in x else x + "년")
+            
+            current_data = df_forest[(df_forest["조사년도_str"] == selected_year) & (df_forest["월_인덱스"] == month_int)]
             
             if current_data["is_uploaded"].sum() > 0:
                 m_forest = current_data[current_data["is_uploaded"] == True].copy()
@@ -876,20 +893,27 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(m_forest), f"어린이숲_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
 
     if not m_forest.empty:
+        m_forest = m_forest.dropna(subset=['채집지역2'])
         m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Hard tick(참진드기)": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
-        m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
         
-        # 💡 [핵심 해결] 분류명("탐방로") 조건 분기 확장 및 1~6 지점 번호를 관리/비관지점 1,2,3 번호로 완전 자동 매핑 적용
+        # 💡 [핵심 패치 3] 원본 파일에 존재하는 지점번호 'NaN' 값으로 인한 크러시 에러 완벽 차단
+        def safe_int(x):
+            try:
+                return int(float(x))
+            except:
+                return 1
+                
+        m_forest['지점번호'] = m_forest['지점번호'].apply(safe_int)
+        
         def calc_gu_spot(x):
             cls = str(x['분류']).strip().lower()
-            num = int(x['지점번호'])
+            num = x['지점번호']
             is_in = cls in ["in", "탐방로"]
             
-            # 2023년 데이터의 1~6번 구조 유연 정형화 정규식
             if num in [1, 2, 3, 4, 5, 6]:
                 mapped_num = 1 if num in [1, 2] else (2 if num in [3, 4] else 3)
             else:
-                mapped_num = num
+                mapped_num = num if num > 0 else 1
                 
             prefix = "관리지점" if is_in else "비관리지점"
             return f"{prefix} {mapped_num}"
