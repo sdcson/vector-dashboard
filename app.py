@@ -42,7 +42,7 @@ def init_korean_font_and_get_prop():
 f_prop = init_korean_font_and_get_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터 대시보드 (2026 마스터 배포판)")
-st.markdown("질병조과 주요 감시사업별 맞춤형 시간 필터 및 질병청 원본 파일 업로드와 데이터 추출 기능을 제공하는 최종 시스템입니다.")
+st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 질병청 원본 파일 업로드와 데이터 추출 기능을 제공하는 최종 시스템입니다.")
 
 # -----------------------------------------------------------------
 # [💡 GitHub API 연동 파일 영구 커밋 & 로드 클라우드 데이터베이스 엔진]
@@ -274,8 +274,7 @@ def get_forest_playground_actual_data():
     idx = 1
     species_map = ["Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica", "Ixodes nipponensis"]
     stages = ["Female", "Male", "Nymph", "Larvae"]
-    # 💡 [가상 데이터 구조 수정] 2026년은 사용자가 직접 데이터를 업로드하여 활용할 수 있도록 가상 데이터 생성 대상에서 제외 (순수 해당년도 데이터 보존)
-    for year in ["2025년", "2024년", "2023년", "2021년", "2020년"]:
+    for year in ["2026년", "2025년", "2024년", "2023년", "2021년", "2020년"]:
         seed_year = int(year.replace("년",""))
         regions = ["홍천", "정선"] if seed_year == 2025 else (["춘천", "인제"] if seed_year == 2024 else ["남산", "삼마치"])
         for month_int in range(3, 12): 
@@ -464,6 +463,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             uploaded_df_mal = parse_vectornet_dataframe(uploaded_df_mal, selected_year, selected_month)
             df_mal_uploaded = rename_duplicate_columns(uploaded_df_mal)
             base_mal_df = merge_and_overwrite(base_mal_df, df_mal_uploaded, keys=['조사년도', '조사월', '주차', '지역2', '종'])
+            save_df_to_github(base_mal_df, "database_mal.csv", "Update Malaria data")
             st.success("✅ 말라리아 새 데이터가 원격 보관 대장에 안전하게 결합되었습니다.")
             st.cache_data.clear()
             df_mal = base_mal_df.copy()
@@ -856,13 +856,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
         m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
         
-        # 💡 [지점 및 좌표계 년도별 매핑 정밀화 및 분리 구조 완료]
-        all_coords_pool = {
-            "홍천": [37.7336, 127.8547], "정선": [37.4922, 128.9814],
-            "춘천": [37.9799, 127.7718], "인제": [38.0620, 128.1560],
-            "남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]
-        }
-        
+        # 💡 [원상 복구 완료] 기존에 완벽하게 매핑되던 년도별 위치 지도 바인딩 규칙으로 정확히 환원
         if "2025" in selected_year:
             h_coords_forest = {"홍천": [37.7336, 127.8547], "정선": [37.4922, 128.9814]}
             map_center_forest = [37.61, 128.42]
@@ -871,21 +865,8 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             h_coords_forest = {"춘천": [37.9799, 127.7718], "인제": [38.0620, 128.1560]}
             map_center_forest = [38.02, 127.96]
             map_zoom_forest = 10
-        elif any(y in selected_year for y in ["2023", "2021", "2020"]):
-            h_coords_forest = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
-            map_center_forest = [37.665, 127.900]
-            map_zoom_forest = 11
         else:
-            # 💡 2026년 마스터 및 기타 년도는 데이터에 실제 존재하는 지점만 동적으로 추출하여 완벽하게 반영 (혼선 예방)
-            h_coords_forest = {}
-            if not m_forest.empty and "채집지역2" in m_forest.columns:
-                present_regions = m_forest["채집지역2"].dropna().unique()
-                for r in present_regions:
-                    r_clean = str(r).strip()
-                    if r_clean in all_coords_pool:
-                        h_coords_forest[r_clean] = all_coords_pool[r_clean]
-            if not h_coords_forest:
-                h_coords_forest = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
+            h_coords_forest = {"남산": [37.683361, 127.893111], "삼마치": [37.643444, 127.910306]}
             map_center_forest = [37.665, 127.900]
             map_zoom_forest = 11
 
@@ -922,20 +903,16 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 fig, ax = plt.subplots(figsize=(6, 5))
                 chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum").fillna(0)
                 
-                # 💡 [차트 라벨링 대형 개편 완료] 2026년 마스터 및 기타 년도 선택 시, 기존에 남산/삼마치가 무조건 강제 표출되던 종속적 라벨 예외를 원천 제거
+                # 💡 [요청 사항 반영 필수 수정] 다른 지점들은 제외하고 오직 관리지점 3과 비관리지점 3만 정확하게 인덱싱하여 비교 그래프 표출
+                chart_df = chart_df.reindex(["관리지점 3", "비관리지점 3"]).fillna(0)
+                
+                # 세세한 라벨링 전환 시스템 처리
                 if "2024" in selected_year:
                     chart_df = chart_df.rename(columns={"춘천": "춘천(국립숲체원)", "인제": "인제(갯골어린이숲체험원)"})
                 elif "2025" in selected_year:
                     chart_df = chart_df.rename(columns={"홍천": "홍천(자연환경연구공원)", "정선": "정선(백두대간생태수목원)"})
-                elif any(y in selected_year for y in ["2023", "2021", "2020"]):
-                    chart_df = chart_df.rename(columns={"남산": "홍천 남산 유아숲", "삼마치": "홍천 삼마치 유아숲"})
                 else:
-                    rename_dict = {
-                        "춘천": "춘천(국립숲체원)", "인제": "인제(갯골어린이숲체험원)",
-                        "홍천": "홍천(자연환경연구공원)", "정선": "정선(백두대간생태수목원)",
-                        "남산": "홍천 남산 유아숲", "삼마치": "홍천 삼마치 유아숲"
-                    }
-                    chart_df = chart_df.rename(columns={k: v for k, v in rename_dict.items() if k in chart_df.columns})
+                    chart_df = chart_df.rename(columns={"남산": "홍천 남산 유아숲", "삼마치": "홍천 삼마치 유아숲"})
                     
                 chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black', width=0.6)
                 plt.xticks(rotation=0)
