@@ -276,7 +276,6 @@ def get_forest_playground_actual_data():
     stages = ["Female", "Male", "Nymph", "Larvae"]
     for year in ["2026년", "2025년", "2024년", "2023년", "2021년", "2020년"]:
         seed_year = int(year.replace("년",""))
-        # 💡 [23년도 실제 지점 반영] 23년도는 속초, 양양, 인제 지점으로 기본 가상 데이터 셋 빌드 구조 동기화
         if seed_year == 2025:
             regions = ["홍천", "정선"]
         elif seed_year == 2024:
@@ -877,11 +876,26 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(m_forest), f"어린이숲_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
 
     if not m_forest.empty:
-        m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
+        m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Hard tick(참진드기)": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
-        m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
         
-        # 💡 [23년도 속초/양양/인제 지점 및 좌표계 매핑 최신화 완료]
+        # 💡 [핵심 해결] 분류명("탐방로") 조건 분기 확장 및 1~6 지점 번호를 관리/비관지점 1,2,3 번호로 완전 자동 매핑 적용
+        def calc_gu_spot(x):
+            cls = str(x['분류']).strip().lower()
+            num = int(x['지점번호'])
+            is_in = cls in ["in", "탐방로"]
+            
+            # 2023년 데이터의 1~6번 구조 유연 정형화 정규식
+            if num in [1, 2, 3, 4, 5, 6]:
+                mapped_num = 1 if num in [1, 2] else (2 if num in [3, 4] else 3)
+            else:
+                mapped_num = num
+                
+            prefix = "관리지점" if is_in else "비관리지점"
+            return f"{prefix} {mapped_num}"
+            
+        m_forest['gu분지점'] = m_forest.apply(calc_gu_spot, axis=1)
+        
         if "2025" in selected_year:
             h_coords_forest = {"홍천": [37.7336, 127.8547], "정선": [37.4922, 128.9814]}
             map_center_forest = [37.61, 128.42]
@@ -942,7 +956,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 elif "2025" in selected_year:
                     chart_df = chart_df.rename(columns={"홍천": "홍천(자연환경연구공원)", "정선": "정선(백두대간생태수목원)"})
                 elif "2023" in selected_year:
-                    # 💡 23년 지점 레이블 정상 매핑 명시화
                     chart_df = chart_df.rename(columns={"속초": "속초", "양양": "양양", "인제": "인제"})
                 else:
                     chart_df = chart_df.rename(columns={"남산": "홍천 남산 유아숲", "삼마치": "홍천 삼마치 유아숲"})
