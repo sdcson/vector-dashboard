@@ -274,7 +274,7 @@ def get_forest_playground_actual_data():
     idx = 1
     species_map = ["Hard tick", "Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica", "Ixodes nipponensis"]
     stages = ["Female", "Male", "Nymph", "Larvae"]
-    for year in ["2026년", "2025년", "2024년", "2023년", "2021년", "2020년"]:
+    for year in ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]:
         seed_year = int(year.replace("년",""))
         if seed_year == 2025:
             regions = ["홍천", "정선"]
@@ -321,7 +321,7 @@ base_forest_df = rename_duplicate_columns(load_df_from_github("database_forest.c
 # [사이드바 시간 필터 패널]
 # -----------------------------------------------------------------
 st.sidebar.markdown("### 📅 통합 시간 동기화 필터")
-selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년", "2021년", "2020년"])
+selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"])
 selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"], index=2)
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
