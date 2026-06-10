@@ -838,7 +838,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         if forest_file is not None:
             uploaded_df_for = smart_load_uploaded_file(forest_file)
             
-            # 💡 [핵심 패치 1] 완벽한 데이터베이스 동기화 보장. 누락된 열을 생성하여 DB 병합 시 깨지는 에러 방지
             uploaded_df_for = parse_vectornet_dataframe(uploaded_df_for, selected_year, selected_month)
             uploaded_df_for["조사년도"] = selected_year
             uploaded_df_for["조사월"] = selected_month
@@ -874,11 +873,24 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                     return 0
             df_forest["월_인덱스"] = df_forest["월"].apply(get_month_num)
             
-            # 💡 [핵심 패치 2] 필터링 시 년도 조건 매칭 오류 방지 (예: 2023 vs 2023년)
             df_forest["조사년도_str"] = df_forest["조사년도"].astype(str).str.strip()
             df_forest["조사년도_str"] = df_forest["조사년도_str"].apply(lambda x: x if "년" in x else x + "년")
             
-            current_data = df_forest[(df_forest["조사년도_str"] == selected_year) & (df_forest["월_인덱스"] == month_int)]
+            current_data = df_forest[(df_forest["조사년도_str"] == selected_year) & (df_forest["월_인덱스"] == month_int)].copy()
+            
+            # 💡 [핵심 패치] 지정된 연도의 공식 거점만 남겨서 타 연도 데이터 섞임 현상 원천 차단
+            if "2025" in selected_year:
+                valid_regions = ["홍천", "정선"]
+            elif "2024" in selected_year:
+                valid_regions = ["춘천", "인제"]
+            elif "2023" in selected_year:
+                valid_regions = ["속초", "양양", "인제"]
+            else:
+                valid_regions = ["남산", "삼마치"]
+                
+            if not current_data.empty and "채집지역2" in current_data.columns:
+                current_data['채집지역2'] = current_data['채집지역2'].astype(str).str.strip()
+                current_data = current_data[current_data['채집지역2'].isin(valid_regions)]
             
             if current_data["is_uploaded"].sum() > 0:
                 m_forest = current_data[current_data["is_uploaded"] == True].copy()
@@ -896,7 +908,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         m_forest = m_forest.dropna(subset=['채집지역2'])
         m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Hard tick(참진드기)": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
         
-        # 💡 [핵심 패치 3] 원본 파일에 존재하는 지점번호 'NaN' 값으로 인한 크러시 에러 완벽 차단
         def safe_int(x):
             try:
                 return int(float(x))
