@@ -856,7 +856,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
         m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
         
-        # 💡 [지점 전면 수정] 2024년 춘천: 국립춘천숲체원, 인제: 갯골유아숲체험원 좌표계 최신화 적용
+        # 💡 [지점 전면 수정 완료] 2024년, 2025년 뿐만 아니라 2023년 및 기타 과거 년도(남산, 삼마치)에 대한 좌표 바인딩 구조 결함 해소
         if "2025" in selected_year:
             h_coords_forest = {"홍천": [37.7336, 127.8547], "정선": [37.4922, 128.9814]}
             map_center_forest = [37.61, 128.42]
@@ -903,11 +903,13 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 fig, ax = plt.subplots(figsize=(6, 5))
                 chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum").fillna(0)
                 
-                # 💡 세세한 라벨링 전환 시스템 처리
+                # 💡 [그래프 수정 완료] 2024, 2025년 외에 2023년 등의 데이터를 업로드했을 때도 컬럼 라벨이 유연하게 맵핑되도록 예외 예방 추가
                 if "2024" in selected_year:
                     chart_df = chart_df.rename(columns={"춘천": "춘천(국립숲체원)", "인제": "인제(갯골어린이숲체험원)"})
                 elif "2025" in selected_year:
                     chart_df = chart_df.rename(columns={"홍천": "홍천(자연환경연구공원)", "정선": "정선(백두대간생태수목원)"})
+                else:
+                    chart_df = chart_df.rename(columns={"남산": "홍천 남산 유아숲", "삼마치": "홍천 삼마치 유아숲"})
                     
                 chart_df.plot(kind='bar', ax=ax, color=['#2b2d42', '#ef233c'], edgecolor='black', width=0.6)
                 plt.xticks(rotation=0)
