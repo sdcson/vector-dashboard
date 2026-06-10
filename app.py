@@ -294,7 +294,8 @@ def get_forest_playground_actual_data():
                                             "채집일": f"{seed_year}-{month_int:02d}-12", "채집지역2": region, "코스번호": course,
                                             "지점번호": spot_num, "분류": classification, "종": sp, "Stage": stg, "개체수": cnt,
                                             "Pool No.": 1, "리케치아 양성 Pools": 0, "라임 양성 pool": 0, "아나플라즈마 양성": 0,
-                                            "Ehlichia": 0, "POWV": 0, "HRTV": 0, "Babesia": 0, "동시감염": 0, "SFTS_유전자검사": "음성"
+                                            "Ehlichia": 0, "POWV": 0, "HRTV": 0, "Babesia": 0, "동시감염": 0, "SFTS_유전자검사": "음성",
+                                            "is_uploaded": False
                                         })
                                         idx += 1
     return pd.DataFrame(data)
@@ -830,6 +831,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         if forest_file is not None:
             uploaded_df_for = smart_load_uploaded_file(forest_file)
             uploaded_df_for["조사년도"] = selected_year
+            uploaded_df_for["is_uploaded"] = True  # 업로드한 실무 데이터임을 명시하는 격리 플래그 강제 주입
             df_forest_uploaded = rename_duplicate_columns(uploaded_df_for)
             base_forest_df = merge_and_overwrite(base_forest_df, df_forest_uploaded, keys=['조사년도', '월', '조사월', '조사주', '채집지역2', '지점번호', '분류', '종', 'Stage'])
             save_df_to_github(base_forest_df, "database_forest.csv", "Update Forest data")
@@ -841,8 +843,24 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     try:
         month_int = int(str(selected_month).replace("월",""))
         if "월" in df_forest.columns:
-            df_forest["월_인덱스"] = df_forest["월"].astype(str).str.extract(r'(\d+)').astype(int)
-            m_forest = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월_인덱스"] == month_int)].copy()
+            if "is_uploaded" not in df_forest.columns:
+                df_forest["is_uploaded"] = False
+                
+            def get_month_num(val):
+                try:
+                    return int(float(str(val).replace("월","").strip()))
+                except:
+                    return 0
+            df_forest["월_인덱스"] = df_forest["월"].apply(get_month_num)
+            
+            # 💡 [정밀 필터링 구현] 해당 년도 및 해당 월의 가상+실제 데이터를 완전 추출
+            current_data = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월_인덱스"] == month_int)]
+            
+            # 💡 사용자가 직접 업로드한 실제 행이 해당 연월에 단 하나라도 존재한다면 가상 데이터를 완벽히 배제하고 실무 데이터만 그래프에 반영
+            if current_data["is_uploaded"].sum() > 0:
+                m_forest = current_data[current_data["is_uploaded"] == True].copy()
+            else:
+                m_forest = current_data.copy()
         else: m_forest = pd.DataFrame()
     except Exception: m_forest = pd.DataFrame()
 
@@ -856,7 +874,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         m_forest['지점번호'] = pd.to_numeric(m_forest['지점번호'], errors='coerce').fillna(0).astype(int)
         m_forest['gu분지점'] = m_forest.apply(lambda x: f"관리지점 {x['지점번호']}" if str(x['분류']).strip().lower() == "in" else f"비관리지점 {x['지점번호']}", axis=1)
         
-        # 💡 [원상 복구 완료] 기존에 완벽하게 매핑되던 년도별 위치 지도 바인딩 규칙으로 정확히 환원
         if "2025" in selected_year:
             h_coords_forest = {"홍천": [37.7336, 127.8547], "정선": [37.4922, 128.9814]}
             map_center_forest = [37.61, 128.42]
@@ -903,8 +920,9 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 fig, ax = plt.subplots(figsize=(6, 5))
                 chart_df = forest_summary.pivot_table(index="gu분지점", columns="채집지역2", values="합계", aggfunc="sum").fillna(0)
                 
-                # 💡 [요청 사항 반영 필수 수정] 다른 지점들은 제외하고 오직 관리지점 3과 비관리지점 3만 정확하게 인덱싱하여 비교 그래프 표출
-                chart_df = chart_df.reindex(["관리지점 3", "비관리지점 3"]).fillna(0)
+                # 💡 [원상 복구 완벽 완료] 관리지점 1,2,3 / 비관리지점 1,2,3이 순서대로 온전히 찍히도록 강제 재배치(reindex)
+                target_indices = ["관리지점 1", "관리지점 2", "관리지점 3", "비관리지점 1", "비관리지점 2", "비관리지점 3"]
+                chart_df = chart_df.reindex(target_indices).fillna(0)
                 
                 # 세세한 라벨링 전환 시스템 처리
                 if "2024" in selected_year:
