@@ -50,7 +50,6 @@ st.markdown("질병조사과 주요 감시사업별 맞춤형 시간 필터 및 
 KMA_API_KEY = "c8d1bc45c0ea0b9b1599e0f08f84fe61a141e9a29276bb43ab140915baee2898"
 
 def get_kma_stn(loc_name):
-    """세부 관할 지역명(리/동 단위)까지 완벽 매핑하는 관측소 반환 엔진"""
     stn_map = {
         "춘천": "101", "산천": "101", "중앙": "101", "지내": "101",
         "철원": "95", "대마": "95", "학사": "95",
@@ -63,47 +62,36 @@ def get_kma_stn(loc_name):
     }
     for k, v in stn_map.items():
         if k in str(loc_name): return v
-    return "101" # 기본값 춘천
+    return "101" 
 
 @st.cache_data(ttl=3600)
 def get_kma_weather(year_str, month_str, week_str, loc_name):
-    """특정 주차/월간 단일 데이터 호출 (JSON 파싱)"""
     y = str(year_str).replace("년", "").strip()
     m = str(month_str).replace("월", "").strip().zfill(2)
-    
     w_map = {"1주":("01","07"), "2주":("08","14"), "3주":("15","21"), "4주":("22","28"), "전체":("01","28")}
     d1, d2 = w_map.get(str(week_str).strip(), ("01","28"))
     tm1, tm2 = f"{y}{m}{d1}", f"{y}{m}{d2}"
     stn = get_kma_stn(loc_name)
             
     url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=50&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
-    
     try:
         res = requests.get(url, timeout=10)
         if res.status_code == 200:
             data = res.json()
             items = data.get('response', {}).get('body', {}).get('items', {}).get('item', [])
-            
             if items:
                 df_w = pd.DataFrame(items)
                 t_avg = pd.to_numeric(df_w['avgTa'], errors='coerce').mean()
                 p_sum = pd.to_numeric(df_w['sumRn'], errors='coerce').fillna(0.0).sum()
                 h_avg = pd.to_numeric(df_w['avgRhm'], errors='coerce').mean()
-                
-                return {
-                    "temp": round(t_avg, 1) if not pd.isna(t_avg) else 0.0, 
-                    "precip": round(p_sum, 1) if not pd.isna(p_sum) else 0.0,
-                    "humid": round(h_avg, 1) if not pd.isna(h_avg) else 0.0
-                }
+                return {"temp": round(t_avg, 1) if not pd.isna(t_avg) else 0.0, "precip": round(p_sum, 1) if not pd.isna(p_sum) else 0.0, "humid": round(h_avg, 1) if not pd.isna(h_avg) else 0.0}
     except Exception: pass
     return {"temp": 0.0, "precip": 0.0, "humid": 0.0}
 
 @st.cache_data(ttl=3600)
 def get_kma_weather_bulk(year_str, loc_name):
-    """상관분석 탭 전용: 3월~10월 데이터를 JSON으로 한 번에 호출"""
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
-    
     if "2026" in year_str:
         tm1, tm2 = f"{y}0301", f"{y}0531"
         weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0} for m in range(3, 6)}
@@ -112,30 +100,21 @@ def get_kma_weather_bulk(year_str, loc_name):
         weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0} for m in range(3, 11)}
     
     url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=300&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
-    
     try:
         res = requests.get(url, timeout=15)
         if res.status_code == 200:
             data = res.json()
             items = data.get('response', {}).get('body', {}).get('items', {}).get('item', [])
-            
             if items:
                 df_w = pd.DataFrame(items)
                 df_w["month_str"] = df_w['tm'].str[5:7] + "월"
                 df_w = df_w[df_w["month_str"].isin(weather_dict.keys())]
-                
                 df_w['avgTa'] = pd.to_numeric(df_w['avgTa'], errors='coerce')
                 df_w['sumRn'] = pd.to_numeric(df_w['sumRn'], errors='coerce').fillna(0.0)
                 df_w['avgRhm'] = pd.to_numeric(df_w['avgRhm'], errors='coerce')
-                
                 grouped = df_w.groupby("month_str").agg({'avgTa': 'mean', 'sumRn': 'sum', 'avgRhm': 'mean'})
-                
                 for m_idx, row in grouped.iterrows():
-                    weather_dict[m_idx] = {
-                        "temp": round(row['avgTa'], 1) if not pd.isna(row['avgTa']) else 0.0,
-                        "precip": round(row['sumRn'], 1) if not pd.isna(row['sumRn']) else 0.0,
-                        "humid": round(row['avgRhm'], 1) if not pd.isna(row['avgRhm']) else 0.0
-                    }
+                    weather_dict[m_idx] = {"temp": round(row['avgTa'], 1) if not pd.isna(row['avgTa']) else 0.0, "precip": round(row['sumRn'], 1) if not pd.isna(row['sumRn']) else 0.0, "humid": round(row['avgRhm'], 1) if not pd.isna(row['avgRhm']) else 0.0}
     except Exception: pass
     return weather_dict
 
@@ -284,11 +263,7 @@ def get_forest_playground_actual_data():
                         for sp in ["Hard tick", "Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica", "Ixodes nipponensis"]:
                             cnt = int(np.random.poisson(20 if month_int in [8,9] else 2))
                             if cnt > 0:
-                                data.append({
-                                    "연번": idx, "조사년도": year, "월": month_int, "조사월": f"{month_int:02d}월", "조사주": week,
-                                    "채집지역2": region, "지점번호": spot_num, "분류": "In", "종": sp, "Stage": "Nymph", "개체수": cnt,
-                                    "is_uploaded": False
-                                })
+                                data.append({"연번": idx, "조사년도": year, "월": month_int, "조사월": f"{month_int:02d}월", "조사주": week, "채집지역2": region, "지점번호": spot_num, "분류": "In", "종": sp, "Stage": "Nymph", "개체수": cnt, "is_uploaded": False})
                                 idx += 1
     return pd.DataFrame(data)
 
@@ -347,17 +322,14 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             df_je = df_je.sort_values(by=["조사년도", "조사월", "주차"])
             weeks_sorted = df_je.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
             df_je["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
-        else:
-            df_je["조사주"] = "1주"
+        else: df_je["조사주"] = "1주"
 
-        if selected_week != "전체":
-            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
-        else:
-            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)]
+        f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)]
+        if selected_week != "전체": f_je = f_je[f_je["조사주"] == selected_week]
         
         with c_dl1:
             st.markdown("<br>", unsafe_allow_html=True)
-            if not f_je.empty: st.download_button("📥 필터 데이터 원본 추출", convert_df_to_csv(f_je), "일본뇌염.csv", "text/csv")
+            if not f_je.empty: st.download_button("📥 필터 데이터 추출", convert_df_to_csv(f_je), "일본뇌염.csv", "text/csv")
 
         if not f_je.empty:
             je_spots = ["춘천시 산천리 (우사 거점)", "강릉시 산대월리 (우사 거점)", "횡성군 하대리 (우사 거점)"]
@@ -366,31 +338,49 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             with je_sub_tabs[0]:
                 c1, c2 = st.columns([5, 5])
                 with c1:
-                    st.markdown("##### 🗺️ GIS 거점센터 지도 (전체 지점 표시)")
+                    st.markdown("##### 🗺️ GIS 거점센터 지도 (전체)")
                     m_je_all = folium.Map(location=[37.75, 128.3], zoom_start=8)
                     for target_spot_name, coords in je_coords_map.items():
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_spot_name} (우사 거점)", icon=folium.Icon(color='red', icon='home')).add_to(m_je_all)
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 with c2:
-                    st.markdown("##### 📊 주요 매개체(Culex tritaeniorhynchus) 지점별 채집량")
+                    st.markdown("##### 📊 주요 매개체 지점별 채집량")
                     df_ct = f_je[f_je["종"].str.contains("tritaeniorhynchus", na=False, case=False)]
                     val_col_je = "개체수" if "개체수" in f_je.columns else "채집수"
                     
                     spot_dict = {s.split(' (')[0]: 0 for s in je_spots}
-                    if not df_ct.empty:
-                        for _, row in df_ct.iterrows():
-                            loc_str = str(row.get("지역2_정규화", row.get("지역2", "")))
-                            for s in spot_dict.keys():
-                                if s in loc_str: spot_dict[s] += row.get(val_col_je, 0)
+                    for _, row in df_ct.iterrows():
+                        loc_str = str(row.get("지역2_정규화", row.get("지역2", "")))
+                        for s in spot_dict.keys():
+                            if s in loc_str: spot_dict[s] += row.get(val_col_je, 0)
                                     
                     plot_df = pd.DataFrame(list(spot_dict.items()), columns=["지점", val_col_je]).sort_values(by=val_col_je, ascending=True)
                     fig, plt_ax = plt.subplots(figsize=(6, 5.2))
                     bars = plt_ax.barh(plot_df["지점"], plot_df[val_col_je].values, color='#ef233c', edgecolor='#2b2d42', height=0.7)
-                    for bar in bars:
-                        width = bar.get_width()
-                        plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8)
+                    for bar in bars: plt_ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', ha='left', fontsize=8)
                     st.pyplot(fig)
                     plt.close()
+
+            # 💡 [복구] 일본뇌염 개별 지점 상세 탭
+            for idx, spot_name in enumerate(je_spots):
+                with je_sub_tabs[idx + 1]:
+                    spot_data = f_je[f_je["지점명"].str.contains(spot_name.split(' (')[0], na=False)]
+                    if not spot_data.empty:
+                        c1, c2 = st.columns([5, 5])
+                        with c1:
+                            m_spot = folium.Map(location=je_coords_map[spot_name.split(' (')[0]], zoom_start=11)
+                            folium.Marker(je_coords_map[spot_name.split(' (')[0]], tooltip=spot_name, icon=folium.Icon(color='red', icon='star')).add_to(m_spot)
+                            st_folium(m_spot, key=f"map_je_spot_{idx}", width="100%", height=380)
+                        with c2:
+                            val_col_je = "개체수" if "개체수" in spot_data.columns else "채집수"
+                            sum_df = spot_data[spot_data[val_col_je]>0].groupby("종")[val_col_je].sum().reset_index().sort_values(by=val_col_je)
+                            fig, plt_ax = plt.subplots(figsize=(6, 5.2))
+                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col_je], color='#ef233c', edgecolor='#2b2d42')
+                            for bar in bars: plt_ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', fontsize=8)
+                            st.pyplot(fig)
+                            plt.close()
+                        st.dataframe(spot_data.drop(columns=["위도", "경도"], errors='ignore'), hide_index=True, use_container_width=True)
+                    else: st.info(f"💡 {spot_name} 지점의 채집 데이터가 없습니다.")
 
 # =================================================================================
 # 2. 말라리아 레이어
@@ -425,6 +415,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             df_mal["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
         else: df_mal["조사주"] = "1주"
 
+        # 💡 [핵심 패치] 데이터가 비어있을 때 발생하는 zip 에러 방지용 안전 장치
         if "지역2" in df_mal.columns:
             mal_df_loc_clean = df_mal["지역2"].astype(str).str.strip()
             def find_mal_coords(loc_str):
@@ -433,8 +424,11 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     if k.split()[-1] in loc_str or loc_str in k: return coord[0], coord[1], k
                 return 38.2543, 127.2145, "철원군 대마리"
             coords_res = mal_df_loc_clean.map(find_mal_coords)
-            df_mal["위도"], df_mal["경도"], df_mal["지점명"] = zip(*[(c[0], c[1], f"{c[2]} (우사 거점)") for c in coords_res])
-        else: df_mal["지점명"] = "철원군 대마리 (우사 거점)"
+            df_mal["위도"] = [c[0] for c in coords_res]
+            df_mal["경도"] = [c[1] for c in coords_res]
+            df_mal["지점명"] = [f"{c[2]} (우사 거점)" for c in coords_res]
+        else: 
+            df_mal["지점명"] = "철원군 대마리 (우사 거점)"
 
         f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month)]
         if selected_week != "전체": f_mal = f_mal[f_mal["조사주"] == selected_week]
@@ -461,26 +455,44 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     val_col_mal = "개체수" if "개체수" in f_mal.columns else "채집수"
                     
                     mal_spot_dict = {s: 0 for s in mal_spots_list}
-                    if not df_an.empty:
-                        for _, row in df_an.iterrows():
-                            loc_str = str(row.get("지점명", row.get("지역2", "")))
-                            for s in mal_spots_list:
-                                if s in loc_str: mal_spot_dict[s] += row.get(val_col_mal, 0)
+                    for _, row in df_an.iterrows():
+                        loc_str = str(row.get("지점명", row.get("지역2", "")))
+                        for s in mal_spots_list:
+                            if s in loc_str: mal_spot_dict[s] += row.get(val_col_mal, 0)
                                     
                     plot_df_mal = pd.DataFrame(list(mal_spot_dict.items()), columns=["지점", val_col_mal]).sort_values(by=val_col_mal, ascending=True)
                     fig, plt_ax = plt.subplots(figsize=(6, 5.2))
                     bars = plt_ax.barh(plot_df_mal["지점"], plot_df_mal[val_col_mal].values, color='#1d3557', edgecolor='#2b2d42', height=0.7)
-                    for bar in bars:
-                        width = bar.get_width()
-                        plt_ax.text(width + 0.5, bar.get_y() + bar.get_height()/2, f"{int(width)}마리", va='center', ha='left', fontsize=8)
+                    for bar in bars: plt_ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', ha='left', fontsize=8)
                     st.pyplot(fig)
                     plt.close()
+
+            # 💡 [복구] 말라리아 개별 지점 상세 탭
+            for idx, spot_name in enumerate(mal_spots_list):
+                with mal_sub_tabs[idx + 1]:
+                    spot_data = f_mal[f_mal["지점명"].str.contains(spot_name.split(' (')[0], na=False)]
+                    if not spot_data.empty:
+                        c1, c2 = st.columns([5, 5])
+                        with c1:
+                            m_spot = folium.Map(location=mal_coords_map[spot_name], zoom_start=11)
+                            folium.Marker(mal_coords_map[spot_name], tooltip=spot_name, icon=folium.Icon(color='purple', icon='star')).add_to(m_spot)
+                            st_folium(m_spot, key=f"map_mal_spot_{idx}", width="100%", height=380)
+                        with c2:
+                            val_col_mal = "개체수" if "개체수" in spot_data.columns else "채집수"
+                            sum_df = spot_data[spot_data[val_col_mal]>0].groupby("종")[val_col_mal].sum().reset_index().sort_values(by=val_col_mal)
+                            fig, plt_ax = plt.subplots(figsize=(6, 5.2))
+                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col_mal], color=['#1d3557' if 'Anopheles' in str(s) else '#c4cbde' for s in sum_df["종"]], edgecolor='#2b2d42')
+                            for bar in bars: plt_ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', fontsize=8)
+                            st.pyplot(fig)
+                            plt.close()
+                        st.dataframe(spot_data.drop(columns=["위도", "경도"], errors='ignore'), hide_index=True, use_container_width=True)
+                    else: st.info(f"💡 {spot_name} 지점의 채집 데이터가 없습니다.")
 
 # =================================================================================
 # 3. 기후변화 대응 매개체 감시 레이어
 # =================================================================================
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
-    st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} 월간 통합 결과]")
+    st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month}]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     df_zone = base_cli_moq_df.copy() if selected_zone == "모기 권역" else base_cli_tick_df.copy()
     
@@ -494,7 +506,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             
             with cli_sub_tabs[0]:
                 c1, c2 = st.columns([5, 5])
-                with c1: st.info("지도 데이터 표출 최적화 중...")
+                with c1: st.info("지도 데이터 표출 중...")
                 with c2:
                     st.markdown("##### 📊 지점별 통합 채집량")
                     all_spot_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
@@ -506,6 +518,14 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         plt.xticks(rotation=0)
                         st.pyplot(fig)
                         plt.close()
+
+            # 💡 [복구] 기후변화 매개체 개별 지점 상세 탭
+            for idx, spot_name in enumerate(master_spots_list):
+                with cli_sub_tabs[idx + 1]:
+                    spot_data = m_data[m_data["지역2"].astype(str).str.contains(spot_name, na=False)]
+                    if not spot_data.empty:
+                        st.dataframe(spot_data, hide_index=True, use_container_width=True)
+                    else: st.info(f"💡 {spot_name} 지점의 채집 데이터가 없습니다.")
 
 # =================================================================================
 # 4. 참진드기조사 어린이숲체험장 레이어
@@ -545,7 +565,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             plt.close()
 
 # =================================================================================
-# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어 (기후 수치 표시 라벨 추가)
+# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어 
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -555,15 +575,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         years_list = ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]
         analysis_year = st.selectbox("분석 연도", years_list, index=years_list.index(selected_year))
     with col_c2:
-        target_disease = st.selectbox("분석 대상 감시망", [
-            "일본뇌염 매개모기 (Culex tritaeniorhynchus)", 
-            "말라리아 매개모기 (Anopheles spp.)"
-        ])
+        target_disease = st.selectbox("분석 대상 감시망", ["일본뇌염 매개모기 (Culex tritaeniorhynchus)", "말라리아 매개모기 (Anopheles spp.)"])
     with col_c3:
-        if "일본뇌염" in target_disease:
-            spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
-        else:
-            spots_list = ["춘천시 중앙동", "철원군 대마리", "화천군", "양구군", "인제군", "고성군"]
+        if "일본뇌염" in target_disease: spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
+        else: spots_list = ["춘천시 중앙동", "철원군 대마리", "화천군", "양구군", "인제군", "고성군"]
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
         climate_factors = st.multiselect("비교할 기후 인자", ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)"], default=["평균기온(°C)", "누적강수량(mm)"])
@@ -572,12 +587,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
-        species_keyword = "tritaeniorhynchus"
-        target_name_kr = "작은빨간집모기"
+        species_keyword, target_name_kr = "tritaeniorhynchus", "작은빨간집모기"
     else:
         df_target = base_mal_df.copy()
-        species_keyword = "Anopheles"
-        target_name_kr = "얼룩날개모기류"
+        species_keyword, target_name_kr = "Anopheles", "얼룩날개모기류"
 
     if not df_target.empty:
         df_target = parse_vectornet_dataframe(df_target, analysis_year, selected_month)
@@ -590,23 +603,18 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         f_target = f_target[spot_mask & species_mask]
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         
-        if "2026" in analysis_year:
-            months = [f"{m:02d}월" for m in range(3, 6)]
-        else:
-            months = [f"{m:02d}월" for m in range(3, 11)]
+        if "2026" in analysis_year: months = [f"{m:02d}월" for m in range(3, 6)]
+        else: months = [f"{m:02d}월" for m in range(3, 11)]
             
         monthly_counts = {m: 0 for m in months}
-        
         for _, row in f_target.iterrows():
             m_str = str(row.get("조사월", "")).strip()
-            if m_str in monthly_counts:
-                monthly_counts[m_str] += row.get(val_col_target, 0)
+            if m_str in monthly_counts: monthly_counts[m_str] += row.get(val_col_target, 0)
                 
         plot_df = pd.DataFrame(list(monthly_counts.items()), columns=["조사월", "채집량(마리)"])
         
         with st.spinner(f"📡 {analysis_year} {selected_spot} 기상청 JSON 데이터를 불러오는 중입니다..."):
             bulk_weather = get_kma_weather_bulk(analysis_year, selected_spot)
-            
             plot_df["평균기온(°C)"] = [bulk_weather.get(m, {}).get("temp", 0.0) for m in plot_df["조사월"]]
             plot_df["누적강수량(mm)"] = [bulk_weather.get(m, {}).get("precip", 0.0) for m in plot_df["조사월"]]
             plot_df["평균습도(%)"] = [bulk_weather.get(m, {}).get("humid", 0.0) for m in plot_df["조사월"]]
@@ -622,36 +630,23 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         for bar in bars:
             height = bar.get_height()
-            if height > 0:
-                ax1.text(bar.get_x() + bar.get_width()/2., height, f'{int(height)}', ha='center', va='bottom', fontsize=9)
+            if height > 0: ax1.text(bar.get_x() + bar.get_width()/2., height, f'{int(height)}', ha='center', va='bottom', fontsize=9)
         
         if climate_factors:
             ax2 = ax1.twinx()
             colors = {"평균기온(°C)": "#e63946", "누적강수량(mm)": "#457b9d", "평균습도(%)": "#2a9d8f"}
             markers = {"평균기온(°C)": "o", "누적강수량(mm)": "s", "평균습도(%)": "^"}
-            
-            # 💡 텍스트 겹침 방지를 위한 Y축 오프셋(위/아래 여백) 설정
             offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 15)}
             
             for factor in climate_factors:
                 color = colors.get(factor, 'black')
                 ax2.plot(plot_df["조사월"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
-                
-                # 💡 꺾은선 그래프 위에 데이터 값(텍스트) 추가 로직
                 for idx, val in enumerate(plot_df[factor]):
-                    if pd.notna(val):
+                    if pd.notna(val) and val != 0.0:
                         suffix = "°C" if "기온" in factor else ("mm" if "강수" in factor else "%")
-                        ax2.annotate(f"{val}{suffix}", 
-                                     (idx, val), 
-                                     textcoords="offset points", 
-                                     xytext=offsets.get(factor, (0, 10)), 
-                                     ha='center', 
-                                     fontsize=8, 
-                                     color=color, 
-                                     fontweight='bold')
+                        ax2.annotate(f"{val}{suffix}", (idx, val), textcoords="offset points", xytext=offsets.get(factor, (0, 10)), ha='center', fontsize=8, color=color, fontweight='bold')
                 
             ax2.set_ylabel('기상 관측 수치', fontweight='bold')
-            
             lines_1, labels_1 = ax1.get_legend_handles_labels()
             lines_2, labels_2 = ax2.get_legend_handles_labels()
             ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', bbox_to_anchor=(0.02, 0.98))
