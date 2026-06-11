@@ -545,7 +545,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             plt.close()
 
 # =================================================================================
-# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어
+# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어 (기후 수치 표시 라벨 추가)
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -553,7 +553,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     col_c1, col_c2, col_c3, col_c4 = st.columns([2, 3, 3, 3])
     with col_c1:
         years_list = ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]
-        # 💡 [핵심수정 1] 경고문구 완전 삭제 및 대시보드(사이드바)의 연도를 기본값으로 즉시 동기화
         analysis_year = st.selectbox("분석 연도", years_list, index=years_list.index(selected_year))
     with col_c2:
         target_disease = st.selectbox("분석 대상 감시망", [
@@ -591,7 +590,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         f_target = f_target[spot_mask & species_mask]
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         
-        # 💡 [핵심수정 2] 2026년은 현재 시점 이전 월인 5월까지만 데이터를 제한하여 오류 원천 차단
         if "2026" in analysis_year:
             months = [f"{m:02d}월" for m in range(3, 6)]
         else:
@@ -632,8 +630,25 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             colors = {"평균기온(°C)": "#e63946", "누적강수량(mm)": "#457b9d", "평균습도(%)": "#2a9d8f"}
             markers = {"평균기온(°C)": "o", "누적강수량(mm)": "s", "평균습도(%)": "^"}
             
+            # 💡 텍스트 겹침 방지를 위한 Y축 오프셋(위/아래 여백) 설정
+            offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 15)}
+            
             for factor in climate_factors:
-                ax2.plot(plot_df["조사월"], plot_df[factor], color=colors.get(factor, 'black'), marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
+                color = colors.get(factor, 'black')
+                ax2.plot(plot_df["조사월"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
+                
+                # 💡 꺾은선 그래프 위에 데이터 값(텍스트) 추가 로직
+                for idx, val in enumerate(plot_df[factor]):
+                    if pd.notna(val):
+                        suffix = "°C" if "기온" in factor else ("mm" if "강수" in factor else "%")
+                        ax2.annotate(f"{val}{suffix}", 
+                                     (idx, val), 
+                                     textcoords="offset points", 
+                                     xytext=offsets.get(factor, (0, 10)), 
+                                     ha='center', 
+                                     fontsize=8, 
+                                     color=color, 
+                                     fontweight='bold')
                 
             ax2.set_ylabel('기상 관측 수치', fontweight='bold')
             
