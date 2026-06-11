@@ -559,6 +559,8 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     
                 df_mal_all_clean = f_mal[(f_mal["종"] != "미채집") & (f_mal[val_col_mal] > 0)]
                 if not df_mal_all_clean.empty:
+                    # 💡 복구 완료된 집계 묶음 로직
+                    mal_all_grouped = df_mal_all_clean.groupby(["조사주", "지점명", "환경", "종"], as_index=False)[val_col_mal].sum()
                     mal_all_grouped = mal_all_grouped.sort_values(by=["조사주", val_col_mal], ascending=[True, False])
                     st.dataframe(mal_all_grouped[["조사주", "지점명", "환경", "종", val_col_mal]].rename(columns={"조사주": "조사주차"}), hide_index=True, use_container_width=True)
 
