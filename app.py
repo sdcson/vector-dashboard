@@ -545,7 +545,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             plt.close()
 
 # =================================================================================
-# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어 (다중 질병 동적 연동)
+# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -553,16 +553,14 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     col_c1, col_c2, col_c3, col_c4 = st.columns([2, 3, 3, 3])
     with col_c1:
         years_list = ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]
-        safe_default_idx = years_list.index("2023년")
-        analysis_year = st.selectbox("분석 연도", years_list, index=safe_default_idx)
+        # 💡 [핵심수정 1] 경고문구 완전 삭제 및 대시보드(사이드바)의 연도를 기본값으로 즉시 동기화
+        analysis_year = st.selectbox("분석 연도", years_list, index=years_list.index(selected_year))
     with col_c2:
-        # 💡 [핵심] 분석 대상 드롭다운에 말라리아 추가
         target_disease = st.selectbox("분석 대상 감시망", [
             "일본뇌염 매개모기 (Culex tritaeniorhynchus)", 
             "말라리아 매개모기 (Anopheles spp.)"
         ])
     with col_c3:
-        # 💡 [핵심] 선택한 질병에 따라 조사지점 드롭다운 목록 자동 변경
         if "일본뇌염" in target_disease:
             spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
         else:
@@ -573,10 +571,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
     st.markdown("---")
     
-    if analysis_year in ["2025년", "2026년"]:
-        st.warning("⚠️ 선택하신 연도는 아직 기상청 일일 관측 데이터가 완전히 구축되지 않은 미래 연도입니다. 데이터 조회를 위해 2024년 이전 과거 연도를 선택해주세요.")
-    
-    # 💡 [핵심] 선택한 질병에 따라 원본 데이터 및 종 마스킹 키워드 자동 변경
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
         species_keyword = "tritaeniorhynchus"
@@ -591,13 +585,13 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         f_target = df_target[df_target["조사년도"] == analysis_year].copy()
         f_target["지역2_정규화"] = f_target.get("지역2", "").astype(str).str.strip()
         
-        # 지점 필터링 (스플릿을 통해 '춘천시 산천리' -> '춘천시' 매칭 유연화)
         spot_mask = f_target["지역2_정규화"].str.contains(selected_spot.split()[0], na=False)
         species_mask = f_target["종"].str.contains(species_keyword, na=False, case=False)
         
         f_target = f_target[spot_mask & species_mask]
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         
+        # 💡 [핵심수정 2] 2026년은 현재 시점 이전 월인 5월까지만 데이터를 제한하여 오류 원천 차단
         if "2026" in analysis_year:
             months = [f"{m:02d}월" for m in range(3, 6)]
         else:
@@ -612,7 +606,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 
         plot_df = pd.DataFrame(list(monthly_counts.items()), columns=["조사월", "채집량(마리)"])
         
-        # 기상청 JSON API 데이터 일괄 수집
         with st.spinner(f"📡 {analysis_year} {selected_spot} 기상청 JSON 데이터를 불러오는 중입니다..."):
             bulk_weather = get_kma_weather_bulk(analysis_year, selected_spot)
             
