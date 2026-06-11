@@ -76,7 +76,7 @@ def get_kma_weather(year_str, month_str, week_str, loc_name):
             if lines:
                 try:
                     df_w = pd.read_csv(BytesIO("\n".join(lines).encode('euc-kr')), delim_whitespace=True, header=None)
-                    # 기상청 ASOS 일자료: 10=평균기온, 32=일강수량, 39=평균상대습도 (포맷 기준)
+                    # 기상청 ASOS 일자료: 10=평균기온, 32=일강수량, 39=평균상대습도
                     t_avg = pd.to_numeric(df_w.iloc[:, 10], errors='coerce').mean()
                     p_sum = pd.to_numeric(df_w.iloc[:, 32], errors='coerce').sum()
                     h_avg = pd.to_numeric(df_w.iloc[:, 39], errors='coerce').mean()
@@ -91,7 +91,6 @@ def get_kma_weather(year_str, month_str, week_str, loc_name):
     except Exception:
         pass
     
-    # API 호출 실패 시 시각화를 위한 기본값
     return {"temp": 0.0, "precip": 0.0, "humid": 0.0}
 
 # -----------------------------------------------------------------
@@ -193,7 +192,8 @@ def parse_vectornet_dataframe(df, default_year, default_month):
     return df
 
 def rename_duplicate_columns(df):
-    if df is None or df.empty: return df
+    if df is None or df.empty:
+        return df
     cols = pd.Series(df.columns)
     for dup in cols[cols.duplicated()].unique():
         cols[cols == dup] = [f"{dup}.{i}" if i != 0 else dup for i in range(cols[cols == dup].shape[0])]
@@ -204,21 +204,27 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False).encode('utf-8-sig')
 
 def merge_and_overwrite(old_df, new_df, keys):
-    if new_df.empty: return old_df
+    if new_df.empty:
+        return old_df
     val_col = "개체수" if "개체수" in new_df.columns else ("채집수" if "채집수" in new_df.columns else "개체수")
     groupby_keys = [k for k in keys if k in new_df.columns]
+    
     agg_dict = {}
     for col in new_df.columns:
-        if col == val_col: agg_dict[col] = 'sum'
-        elif col not in groupby_keys and col not in ['번호', '연번']: agg_dict[col] = 'first'
+        if col == val_col:
+            agg_dict[col] = 'sum'
+        elif col not in groupby_keys and col not in ['번호', '연번']:
+            agg_dict[col] = 'first'
     new_df_aggregated = new_df.groupby(groupby_keys, as_index=False).agg(agg_dict)
     
-    if old_df.empty: return new_df_aggregated
+    if old_df.empty:
+        return new_df_aggregated
     combined = pd.concat([old_df, new_df_aggregated], ignore_index=True)
     return combined.drop_duplicates(subset=groupby_keys, keep='last')
 
 def smart_load_uploaded_file(uploaded_file):
-    if uploaded_file is None: return pd.DataFrame()
+    if uploaded_file is None:
+        return pd.DataFrame()
     file_name = uploaded_file.name.lower()
     df_res = pd.DataFrame()
     
@@ -254,7 +260,9 @@ def smart_load_uploaded_file(uploaded_file):
                 break
             except Exception:
                 continue
-    if not df_res.empty: df_res.columns = [str(c).strip() for c in df_res.columns]
+                
+    if not df_res.empty:
+        df_res.columns = [str(c).strip() for c in df_res.columns]
     return df_res
 
 # -----------------------------------------------------------------
@@ -312,13 +320,16 @@ def get_forest_playground_actual_data():
     idx = 1
     species_map = ["Hard tick", "Haemaphysalis longicornis", "Haemaphysalis flava ", "Haemaphysalis japonica", "Ixodes nipponensis"]
     stages = ["Female", "Male", "Nymph", "Larvae"]
-    # 💡 2022년 추가 반영
     for year in ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]:
         seed_year = int(year.replace("년",""))
-        if seed_year == 2025: regions = ["홍천", "정선"]
-        elif seed_year == 2024: regions = ["춘천", "인제"]
-        elif seed_year == 2023: regions = ["속초", "양양", "인제"]
-        else: regions = ["남산", "삼마치"]
+        if seed_year == 2025:
+            regions = ["홍천", "정선"]
+        elif seed_year == 2024:
+            regions = ["춘천", "인제"]
+        elif seed_year == 2023:
+            regions = ["속초", "양양", "인제"]
+        else:
+            regions = ["남산", "삼마치"]
             
         for month_int in range(3, 12): 
             month_str = f"{month_int:02d}월"
@@ -353,7 +364,6 @@ base_forest_df = rename_duplicate_columns(load_df_from_github("database_forest.c
 # [사이드바 시간 필터 패널]
 # -----------------------------------------------------------------
 st.sidebar.markdown("### 📅 통합 시간 동기화 필터")
-# 💡 2022년 추가 반영 완료
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"])
 selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"], index=2)
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
@@ -371,13 +381,13 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
     
     c_up1, c_dl1 = st.columns([8, 4])
     with c_up1:
-        je_file = st.file_uploader("질병청 VectorNet 일본뇌염 파일 업로드", type=["csv", "xlsx", "xls"], key="je_up")
+        je_file = st.file_uploader("질병청 VectorNet 일본뇌염 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="je_up")
         if je_file is not None:
             uploaded_df = smart_load_uploaded_file(je_file)
             uploaded_df = parse_vectornet_dataframe(uploaded_df, selected_year, selected_month)
             base_je_df = merge_and_overwrite(base_je_df, rename_duplicate_columns(uploaded_df), keys=['조사년도', '조사월', '주차', '지역2', '종'])
             save_df_to_github(base_je_df, "database_je.csv", "Append JE data")
-            st.success("✅ 실시간 DB에 동기화 완료")
+            st.success("✅ 일본뇌염 새 데이터가 실시간 원격 원장 데이터베이스에 누적 결합되었습니다.")
             st.cache_data.clear()
             
     df_je = base_je_df.copy()
@@ -385,24 +395,36 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
     if not df_je.empty:
         df_je = parse_vectornet_dataframe(df_je, selected_year, selected_month)
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
-        df_je["지역2_정규화"] = df_je.get("지역2", "춘천시 산천리").astype(str).str.strip()
-        df_je["위도"] = df_je["지역2_정규화"].map(lambda x: je_coords_map.get(x, [37.9250, 127.7410])[0])
-        df_je["경도"] = df_je["지역2_정규화"].map(lambda x: je_coords_map.get(x, [37.9250, 127.7410])[1])
-        df_je["지점명"] = df_je["지역2_정규화"].map(lambda x: f"{x} (우사 거점)")
-        df_je["조사주"] = df_je.get("주차", "1주").apply(lambda x: f"{min(int(pd.factorize([x])[0][0])+1, 4)}주" if str(x).isdigit() else str(x))
+        if "지역2" in df_je.columns:
+            df_je["지역2_정규화"] = df_je["지역2"].astype(str).str.strip()
+            df_je["위도"] = df_je["지역2_정규화"].map(lambda x: je_coords_map.get(x, [37.9250, 127.7410])[0])
+            df_je["경도"] = df_je["지역2_정규화"].map(lambda x: je_coords_map.get(x, [37.9250, 127.7410])[1])
+            df_je["지점명"] = df_je["지역2_정규화"].map(lambda x: f"{x} (우사 거점)")
+        else:
+            df_je["지점명"] = "춘천시 산천리 (우사 거점)"
 
-        f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)]
-        if selected_week != "전체": f_je = f_je[f_je["조사주"] == selected_week]
+        # [안정적 판다스 그룹 변환 스크립트 복구 파트]
+        if "주차" in df_je.columns:
+            df_je = df_je.sort_values(by=["조사년도", "조사월", "주차"])
+            weeks_sorted = df_je.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
+            df_je["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
+        else:
+            df_je["조사주"] = "1주"
+
+        if selected_week != "전체":
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
+        else:
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)]
         
         with c_dl1:
             st.markdown("<br>", unsafe_allow_html=True)
-            if not f_je.empty: st.download_button("📥 필터 데이터 추출", convert_df_to_csv(f_je), "일본뇌염.csv", "text/csv")
+            if not f_je.empty:
+                st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(f_je), f"일본뇌염_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
 
         if not f_je.empty:
             je_spots = ["춘천시 산천리 (우사 거점)", "강릉시 산대월리 (우사 거점)", "횡성군 하대리 (우사 거점)"]
             je_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot.split(' (')[0]}" for spot in je_spots])
             
-            # [1] 지점전체 전용 스페이스 (💡 기상청 API 기온/강수량 이중축 적용)
             with je_sub_tabs[0]:
                 c1, c2 = st.columns([5, 5])
                 with c1:
@@ -410,7 +432,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     m_je_all = folium.Map(location=[37.75, 128.3], zoom_start=8)
                     for target_spot_name, coords in je_coords_map.items():
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_spot_name} (우사 거점)", icon=folium.Icon(color='red', icon='home')).add_to(m_je_all)
-                    st_folium(m_je_all, key="map_je_all", width="100%", height=380)
+                    st_folium(m_je_all, key=f"map_je_all_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                 with c2:
                     st.markdown("##### 📊 주요 매개체 채집량 및 기후 변화 분석")
                     df_ct = f_je[f_je["종"].str.contains("tritaeniorhynchus", na=False, case=False)]
@@ -420,24 +442,21 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     for _, row in df_ct.iterrows():
                         loc_str = str(row.get("지역2_정규화", ""))
                         for s in spot_dict.keys():
-                            if s in loc_str: spot_dict[s] += row[val_col_je]
+                            if s in loc_str: 
+                                spot_dict[s] += row[val_col_je]
                                     
                     plot_df = pd.DataFrame(list(spot_dict.items()), columns=["지점", val_col_je])
                     
-                    # API 연동: 지점별 기온 및 강수량 조회
                     w_data = [get_kma_weather(selected_year, selected_month, selected_week, loc) for loc in plot_df["지점"]]
                     temps = [w["temp"] for w in w_data]
                     
                     fig, plt_ax1 = plt.subplots(figsize=(6, 5.2))
-                    
-                    # 막대 차트 (왼쪽 Y축)
                     bars = plt_ax1.barh(plot_df["지점"], plot_df[val_col_je].values, color='#ef233c', edgecolor='#2b2d42', height=0.6, label='채집 개체수')
                     plt_ax1.set_xlabel('개체수 (마리)')
                     
                     for bar in bars:
                         plt_ax1.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height()/2, f"{int(bar.get_width())}", va='center', fontsize=8)
                         
-                    # 선 차트 (오른쪽 위 Y축 생성 - 기온 이중축)
                     plt_ax2 = plt_ax1.twiny()
                     plt_ax2.plot(temps, plot_df["지점"], color='#0077b6', marker='o', linestyle='-', linewidth=2, markersize=8, label='평균기온(°C)')
                     plt_ax2.set_xlabel('기상청 평균기온 (°C)', color='#0077b6')
@@ -458,12 +477,13 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
     
     c_up2, c_dl2 = st.columns([8, 4])
     with c_up2:
-        mal_file = st.file_uploader("질병청 VectorNet 말라리아 파일 업로드", type=["csv", "xlsx", "xls"], key="mal_up")
+        mal_file = st.file_uploader("질병청 VectorNet 말라리아 결과 파일 업로드 (.xlsx / .csv)", type=["csv", "xlsx", "xls"], key="mal_up")
         if mal_file is not None:
-            uploaded_df_mal = parse_vectornet_dataframe(smart_load_uploaded_file(mal_file), selected_year, selected_month)
+            uploaded_df_mal = smart_load_uploaded_file(mal_file)
+            uploaded_df_mal = parse_vectornet_dataframe(uploaded_df_mal, selected_year, selected_month)
             base_mal_df = merge_and_overwrite(base_mal_df, rename_duplicate_columns(uploaded_df_mal), keys=['조사년도', '조사월', '주차', '지역2', '종'])
             save_df_to_github(base_mal_df, "database_mal.csv", "Update Malaria data")
-            st.success("✅ 원격 대장 반영 완료")
+            st.success("✅ 말라리아 새 데이터가 원격 보관 대장에 안전하게 결합되었습니다.")
             st.cache_data.clear()
             
     df_mal = base_mal_df.copy()
@@ -475,28 +495,53 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
-        df_mal["조사주"] = df_mal.get("주차", "1주").apply(lambda x: f"{min(int(pd.factorize([x])[0][0])+1, 4)}주" if str(x).isdigit() else str(x))
+        
+        # [안정적 판다스 그룹 변환 스크립트 복구 파트]
+        if "주차" in df_mal.columns:
+            df_mal = df_mal.sort_values(by=["조사년도", "조사월", "주차"])
+            weeks_sorted = df_mal.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
+            df_mal["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
+        else:
+            df_mal["조사주"] = "1주"
 
-        f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month)]
-        if selected_week != "전체": f_mal = f_mal[f_mal["조사주"] == selected_week]
+        if "지역2" in df_mal.columns:
+            mal_df_loc_clean = df_mal["지역2"].astype(str).str.strip()
+            def find_mal_coords(loc_str):
+                if "중앙" in loc_str: return mal_coords_map["춘천시 중앙동"][0], mal_coords_map["춘천시 중앙동"][1], "춘천시 중앙동"
+                for k, coord in mal_coords_map.items():
+                    if k.split()[-1] in loc_str or loc_str in k: 
+                        return coord[0], coord[1], k
+                return 38.2543, 127.2145, "철원군 대마리"
+                
+            coords_res = mal_df_loc_clean.map(find_mal_coords)
+            df_mal["위도"] = [c[0] for c in coords_res]
+            df_mal["경도"] = [c[1] for c in coords_res]
+            df_mal["지점명"] = [f"{c[2]} (우사 거점)" for c in coords_res]
+        else:
+            df_mal["지점명"] = "철원군 대마리 (우사 거점)"
+
+        if selected_week != "전체":
+            f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month) & (df_mal["조사주"] == selected_week)]
+        else:
+            f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month)]
         
         with c_dl2:
             st.markdown("<br>", unsafe_allow_html=True)
-            if not f_mal.empty: st.download_button("📥 데이터 추출", convert_df_to_csv(f_mal), "말라리아.csv", "text/csv")
+            if not f_mal.empty:
+                st.download_button("📥 필터 데이터 원본 추출 (.csv)", convert_df_to_csv(f_mal), f"말라리아_감시망_추출_{selected_year}_{selected_month}.csv", "text/csv")
 
         if not f_mal.empty:
             mal_spots_list = list(mal_coords_map.keys())
-            mal_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list])
+            mal_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot}" for spot in mal_spots_list])
             
-            # [1] 지점전체 전용 스페이스 (💡 기상청 API 기온/강수량 이중축 적용)
             with mal_sub_tabs[0]:
                 c1, c2 = st.columns([5, 5])
                 with c1:
-                    st.markdown("##### 🗺️ GIS 말라리아 거점 지도 (전체)")
+                    st.markdown("##### 🗺️ GIS 말라리아 거점 지도 (전체 지점 표시)")
                     m_mal_all = folium.Map(location=[38.15, 127.8], zoom_start=9)
                     for target_mal_name, coords in mal_coords_map.items():
-                        folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name}", icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal_all)
-                    st_folium(m_mal_all, key="map_mal_all", width="100%", height=380)
+                        folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name} (우사 거점)", icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal_all)
+                    st_folium(m_mal_all, key=f"map_mal_all_{selected_year}_{selected_month}_{selected_week}", width="100%", height=380)
                 with c2:
                     st.markdown("##### 📊 Anopheles spp. 채집량 및 기후 상관관계")
                     df_an = f_mal[f_mal["종"].str.contains("Anopheles", na=False, case=False)]
@@ -506,20 +551,18 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     for _, row in df_an.iterrows():
                         loc_str = str(row.get("지역2", ""))
                         for s in mal_spots_list:
-                            if s in loc_str: mal_spot_dict[s] += row[val_col_mal]
+                            if s in loc_str: 
+                                mal_spot_dict[s] += row[val_col_mal]
                                     
                     plot_df_mal = pd.DataFrame(list(mal_spot_dict.items()), columns=["지점", val_col_mal])
                     
-                    # API 연동: 지점별 기온 및 누적강수량 조회
                     w_data = [get_kma_weather(selected_year, selected_month, selected_week, loc) for loc in plot_df_mal["지점"]]
                     precips = [w["precip"] for w in w_data]
                     
                     fig, plt_ax1 = plt.subplots(figsize=(6, 5.2))
-                    
                     bars = plt_ax1.barh(plot_df_mal["지점"], plot_df_mal[val_col_mal].values, color='#1d3557', edgecolor='#2b2d42', height=0.6, label='채집 개체수')
                     plt_ax1.set_xlabel('개체수 (마리)')
                     
-                    # 선 차트 (강수량 이중축)
                     plt_ax2 = plt_ax1.twiny()
                     plt_ax2.plot(precips, plot_df_mal["지점"], color='#e63946', marker='s', linestyle='--', linewidth=2, label='누적강수량(mm)')
                     plt_ax2.set_xlabel('기상청 누적강수량 (mm)', color='#e63946')
@@ -539,7 +582,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} 월간 통합 결과]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     
-    # ... 파일 업로드 로직 생략 (기존 코드와 완전히 동일하게 동작하도록 유지하되 데이터프레임만 병합)
     df_zone = base_cli_moq_df.copy() if selected_zone == "모기 권역" else base_cli_tick_df.copy()
     
     if not df_zone.empty:
@@ -557,7 +599,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 with c2:
                     st.markdown("##### 📊 지점별 통합 채집량 및 평균 기후(기온/습도) 현황")
                     
-                    # API 연동: 기후 팩터 다중 활용
                     w_data = [get_kma_weather(selected_year, selected_month, "전체", loc) for loc in master_spots_list]
                     temps = [w["temp"] for w in w_data]
                     humids = [w["humid"] for w in w_data]
@@ -565,14 +606,12 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     all_spot_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
                     
                     if not all_spot_clean.empty:
-                        # 막대 그래프 (다중 종 분산형을 심플하게 스택형으로 전환)
                         pivot_df = all_spot_clean.pivot_table(index='지역2', columns='종', values=val_col, aggfunc='sum').fillna(0)
                         
                         fig, ax1 = plt.subplots(figsize=(6, 5.2))
                         pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42')
                         ax1.set_ylabel('총 개체수')
                         
-                        # 이중 축 (기온을 꺾은선으로)
                         ax2 = ax1.twinx()
                         x_indices = np.arange(len(pivot_df.index))
                         ax2.plot(x_indices, temps[:len(x_indices)], color='red', marker='o', linestyle='-', linewidth=2, label='평균기온(°C)')
@@ -593,20 +632,24 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
 elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     st.header(f"🌳 어린이 숲 체험장 참진드기 자체조사 현황 [{selected_year} {selected_month}]")
     
-    # ... 기본 숲 파일 로드 및 정리 과정 (위에서 이미 선언됨)
     df_forest = base_forest_df.copy()
 
     try:
         month_int = int(str(selected_month).replace("월",""))
         m_forest = df_forest[(df_forest["조사년도"] == selected_year) & (df_forest["월"] == month_int)].copy()
         
-        if "2025" in selected_year: valid_regions = ["홍천", "정선"]
-        elif "2024" in selected_year: valid_regions = ["춘천", "인제"]
-        elif "2023" in selected_year: valid_regions = ["속초", "양양", "인제"]
-        else: valid_regions = ["남산", "삼마치"]
+        if "2025" in selected_year: 
+            valid_regions = ["홍천", "정선"]
+        elif "2024" in selected_year: 
+            valid_regions = ["춘천", "인제"]
+        elif "2023" in selected_year: 
+            valid_regions = ["속초", "양양", "인제"]
+        else: 
+            valid_regions = ["남산", "삼마치"]
             
         m_forest = m_forest[m_forest['채집지역2'].isin(valid_regions)]
-    except Exception: m_forest = pd.DataFrame()
+    except Exception: 
+        m_forest = pd.DataFrame()
 
     if not m_forest.empty:
         m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
@@ -621,7 +664,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         with col_f_graph:
             st.markdown(f"##### 📊 {selected_year} {selected_month} 구역별 채집량 및 현지 기상 현황")
             
-            # API 기상 호출
             w_data = [get_kma_weather(selected_year, selected_month, "전체", loc) for loc in forest_summary["채집지역2"]]
             temps = [w["temp"] for w in w_data]
             
@@ -629,7 +671,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             forest_summary.plot(x="채집지역2", y="합계", kind='bar', ax=ax1, color='#2a9d8f', edgecolor='black', width=0.4, legend=False)
             ax1.set_ylabel('총 개체수 합계')
             
-            # 이중 축 - 기상 데이터 선그래프
             ax2 = ax1.twinx()
             x_indices = np.arange(len(forest_summary["채집지역2"]))
             ax2.plot(x_indices, temps, color='#e63946', marker='D', linestyle='-', linewidth=2, label='월평균 기온(°C)')
