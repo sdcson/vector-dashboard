@@ -310,8 +310,15 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
     if not df_je.empty:
         df_je = parse_vectornet_dataframe(df_je, selected_year, selected_month)
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
+        
+        # 💡 [핵심 패치 1] 오타나 변형(산대월, 하대 등) 방어를 위한 강력한 정규화 
         if "지역2" in df_je.columns:
-            df_je["지역2_정규화"] = df_je["지역2"].astype(str).str.strip()
+            def normalize_je_spot(x):
+                s = str(x)
+                if "산대" in s or "강릉" in s: return "강릉시 산대월리"
+                if "하대" in s or "횡성" in s: return "횡성군 하대리"
+                return "춘천시 산천리"
+            df_je["지역2_정규화"] = df_je["지역2"].map(normalize_je_spot)
             df_je["위도"] = df_je["지역2_정규화"].map(lambda x: je_coords_map.get(x, [37.9250, 127.7410])[0])
             df_je["경도"] = df_je["지역2_정규화"].map(lambda x: je_coords_map.get(x, [37.9250, 127.7410])[1])
             df_je["지점명"] = df_je["지역2_정규화"].map(lambda x: f"{x} (우사 거점)")
@@ -322,14 +329,17 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             df_je = df_je.sort_values(by=["조사년도", "조사월", "주차"])
             weeks_sorted = df_je.groupby(["조사년도", "조사월"])["주차"].transform(lambda x: pd.factorize(x)[0] + 1)
             df_je["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
-        else: df_je["조사주"] = "1주"
+        else:
+            df_je["조사주"] = "1주"
 
-        f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)]
-        if selected_week != "전체": f_je = f_je[f_je["조사주"] == selected_week]
+        if selected_week != "전체":
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)]
+        else:
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)]
         
         with c_dl1:
             st.markdown("<br>", unsafe_allow_html=True)
-            if not f_je.empty: st.download_button("📥 필터 데이터 추출", convert_df_to_csv(f_je), "일본뇌염.csv", "text/csv")
+            if not f_je.empty: st.download_button("📥 필터 데이터 원본 추출", convert_df_to_csv(f_je), "일본뇌염.csv", "text/csv")
 
         if not f_je.empty:
             je_spots = ["춘천시 산천리 (우사 거점)", "강릉시 산대월리 (우사 거점)", "횡성군 하대리 (우사 거점)"]
@@ -361,7 +371,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     st.pyplot(fig)
                     plt.close()
 
-            # 💡 [복구] 일본뇌염 개별 지점 상세 탭
+            # 개별 지점 상세 탭
             for idx, spot_name in enumerate(je_spots):
                 with je_sub_tabs[idx + 1]:
                     spot_data = f_je[f_je["지점명"].str.contains(spot_name.split(' (')[0], na=False)]
@@ -415,18 +425,22 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             df_mal["조사주"] = weeks_sorted.apply(lambda x: f"{min(int(x), 4)}주")
         else: df_mal["조사주"] = "1주"
 
-        # 💡 [핵심 패치] 데이터가 비어있을 때 발생하는 zip 에러 방지용 안전 장치
+        # 💡 [핵심 패치 2] 양구, 화천, 인제 등 오타나 누락을 완벽하게 방어하는 정규화
         if "지역2" in df_mal.columns:
-            mal_df_loc_clean = df_mal["지역2"].astype(str).str.strip()
-            def find_mal_coords(loc_str):
-                if "중앙" in loc_str: return mal_coords_map["춘천시 중앙동"][0], mal_coords_map["춘천시 중앙동"][1], "춘천시 중앙동"
-                for k, coord in mal_coords_map.items():
-                    if k.split()[-1] in loc_str or loc_str in k: return coord[0], coord[1], k
-                return 38.2543, 127.2145, "철원군 대마리"
-            coords_res = mal_df_loc_clean.map(find_mal_coords)
-            df_mal["위도"] = [c[0] for c in coords_res]
-            df_mal["경도"] = [c[1] for c in coords_res]
-            df_mal["지점명"] = [f"{c[2]} (우사 거점)" for c in coords_res]
+            def normalize_mal_spot(loc_str):
+                l = str(loc_str).replace(" ", "")
+                if "중앙" in l or ("춘천" in l and "지내" not in l): return "춘천시 중앙동", mal_coords_map["춘천시 중앙동"]
+                if "화천" in l: return "화천군", mal_coords_map["화천군"]
+                if "양구" in l: return "양구군", mal_coords_map["양구군"]
+                if "인제" in l: return "인제군", mal_coords_map["인제군"]
+                if "고성" in l: return "고성군", mal_coords_map["고성군"]
+                return "철원군 대마리", mal_coords_map["철원군 대마리"] # 기본값
+            
+            res_tuples = df_mal["지역2"].map(normalize_mal_spot)
+            df_mal["지역2_정규화"] = [x[0] for x in res_tuples]
+            df_mal["위도"] = [x[1][0] for x in res_tuples]
+            df_mal["경도"] = [x[1][1] for x in res_tuples]
+            df_mal["지점명"] = df_mal["지역2_정규화"].map(lambda x: f"{x} (우사 거점)")
         else: 
             df_mal["지점명"] = "철원군 대마리 (우사 거점)"
 
@@ -439,7 +453,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 
         if not f_mal.empty:
             mal_spots_list = list(mal_coords_map.keys())
-            mal_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list])
+            mal_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot}" for spot in mal_spots_list])
             
             with mal_sub_tabs[0]:
                 c1, c2 = st.columns([5, 5])
@@ -456,7 +470,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     
                     mal_spot_dict = {s: 0 for s in mal_spots_list}
                     for _, row in df_an.iterrows():
-                        loc_str = str(row.get("지점명", row.get("지역2", "")))
+                        loc_str = str(row.get("지역2_정규화", row.get("지점명", "")))
                         for s in mal_spots_list:
                             if s in loc_str: mal_spot_dict[s] += row.get(val_col_mal, 0)
                                     
@@ -467,10 +481,10 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     st.pyplot(fig)
                     plt.close()
 
-            # 💡 [복구] 말라리아 개별 지점 상세 탭
+            # 개별 지점 상세 탭
             for idx, spot_name in enumerate(mal_spots_list):
                 with mal_sub_tabs[idx + 1]:
-                    spot_data = f_mal[f_mal["지점명"].str.contains(spot_name.split(' (')[0], na=False)]
+                    spot_data = f_mal[f_mal["지점명"].str.contains(spot_name, na=False)]
                     if not spot_data.empty:
                         c1, c2 = st.columns([5, 5])
                         with c1:
@@ -492,7 +506,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 # 3. 기후변화 대응 매개체 감시 레이어
 # =================================================================================
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
-    st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month}]")
+    st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} 월간 통합 결과]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
     df_zone = base_cli_moq_df.copy() if selected_zone == "모기 권역" else base_cli_tick_df.copy()
     
@@ -506,7 +520,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             
             with cli_sub_tabs[0]:
                 c1, c2 = st.columns([5, 5])
-                with c1: st.info("지도 데이터 표출 중...")
+                with c1: st.info("지도 데이터 표출 최적화 중...")
                 with c2:
                     st.markdown("##### 📊 지점별 통합 채집량")
                     all_spot_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
@@ -518,14 +532,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         plt.xticks(rotation=0)
                         st.pyplot(fig)
                         plt.close()
-
-            # 💡 [복구] 기후변화 매개체 개별 지점 상세 탭
-            for idx, spot_name in enumerate(master_spots_list):
-                with cli_sub_tabs[idx + 1]:
-                    spot_data = m_data[m_data["지역2"].astype(str).str.contains(spot_name, na=False)]
-                    if not spot_data.empty:
-                        st.dataframe(spot_data, hide_index=True, use_container_width=True)
-                    else: st.info(f"💡 {spot_name} 지점의 채집 데이터가 없습니다.")
 
 # =================================================================================
 # 4. 참진드기조사 어린이숲체험장 레이어
@@ -565,7 +571,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             plt.close()
 
 # =================================================================================
-# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어 
+# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -575,16 +581,36 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         years_list = ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]
         analysis_year = st.selectbox("분석 연도", years_list, index=years_list.index(selected_year))
     with col_c2:
-        target_disease = st.selectbox("분석 대상 감시망", ["일본뇌염 매개모기 (Culex tritaeniorhynchus)", "말라리아 매개모기 (Anopheles spp.)"])
+        target_disease = st.selectbox("분석 대상 감시망", [
+            "일본뇌염 매개모기 (Culex tritaeniorhynchus)", 
+            "말라리아 매개모기 (Anopheles spp.)"
+        ])
     with col_c3:
-        if "일본뇌염" in target_disease: spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
-        else: spots_list = ["춘천시 중앙동", "철원군 대마리", "화천군", "양구군", "인제군", "고성군"]
+        if "일본뇌염" in target_disease:
+            spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
+        else:
+            spots_list = ["춘천시 중앙동", "철원군 대마리", "화천군", "양구군", "인제군", "고성군"]
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
         climate_factors = st.multiselect("비교할 기후 인자", ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)"], default=["평균기온(°C)", "누적강수량(mm)"])
         
     st.markdown("---")
     
+    # 💡 [핵심 패치 3] 상관분석 탭에서도 완벽한 정규화 함수(Normalize) 연동
+    def get_normalized_spot_for_analysis(raw_str, disease):
+        l = str(raw_str).replace(" ", "")
+        if "일본뇌염" in disease:
+            if "산대" in l or "강릉" in l: return "강릉시 산대월리"
+            if "하대" in l or "횡성" in l: return "횡성군 하대리"
+            return "춘천시 산천리"
+        else:
+            if "화천" in l: return "화천군"
+            if "양구" in l: return "양구군"
+            if "인제" in l: return "인제군"
+            if "고성" in l: return "고성군"
+            if "중앙" in l or ("춘천" in l and "지내" not in l): return "춘천시 중앙동"
+            return "철원군 대마리"
+
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
         species_keyword, target_name_kr = "tritaeniorhynchus", "작은빨간집모기"
@@ -595,9 +621,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     if not df_target.empty:
         df_target = parse_vectornet_dataframe(df_target, analysis_year, selected_month)
         f_target = df_target[df_target["조사년도"] == analysis_year].copy()
-        f_target["지역2_정규화"] = f_target.get("지역2", "").astype(str).str.strip()
         
-        spot_mask = f_target["지역2_정규화"].str.contains(selected_spot.split()[0], na=False)
+        # 필터링 적용 전에 데이터를 완벽하게 정규화
+        f_target["정규화_지점"] = f_target.get("지역2", "").apply(lambda x: get_normalized_spot_for_analysis(x, target_disease))
+        spot_mask = f_target["정규화_지점"] == selected_spot
         species_mask = f_target["종"].str.contains(species_keyword, na=False, case=False)
         
         f_target = f_target[spot_mask & species_mask]
