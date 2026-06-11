@@ -100,11 +100,10 @@ def get_kma_weather(year_str, month_str, week_str, loc_name):
 
 @st.cache_data(ttl=3600)
 def get_kma_weather_bulk(year_str, loc_name):
-    """상관분석 탭 전용: 3월~10월 데이터를 JSON으로 한 번에 호출 (2026년은 5월까지만 유연하게 제한)"""
+    """상관분석 탭 전용: 3월~10월 데이터를 JSON으로 한 번에 호출"""
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
     
-    # 💡 2026년인 경우 현재 시점 기준 이전 월인 5월까지만 세팅, 그 외에는 10월까지 세팅
     if "2026" in year_str:
         tm1, tm2 = f"{y}0301", f"{y}0531"
         weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0} for m in range(3, 6)}
@@ -415,8 +414,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
     if not df_mal.empty:
         df_mal = parse_vectornet_dataframe(df_mal, selected_year, selected_month)
         mal_coords_map = {
-            "춘천시 중앙동": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
-            "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
+            "춘천시 중앙동": [37.8813, 127.7298], "철원군 대마리": [38.2543, 127.2145],
             "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
@@ -547,7 +545,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             plt.close()
 
 # =================================================================================
-# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어 (2026년 조건 최적화 완료)
+# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어 (다중 질병 동적 연동)
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -555,43 +553,62 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     col_c1, col_c2, col_c3, col_c4 = st.columns([2, 3, 3, 3])
     with col_c1:
         years_list = ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]
-        # 기상청 데이터 연동 안정성을 위해 과거 분석의 핵심 축인 2023년을 기본값으로 설정
         safe_default_idx = years_list.index("2023년")
         analysis_year = st.selectbox("분석 연도", years_list, index=safe_default_idx)
     with col_c2:
-        target_disease = st.selectbox("분석 대상 감시망", ["일본뇌염 매개모기 (Culex tritaeniorhynchus)"])
+        # 💡 [핵심] 분석 대상 드롭다운에 말라리아 추가
+        target_disease = st.selectbox("분석 대상 감시망", [
+            "일본뇌염 매개모기 (Culex tritaeniorhynchus)", 
+            "말라리아 매개모기 (Anopheles spp.)"
+        ])
     with col_c3:
-        je_spots = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
-        selected_spot = st.selectbox("조사지점 선택", je_spots)
+        # 💡 [핵심] 선택한 질병에 따라 조사지점 드롭다운 목록 자동 변경
+        if "일본뇌염" in target_disease:
+            spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
+        else:
+            spots_list = ["춘천시 중앙동", "철원군 대마리", "화천군", "양구군", "인제군", "고성군"]
+        selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
         climate_factors = st.multiselect("비교할 기후 인자", ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)"], default=["평균기온(°C)", "누적강수량(mm)"])
         
     st.markdown("---")
     
-    df_je = base_je_df.copy()
-    if not df_je.empty:
-        df_je = parse_vectornet_dataframe(df_je, analysis_year, selected_month)
-        f_je = df_je[df_je["조사년도"] == analysis_year].copy()
-        f_je["지역2_정규화"] = f_je.get("지역2", "").astype(str).str.strip()
+    if analysis_year in ["2025년", "2026년"]:
+        st.warning("⚠️ 선택하신 연도는 아직 기상청 일일 관측 데이터가 완전히 구축되지 않은 미래 연도입니다. 데이터 조회를 위해 2024년 이전 과거 연도를 선택해주세요.")
+    
+    # 💡 [핵심] 선택한 질병에 따라 원본 데이터 및 종 마스킹 키워드 자동 변경
+    if "일본뇌염" in target_disease:
+        df_target = base_je_df.copy()
+        species_keyword = "tritaeniorhynchus"
+        target_name_kr = "작은빨간집모기"
+    else:
+        df_target = base_mal_df.copy()
+        species_keyword = "Anopheles"
+        target_name_kr = "얼룩날개모기류"
+
+    if not df_target.empty:
+        df_target = parse_vectornet_dataframe(df_target, analysis_year, selected_month)
+        f_target = df_target[df_target["조사년도"] == analysis_year].copy()
+        f_target["지역2_정규화"] = f_target.get("지역2", "").astype(str).str.strip()
         
-        spot_mask = f_je["지역2_정규화"].str.contains(selected_spot.split()[0], na=False)
-        species_mask = f_je["종"].str.contains("tritaeniorhynchus", na=False, case=False)
+        # 지점 필터링 (스플릿을 통해 '춘천시 산천리' -> '춘천시' 매칭 유연화)
+        spot_mask = f_target["지역2_정규화"].str.contains(selected_spot.split()[0], na=False)
+        species_mask = f_target["종"].str.contains(species_keyword, na=False, case=False)
         
-        f_je = f_je[spot_mask & species_mask]
-        val_col_je = "개체수" if "개체수" in f_je.columns else ("채집수" if "채집수" in f_je.columns else "개체수")
+        f_target = f_target[spot_mask & species_mask]
+        val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         
-        # 💡 [핵심 패치] 2026년 선택 시 현재 시점 기준 이전 월인 5월까지만 유연하게 필터링 적용
         if "2026" in analysis_year:
-            months = [f"{m:02d}월" for m in range(3, 6)] # 3월, 4월, 5월
+            months = [f"{m:02d}월" for m in range(3, 6)]
         else:
-            months = [f"{m:02d}월" for m in range(3, 11)] # 3월 ~ 10월
+            months = [f"{m:02d}월" for m in range(3, 11)]
             
         monthly_counts = {m: 0 for m in months}
         
-        for _, row in f_je.iterrows():
+        for _, row in f_target.iterrows():
             m_str = str(row.get("조사월", "")).strip()
             if m_str in monthly_counts:
-                monthly_counts[m_str] += row.get(val_col_je, 0)
+                monthly_counts[m_str] += row.get(val_col_target, 0)
                 
         plot_df = pd.DataFrame(list(monthly_counts.items()), columns=["조사월", "채집량(마리)"])
         
@@ -603,10 +620,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             plot_df["누적강수량(mm)"] = [bulk_weather.get(m, {}).get("precip", 0.0) for m in plot_df["조사월"]]
             plot_df["평균습도(%)"] = [bulk_weather.get(m, {}).get("humid", 0.0) for m in plot_df["조사월"]]
         
-        st.markdown(f"##### 📊 {selected_spot} 작은빨간집모기 계절적 변화 추이 ({analysis_year} {months[0]}~{months[-1]})")
+        st.markdown(f"##### 📊 {selected_spot} {target_name_kr} 계절적 변화 추이 ({analysis_year} {months[0]}~{months[-1]})")
         fig, ax1 = plt.subplots(figsize=(12, 5.5))
         
-        bars = ax1.bar(plot_df["조사월"], plot_df["채집량(마리)"], color='#2b2d42', label='작은빨간집모기 채집량', alpha=0.85, width=0.5)
+        bars = ax1.bar(plot_df["조사월"], plot_df["채집량(마리)"], color='#2b2d42', label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
         ax1.set_ylabel('월별 총 채집량 (마리)', color='#2b2d42', fontweight='bold')
         ax1.tick_params(axis='y', labelcolor='#2b2d42')
         max_count = plot_df["채집량(마리)"].max()
