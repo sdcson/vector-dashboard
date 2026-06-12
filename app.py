@@ -282,7 +282,62 @@ st.sidebar.markdown("### 📅 통합 시간 동기화 필터")
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"])
 selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"], index=2)
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
+# --- (기존 코드 위치 참고용: 이 부분 아래에 붙여넣으세요) ---
+# selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
+# =================================================================================
+# 💡 [신규] 사이드바 챗봇 UI 및 엑셀 지식베이스 연동
+# =================================================================================
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 💬 매개체감염병 AI 챗봇")
+
+@st.cache_data
+def load_faq_db():
+    try:
+        # 카카오형식 지식베이스 엑셀 파일 로드
+        df_faq = pd.read_excel("매개체감염병_지식베이스_카카오형식.xlsx", sheet_name="FAQ Set")
+        df_faq["Question"] = df_faq["Question"].astype(str)
+        df_faq["Answer"] = df_faq["Answer"].astype(str)
+        return df_faq
+    except Exception as e:
+        return pd.DataFrame(columns=["Question", "Answer"])
+
+df_faq = load_faq_db()
+
+# 세션 상태에 대화 기록 저장 (사이드바 공간 절약을 위해 초기화)
+if "messages" not in st.session_state:
+    st.session_state.messages = [{"role": "assistant", "content": "매개체감염병에 대해 궁금한 점을 물어보세요!"}]
+
+# 사이드바 높이가 무한정 길어지는 것을 방지하기 위해 최근 3개의 대화만 표시
+for msg in st.session_state.messages[-3:]:
+    with st.sidebar.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# 사용자 텍스트 입력 UI
+if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
+    # 1. 사용자 질문 표시 및 저장
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    with st.sidebar.chat_message("user"):
+        st.markdown(user_query)
+        
+    # 2. 지식베이스 검색 (간단한 키워드 매칭 로직)
+    keywords = user_query.split()
+    matched_answer = "죄송합니다. 지식베이스에서 관련된 답변을 찾지 못했습니다. 검색어를 조금 더 짧은 명사 위주로 입력해 보세요."
+    
+    if not df_faq.empty:
+        # 사용자가 입력한 단어가 'Question' 컬럼에 하나라도 포함되어 있는지 검색
+        mask = df_faq["Question"].str.contains("|".join(keywords), na=False, case=False)
+        if mask.any():
+            # 가장 먼저 매칭된 답변을 가져옵니다
+            matched_answer = df_faq[mask].iloc[0]["Answer"]
+
+    # 3. 챗봇 답변 표시 및 저장
+    with st.sidebar.chat_message("assistant"):
+        st.markdown(matched_answer)
+    st.session_state.messages.append({"role": "assistant", "content": matched_answer})
+
+# --- (기존 코드 위치 참고용: 이 부분 위에 붙여넣으세요) ---
+# tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", ...]
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)", "☁️ 기상 요인 상관분석"]
 selected_tab = st.radio("📡 감시사업 카테고리 선택", tabs, horizontal=True)
 
