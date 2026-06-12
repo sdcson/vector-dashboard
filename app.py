@@ -286,7 +286,7 @@ selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주"
 # selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
 # =================================================================================
-# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 유사도 검색 엔진 (머신러닝 NLP 방식)
+# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진 (정확도/스크롤 개선판)
 # =================================================================================
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💬 매개체감염병 AI 챗봇")
@@ -294,24 +294,16 @@ st.sidebar.markdown("### 💬 매개체감염병 AI 챗봇")
 @st.cache_resource
 def load_faq_ai_engine():
     try:
-        # scikit-learn 라이브러리 호출
         from sklearn.feature_extraction.text import TfidfVectorizer
-        
         df_faq = pd.read_excel("매개체감염병_지식베이스_카카오형식.xlsx", sheet_name="FAQ Set", engine="openpyxl")
         df_faq["Question"] = df_faq["Question"].astype(str)
         df_faq["Answer"] = df_faq["Answer"].astype(str)
         
-        # 💡 한국어 특성을 고려한 문자 단위(N-gram) 벡터화 엔진
-        # 단어 단위가 아닌 글자 뭉치(2~4글자) 단위로 쪼개어 오타나 띄어쓰기 오류에 강하게 만듭니다.
+        # 한국어 특성상 조사(은/는/이/가)가 붙으므로 char_wb 유지, 단어 판별력 강화
         vectorizer = TfidfVectorizer(analyzer='char_wb', ngram_range=(2, 4))
-        
-        # 엑셀에 있는 모든 질문을 수학적 벡터(좌표) 공간에 매핑
         tfidf_matrix = vectorizer.fit_transform(df_faq["Question"])
         
         return df_faq, vectorizer, tfidf_matrix
-    except ImportError:
-        st.sidebar.error("🚨 머신러닝 라이브러리가 없습니다. 터미널에서 'pip install scikit-learn'을 실행해 주세요.")
-        return pd.DataFrame(), None, None
     except Exception as e:
         st.sidebar.error(f"지식베이스 로드 실패: {e}")
         return pd.DataFrame(), None, None
@@ -320,47 +312,59 @@ df_faq, vectorizer, tfidf_matrix = load_faq_ai_engine()
 
 # 세션 상태에 대화 기록 저장
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "매개체감염병에 대해 무엇이든 물어보세요! AI가 문맥을 파악해 가장 정확한 답변을 찾아드립니다."}]
+    st.session_state.messages = [{"role": "assistant", "content": "매개체감염병에 대해 질문해 주세요! (예: 일본뇌염, 말라리아 예방)"}]
 
-# 사이드바 공간 확보를 위해 최근 3개 대화만 렌더링
-for msg in st.session_state.messages[-3:]:
-    with st.sidebar.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-
-# 사용자 텍스트 입력 UI
+# -----------------------------------------------------------------
+# 1. AI 챗봇 두뇌 엔진 (화면을 그리기 전에 답변부터 먼저 찾도록 순서 변경)
+# -----------------------------------------------------------------
 if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
-    # 1. 사용자 질문 저장 및 출력
+    # 사용자의 질문을 세션에 바로 저장
     st.session_state.messages.append({"role": "user", "content": user_query})
-    with st.sidebar.chat_message("user"):
-        st.markdown(user_query)
-        
-    matched_answer = "앗, 질문의 의도를 정확히 파악하지 못했어요. 다른 표현으로 조금 더 자세히 말씀해 주시겠어요?"
     
-    # 2. AI 코사인 유사도 분석 진행
-    if vectorizer is not None and tfidf_matrix is not None and not df_faq.empty:
-        from sklearn.metrics.pairwise import cosine_similarity
+    matched_answer = "질문의 의도를 파악하지 못했어요. 핵심 단어 위주로 다시 질문해 주시겠어요?"
+    
+    if not df_faq.empty:
+        import re
+        # 특수문자를 제거하여 깔끔한 검색어 생성
+        clean_query = re.sub(r'[^\w\s]', '', user_query).strip()
         
-        # 사용자의 질문을 벡터 공간에 매핑
-        query_vec = vectorizer.transform([user_query])
+        # 💡 [핵심 방어 로직] 짧고 명확한 키워드 우선 검색 (일본뇌염 혼동 방지)
+        exact_match_df = df_faq[df_faq["Question"].str.contains(clean_query, na=False, case=False)] if len(clean_query) >= 2 else pd.DataFrame()
         
-        # 기존 지식베이스 질문들과의 방향성(유사도)을 계산 (0.0 ~ 1.0)
-        similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
+        if not exact_match_df.empty:
+            # 검색어가 질문에 명확히 들어있으면 AI 계산 없이 바로 첫 번째 정답 출력
+            matched_answer = exact_match_df.iloc[0]["Answer"]
         
-        # 가장 높은 유사도를 기록한 질문의 인덱스 추출
-        best_idx = similarities.argmax()
-        best_score = similarities[best_idx]
-        
-        # 💡 유사도 임계값(Threshold) 설정
-        # 너무 엉뚱한 질문을 했을 때 아무 답변이나 뱉지 않도록 방어선 구축 (15% 이상 일치할 때만 답변)
-        if best_score > 0.15: 
-            matched_answer = df_faq.iloc[best_idx]["Answer"]
-        else:
-            matched_answer = f"지식베이스에서 충분히 유사한 내용을 찾지 못했습니다. (유사도: {best_score*100:.1f}%)\n\n핵심 키워드를 포함하여 질문을 조금 다르게 입력해 보세요!"
+        elif vectorizer is not None and tfidf_matrix is not None:
+            # 직접 키워드로 못 찾은 긴 문장(예: "모기 안 물리는 법 알려줘")의 경우 TF-IDF 엔진 가동
+            from sklearn.metrics.pairwise import cosine_similarity
+            
+            query_vec = vectorizer.transform([user_query])
+            similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
+            
+            best_idx = similarities.argmax()
+            best_score = similarities[best_idx]
+            
+            # 임계값(Threshold)을 0.25로 상향하여 억지 답변을 차단
+            if best_score > 0.25: 
+                matched_answer = df_faq.iloc[best_idx]["Answer"]
+            else:
+                matched_answer = "지식베이스에서 정확히 일치하는 내용을 찾지 못했습니다. '일본뇌염 증상'처럼 핵심 단어를 포함해 질문해 보세요!"
 
-    # 3. 챗봇 답변 출력 및 저장
-    with st.sidebar.chat_message("assistant"):
-        st.markdown(matched_answer)
+    # 찾은 답변을 세션에 저장
     st.session_state.messages.append({"role": "assistant", "content": matched_answer})
+
+# -----------------------------------------------------------------
+# 2. UI 렌더링: 스크롤 전용 고정 창 (최신 데이터가 즉시 반영됨)
+# -----------------------------------------------------------------
+# height 속성을 부여하여 450px 크기의 스크롤 박스 생성
+chat_container = st.sidebar.container(height=450)
+
+# 모든 대화 기록을 스크롤 박스 안에 차곡차곡 쌓아서 보여줌
+with chat_container:
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 # --- (기존 코드 위치 참고용: 이 부분 위에 붙여넣으세요) ---
 # tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", ...]
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)", "☁️ 기상 요인 상관분석"]
