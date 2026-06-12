@@ -286,56 +286,81 @@ selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주"
 # selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
 # =================================================================================
-# 💡 [신규] 사이드바 챗봇 UI 및 엑셀 지식베이스 연동
+# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 유사도 검색 엔진 (머신러닝 NLP 방식)
 # =================================================================================
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💬 매개체감염병 AI 챗봇")
 
-@st.cache_data
-def load_faq_db():
+@st.cache_resource
+def load_faq_ai_engine():
     try:
-        # 카카오형식 지식베이스 엑셀 파일 로드
-        df_faq = pd.read_excel("매개체감염병_지식베이스_카카오형식.xlsx", sheet_name="FAQ Set")
+        # scikit-learn 라이브러리 호출
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        
+        df_faq = pd.read_excel("매개체감염병_지식베이스_카카오형식.xlsx", sheet_name="FAQ Set", engine="openpyxl")
         df_faq["Question"] = df_faq["Question"].astype(str)
         df_faq["Answer"] = df_faq["Answer"].astype(str)
-        return df_faq
+        
+        # 💡 한국어 특성을 고려한 문자 단위(N-gram) 벡터화 엔진
+        # 단어 단위가 아닌 글자 뭉치(2~4글자) 단위로 쪼개어 오타나 띄어쓰기 오류에 강하게 만듭니다.
+        vectorizer = TfidfVectorizer(analyzer='char_wb', ngram_range=(2, 4))
+        
+        # 엑셀에 있는 모든 질문을 수학적 벡터(좌표) 공간에 매핑
+        tfidf_matrix = vectorizer.fit_transform(df_faq["Question"])
+        
+        return df_faq, vectorizer, tfidf_matrix
+    except ImportError:
+        st.sidebar.error("🚨 머신러닝 라이브러리가 없습니다. 터미널에서 'pip install scikit-learn'을 실행해 주세요.")
+        return pd.DataFrame(), None, None
     except Exception as e:
-        return pd.DataFrame(columns=["Question", "Answer"])
+        st.sidebar.error(f"지식베이스 로드 실패: {e}")
+        return pd.DataFrame(), None, None
 
-df_faq = load_faq_db()
+df_faq, vectorizer, tfidf_matrix = load_faq_ai_engine()
 
-# 세션 상태에 대화 기록 저장 (사이드바 공간 절약을 위해 초기화)
+# 세션 상태에 대화 기록 저장
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "매개체감염병에 대해 궁금한 점을 물어보세요!"}]
+    st.session_state.messages = [{"role": "assistant", "content": "매개체감염병에 대해 무엇이든 물어보세요! AI가 문맥을 파악해 가장 정확한 답변을 찾아드립니다."}]
 
-# 사이드바 높이가 무한정 길어지는 것을 방지하기 위해 최근 3개의 대화만 표시
+# 사이드바 공간 확보를 위해 최근 3개 대화만 렌더링
 for msg in st.session_state.messages[-3:]:
     with st.sidebar.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
 # 사용자 텍스트 입력 UI
 if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
-    # 1. 사용자 질문 표시 및 저장
+    # 1. 사용자 질문 저장 및 출력
     st.session_state.messages.append({"role": "user", "content": user_query})
     with st.sidebar.chat_message("user"):
         st.markdown(user_query)
         
-    # 2. 지식베이스 검색 (간단한 키워드 매칭 로직)
-    keywords = user_query.split()
-    matched_answer = "죄송합니다. 지식베이스에서 관련된 답변을 찾지 못했습니다. 검색어를 조금 더 짧은 명사 위주로 입력해 보세요."
+    matched_answer = "앗, 질문의 의도를 정확히 파악하지 못했어요. 다른 표현으로 조금 더 자세히 말씀해 주시겠어요?"
     
-    if not df_faq.empty:
-        # 사용자가 입력한 단어가 'Question' 컬럼에 하나라도 포함되어 있는지 검색
-        mask = df_faq["Question"].str.contains("|".join(keywords), na=False, case=False)
-        if mask.any():
-            # 가장 먼저 매칭된 답변을 가져옵니다
-            matched_answer = df_faq[mask].iloc[0]["Answer"]
+    # 2. AI 코사인 유사도 분석 진행
+    if vectorizer is not None and tfidf_matrix is not None and not df_faq.empty:
+        from sklearn.metrics.pairwise import cosine_similarity
+        
+        # 사용자의 질문을 벡터 공간에 매핑
+        query_vec = vectorizer.transform([user_query])
+        
+        # 기존 지식베이스 질문들과의 방향성(유사도)을 계산 (0.0 ~ 1.0)
+        similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
+        
+        # 가장 높은 유사도를 기록한 질문의 인덱스 추출
+        best_idx = similarities.argmax()
+        best_score = similarities[best_idx]
+        
+        # 💡 유사도 임계값(Threshold) 설정
+        # 너무 엉뚱한 질문을 했을 때 아무 답변이나 뱉지 않도록 방어선 구축 (15% 이상 일치할 때만 답변)
+        if best_score > 0.15: 
+            matched_answer = df_faq.iloc[best_idx]["Answer"]
+        else:
+            matched_answer = f"지식베이스에서 충분히 유사한 내용을 찾지 못했습니다. (유사도: {best_score*100:.1f}%)\n\n핵심 키워드를 포함하여 질문을 조금 다르게 입력해 보세요!"
 
-    # 3. 챗봇 답변 표시 및 저장
+    # 3. 챗봇 답변 출력 및 저장
     with st.sidebar.chat_message("assistant"):
         st.markdown(matched_answer)
     st.session_state.messages.append({"role": "assistant", "content": matched_answer})
-
 # --- (기존 코드 위치 참고용: 이 부분 위에 붙여넣으세요) ---
 # tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", ...]
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)", "☁️ 기상 요인 상관분석"]
