@@ -365,6 +365,17 @@ with chat_container:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+# -----------------------------------------------------------------
+    # 3. 챗봇 답변 출력 및 저장
+    # -----------------------------------------------------------------
+    # 💡 [핵심] 마크다운 취소선 문법 충돌을 막기 위해 물결표(~) 앞에 역슬래시(\) 추가
+    safe_answer = matched_answer.replace("~", r"\~")
+
+    with chat_container:
+        with st.chat_message("assistant"):
+            st.markdown(safe_answer)
+            
+    st.session_state.messages.append({"role": "assistant", "content": safe_answer})
 # --- (기존 코드 위치 참고용: 이 부분 위에 붙여넣으세요) ---
 # tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", ...]
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)", "☁️ 기상 요인 상관분석"]
