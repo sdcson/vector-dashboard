@@ -286,7 +286,7 @@ selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주"
 # selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
 # =================================================================================
-# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진 (정확도/스크롤 개선판)
+# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진
 # =================================================================================
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💬 매개체감염병 AI 챗봇")
@@ -299,7 +299,6 @@ def load_faq_ai_engine():
         df_faq["Question"] = df_faq["Question"].astype(str)
         df_faq["Answer"] = df_faq["Answer"].astype(str)
         
-        # 한국어 특성상 조사(은/는/이/가)가 붙으므로 char_wb 유지, 단어 판별력 강화
         vectorizer = TfidfVectorizer(analyzer='char_wb', ngram_range=(2, 4))
         tfidf_matrix = vectorizer.fit_transform(df_faq["Question"])
         
@@ -310,72 +309,54 @@ def load_faq_ai_engine():
 
 df_faq, vectorizer, tfidf_matrix = load_faq_ai_engine()
 
-# 세션 상태에 대화 기록 저장
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "매개체감염병에 대해 질문해 주세요! (예: 일본뇌염, 말라리아 예방)"}]
 
 # -----------------------------------------------------------------
-# 1. AI 챗봇 두뇌 엔진 (화면을 그리기 전에 답변부터 먼저 찾도록 순서 변경)
+# 1. AI 챗봇 두뇌 엔진 (질문 입력 시 실행)
 # -----------------------------------------------------------------
 if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
-    # 사용자의 질문을 세션에 바로 저장
     st.session_state.messages.append({"role": "user", "content": user_query})
     
     matched_answer = "질문의 의도를 파악하지 못했어요. 핵심 단어 위주로 다시 질문해 주시겠어요?"
     
     if not df_faq.empty:
         import re
-        # 특수문자를 제거하여 깔끔한 검색어 생성
         clean_query = re.sub(r'[^\w\s]', '', user_query).strip()
         
-        # 💡 [핵심 방어 로직] 짧고 명확한 키워드 우선 검색 (일본뇌염 혼동 방지)
+        # 키워드 직접 매칭 (짧은 단어 오류 방지)
         exact_match_df = df_faq[df_faq["Question"].str.contains(clean_query, na=False, case=False)] if len(clean_query) >= 2 else pd.DataFrame()
         
         if not exact_match_df.empty:
-            # 검색어가 질문에 명확히 들어있으면 AI 계산 없이 바로 첫 번째 정답 출력
             matched_answer = exact_match_df.iloc[0]["Answer"]
-        
         elif vectorizer is not None and tfidf_matrix is not None:
-            # 직접 키워드로 못 찾은 긴 문장(예: "모기 안 물리는 법 알려줘")의 경우 TF-IDF 엔진 가동
+            # AI 유사도 매칭
             from sklearn.metrics.pairwise import cosine_similarity
-            
             query_vec = vectorizer.transform([user_query])
             similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
             
             best_idx = similarities.argmax()
             best_score = similarities[best_idx]
             
-            # 임계값(Threshold)을 0.25로 상향하여 억지 답변을 차단
             if best_score > 0.25: 
                 matched_answer = df_faq.iloc[best_idx]["Answer"]
             else:
                 matched_answer = "지식베이스에서 정확히 일치하는 내용을 찾지 못했습니다. '일본뇌염 증상'처럼 핵심 단어를 포함해 질문해 보세요!"
 
-    # 찾은 답변을 세션에 저장
-    st.session_state.messages.append({"role": "assistant", "content": matched_answer})
+    # 💡 [핵심] 찾은 답변을 세션에 저장하기 전, 취소선 오류 방지를 위해 물결표(~) 이스케이프 처리
+    safe_answer = matched_answer.replace("~", r"\~")
+    st.session_state.messages.append({"role": "assistant", "content": safe_answer})
 
 # -----------------------------------------------------------------
-# 2. UI 렌더링: 스크롤 전용 고정 창 (최신 데이터가 즉시 반영됨)
+# 2. UI 렌더링: 스크롤 전용 고정 창
 # -----------------------------------------------------------------
-# height 속성을 부여하여 450px 크기의 스크롤 박스 생성
 chat_container = st.sidebar.container(height=450)
 
-# 모든 대화 기록을 스크롤 박스 안에 차곡차곡 쌓아서 보여줌
 with chat_container:
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-# -----------------------------------------------------------------
-    # 3. 챗봇 답변 출력 및 저장
-    # -----------------------------------------------------------------
-    # 💡 [핵심] 마크다운 취소선 문법 충돌을 막기 위해 물결표(~) 앞에 역슬래시(\) 추가
-    safe_answer = matched_answer.replace("~", r"\~")
 
-    with chat_container:
-        with st.chat_message("assistant"):
-            st.markdown(safe_answer)
-            
-    st.session_state.messages.append({"role": "assistant", "content": safe_answer})
 # --- (기존 코드 위치 참고용: 이 부분 위에 붙여넣으세요) ---
 # tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", ...]
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)", "☁️ 기상 요인 상관분석"]
