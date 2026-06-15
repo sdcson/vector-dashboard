@@ -627,30 +627,122 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     st.header(f"🌍 기후변화 대응 감염병 매개체 감시 현황 [{selected_year} {selected_month} 월간 통합 결과]")
     selected_zone = st.radio("📡 모니터링 매개체 권역 선택", ["모기 권역", "참진드기 권역", "털진드기 분포감시", "털진드기 발생감시"], horizontal=True)
-    df_zone = base_cli_moq_df.copy() if selected_zone == "모기 권역" else base_cli_tick_df.copy()
     
-    if not df_zone.empty:
-        m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)]
-        val_col = "개체수" if "개체수" in df_zone.columns else "채집수"
-
-        if selected_zone in ["모기 권역", "참진드기 권역"]:
-            master_spots_list = ["춘천시보건소", "백로서식지", "삼천동"] if selected_zone == "모기 권역" else ["화천군", "인제군"]
-            cli_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot}" for spot in master_spots_list])
+    if selected_zone == "모기 권역":
+        df_zone = base_cli_moq_df.copy()
+    elif selected_zone == "참진드기 권역":
+        df_zone = base_cli_tick_df.copy()
+    elif selected_zone == "털진드기 분포감시":
+        df_zone = base_cli_mite_dist_df.copy()
+    else:
+        df_zone = base_cli_mite_gen_df.copy()
+    
+    if df_zone is not None and not df_zone.empty:
+        try:
+            df_zone = parse_vectornet_dataframe(df_zone, selected_year, selected_month)
+        except Exception:
+            pass
             
-            with cli_sub_tabs[0]:
-                c1, c2 = st.columns([5, 5])
-                with c1: st.info("지도 데이터 표출 최적화 중...")
-                with c2:
-                    st.markdown("##### 📊 지점별 통합 채집량")
+        m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)].copy()
+        val_col = "개체수" if "개체수" in m_data.columns else ("채집수" if "채집수" in m_data.columns else "개체수")
+        
+        if val_col in m_data.columns:
+            m_data[val_col] = pd.to_numeric(m_data[val_col], errors='coerce').fillna(0)
+
+        # 💡 [핵심 해결] 유연한 컬럼명 인식 (지역2, 시군구, 채집지역 등 자동 탐색)
+        loc_col = "지역2"
+        for col_name in ["지역2", "시군구", "채집지역", "지역"]:
+            if col_name in m_data.columns:
+                loc_col = col_name
+                break
+
+        # 권역별 기본 지점 맵핑 (군/시 명칭 떼고 핵심 단어로만)
+        if selected_zone == "모기 권역":
+            master_spots_list = ["춘천시보건소", "백로서식지", "삼천동"]
+        elif selected_zone == "참진드기 권역":
+            master_spots_list = ["화천", "인제"]
+        else: # 털진드기 발생 및 분포
+            master_spots_list = ["춘천", "화천", "인제", "철원", "홍천", "정선"]
+
+        actual_spots = m_data[loc_col].dropna().unique().tolist() if loc_col in m_data.columns else []
+        display_spots = [s for s in master_spots_list if any(s in str(a) for a in actual_spots)]
+        if not display_spots: display_spots = master_spots_list # 없으면 기본값 전체 띄움
+        
+        cli_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot}" for spot in display_spots])
+        
+        # 실제 지도 좌표 데이터 세팅
+        zone_coords_map = {
+            "춘천시보건소": [37.8813, 127.7298], "백로서식지": [37.9000, 127.7500], "삼천동": [37.8700, 127.7000],
+            "화천": [38.1060, 127.7035], "인제": [38.0694, 128.1701],
+            "춘천": [37.8813, 127.7298], "철원": [38.2543, 127.2145], 
+            "홍천": [37.6970, 127.8886], "정선": [37.3801, 128.6608]
+        }
+        
+        with cli_sub_tabs[0]:
+            c1, c2 = st.columns([5, 5])
+            with c1: 
+                st.markdown(f"##### 🗺️ {selected_zone} 감시 지점 지도")
+                m_zone = folium.Map(location=[37.85, 128.1], zoom_start=8)
+                
+                # 아이콘 색상 (모기=파랑, 참진드기=초록, 털진드기=주황)
+                marker_color = 'orange' if '털진드기' in selected_zone else ('green' if '참진드기' in selected_zone else 'blue')
+                
+                spot_totals = {s: 0 for s in master_spots_list}
+                if not m_data.empty and loc_col in m_data.columns:
+                    for _, row in m_data.iterrows():
+                        loc_val = str(row[loc_col]).strip()
+                        for s in master_spots_list:
+                            if s in loc_val: # 부분 일치 검색
+                                spot_totals[s] += row.get(val_col, 0)
+
+                for spot in display_spots:
+                    coords = zone_coords_map.get(spot, [37.85, 128.1])
+                    total_cnt = spot_totals.get(spot, 0)
+                    folium.Marker(
+                        coords,
+                        tooltip=f"{spot} (총 {int(total_cnt)}마리)",
+                        icon=folium.Icon(color=marker_color, icon='info-sign')
+                    ).add_to(m_zone)
+                
+                st_folium(m_zone, key=f"map_{selected_zone}_main", width="100%", height=380)
+                
+            with c2:
+                st.markdown("##### 📊 지점별 통합 채집량")
+                if not m_data.empty and "종" in m_data.columns and loc_col in m_data.columns:
+                    # 그래프 표출을 위한 지점 정규화 로직
+                    def get_norm_spot(x):
+                        for s in master_spots_list:
+                            if s in str(x): return s
+                        return "기타지점"
+                    m_data["정규화_지점"] = m_data[loc_col].apply(get_norm_spot)
+                    
                     all_spot_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
                     if not all_spot_clean.empty:
-                        pivot_df = all_spot_clean.pivot_table(index='지역2', columns='종', values=val_col, aggfunc='sum').fillna(0)
+                        pivot_df = all_spot_clean.pivot_table(index='정규화_지점', columns='종', values=val_col, aggfunc='sum').fillna(0)
                         fig, ax1 = plt.subplots(figsize=(6, 5.2))
                         pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42')
                         ax1.set_ylabel('총 개체수')
                         plt.xticks(rotation=0)
                         st.pyplot(fig)
                         plt.close()
+                    else:
+                        st.info("📊 해당 기간에 채집된 개체가 없거나 '미채집' 데이터만 존재합니다.")
+                else:
+                    st.info(f"📊 선택한 달({selected_month})의 데이터가 존재하지 않습니다.")
+                    
+        # 개별 지점 탭 내용 채우기
+        for idx, spot_name in enumerate(display_spots):
+            with cli_sub_tabs[idx + 1]:
+                if not m_data.empty and loc_col in m_data.columns:
+                    spot_data = m_data[m_data[loc_col].str.contains(spot_name, na=False)]
+                    if not spot_data.empty and spot_data[val_col].sum() > 0:
+                        st.dataframe(spot_data.drop(columns=["위도", "경도", "정규화_지점"], errors='ignore'), hide_index=True, use_container_width=True)
+                    else:
+                        st.info(f"💡 {selected_year} {selected_month}에 {spot_name} 지점에서 채집된 데이터가 없습니다.")
+                else:
+                    st.info("데이터가 없습니다.")
+    else:
+        st.warning(f"⚠️ {selected_zone} 데이터베이스에 업로드된 자료가 없습니다.")
 
 # =================================================================================
 # 4. 참진드기조사 어린이숲체험장 레이어
