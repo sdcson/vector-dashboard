@@ -677,9 +677,44 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         forest_summary['합계'] = forest_summary.iloc[:, 1:].sum(axis=1)
         
         col_f_map, col_f_graph = st.columns([5, 5])
+        
         with col_f_map:
-            st.info("어린이 숲 동적 지도 매핑 활성화...")
+            st.markdown("##### 🗺️ 구역별 채집 지점 지도")
+            
+            # 강원도 중심 좌표로 지도 생성
+            m_forest_map = folium.Map(location=[37.85, 128.2], zoom_start=8)
+            
+            # 각 지역별 임시 좌표 딕셔너리 (필요시 정확한 주소 좌표로 수정 가능)
+            forest_coords_map = {
+                "홍천": [37.6970, 127.8886],
+                "정선": [37.3801, 128.6608],
+                "춘천": [37.8813, 127.7298],
+                "인제": [38.0694, 128.1701],
+                "속초": [38.2070, 128.5918],
+                "양양": [38.0754, 128.6189],
+                "남산": [37.7170, 127.6400], 
+                "삼마치": [37.6480, 127.9150]
+            }
+            
+            # 데이터프레임 기반으로 지도에 마커(나뭇잎 아이콘) 추가
+            for index, row in forest_summary.iterrows():
+                region = row["채집지역2"]
+                total_count = row["합계"]
+                if region in forest_coords_map:
+                    coords = forest_coords_map[region]
+                    tooltip_text = f"{region} 숲체험장 (총 {total_count}마리)"
+                    folium.Marker(
+                        coords, 
+                        tooltip=tooltip_text,
+                        icon=folium.Icon(color='green', icon='leaf')
+                    ).add_to(m_forest_map)
+                    
+            # 💡 기존 st.info() 대신 실제 지도를 화면에 출력
+            st_folium(m_forest_map, key="map_forest", width="100%", height=320)
+            
+            # 하단에 요약 데이터프레임 표출
             st.dataframe(forest_summary, hide_index=True, use_container_width=True)
+            
         with col_f_graph:
             st.markdown(f"##### 📊 {selected_year} {selected_month} 구역별 채집량")
             fig, ax1 = plt.subplots(figsize=(6, 5))
@@ -688,6 +723,8 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             plt.xticks(rotation=0)
             st.pyplot(fig)
             plt.close()
+    else:
+        st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
 # 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어
