@@ -295,7 +295,42 @@ st.sidebar.markdown("### 💬 매개체감염병 AI 챗봇")
 def load_faq_ai_engine():
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer
-        df_faq = pd.read_excel("매개체감염병_지식베이스_카카오형식.xlsx", sheet_name="FAQ Set", engine="openpyxl")
+        import os
+        import pandas as pd
+        
+        file_loaded = False
+        df_faq = pd.DataFrame()
+
+        # 1. 파일 자동 탐색 (CSV 최우선 탐색)
+        csv_candidates = [
+            "매개체감염병_지식베이스_통합본_최종.csv", 
+            "매개체감염병_지식베이스_카카오형식.xlsx - FAQ Set.csv",
+            "매개체감염병_지식베이스_카카오형식.csv"
+        ]
+        
+        for csv_file in csv_candidates:
+            if os.path.exists(csv_file):
+                try: # 한글 인코딩 에러 방지 (utf-8-sig -> cp949)
+                    df_faq = pd.read_csv(csv_file, encoding='utf-8-sig')
+                except UnicodeDecodeError:
+                    df_faq = pd.read_csv(csv_file, encoding='cp949')
+                file_loaded = True
+                break
+        
+        # 2. CSV가 없으면 기존 엑셀 로드 시도 (시트명 에러 방지 포함)
+        if not file_loaded:
+            excel_name = "매개체감염병_지식베이스_카카오형식.xlsx"
+            if os.path.exists(excel_name):
+                try:
+                    df_faq = pd.read_excel(excel_name, sheet_name="FAQ Set", engine="openpyxl")
+                except ValueError:
+                    df_faq = pd.read_excel(excel_name, sheet_name=0, engine="openpyxl") # 시트 못 찾으면 첫 번째 시트 강제 로드
+                file_loaded = True
+
+        if df_faq.empty:
+            st.sidebar.error("지식베이스 데이터를 찾을 수 없습니다. 파일 업로드를 확인해주세요.")
+            return pd.DataFrame(), None, None
+
         df_faq["Question"] = df_faq["Question"].astype(str)
         df_faq["Answer"] = df_faq["Answer"].astype(str)
         
@@ -324,8 +359,11 @@ if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
         import re
         clean_query = re.sub(r'[^\w\s]', '', user_query).strip()
         
-        # 키워드 직접 매칭 (짧은 단어 오류 방지)
-        exact_match_df = df_faq[df_faq["Question"].str.contains(clean_query, na=False, case=False)] if len(clean_query) >= 2 else pd.DataFrame()
+        # 키워드 직접 매칭 (정규식 이스케이프 적용으로 특수문자 에러 원천 차단)
+        if len(clean_query) >= 2:
+            exact_match_df = df_faq[df_faq["Question"].str.contains(re.escape(clean_query), na=False, case=False)]
+        else:
+            exact_match_df = pd.DataFrame()
         
         if not exact_match_df.empty:
             matched_answer = exact_match_df.iloc[0]["Answer"]
@@ -343,7 +381,7 @@ if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
             else:
                 matched_answer = "지식베이스에서 정확히 일치하는 내용을 찾지 못했습니다. '일본뇌염 증상'처럼 핵심 단어를 포함해 질문해 보세요!"
 
-    # 💡 [핵심] 찾은 답변을 세션에 저장하기 전, 취소선 오류 방지를 위해 물결표(~) 이스케이프 처리
+    # 찾은 답변을 세션에 저장하기 전 이스케이프 처리
     safe_answer = matched_answer.replace("~", r"\~")
     st.session_state.messages.append({"role": "assistant", "content": safe_answer})
 
