@@ -798,7 +798,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     if not m_forest.empty:
         m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
         
-        # 💡 [핵심] 관리지역/비관리지역 자동 파싱 로직 추가
         def parse_management_zone(row):
             env = str(row.get('환경', '')).strip()
             cls = str(row.get('분류', '')).strip()
@@ -806,16 +805,13 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             
             combined = env + " " + cls
             
-            # 명시적으로 '관리지역1' 등이 적혀있는 경우
             import re
             match = re.search(r'(비?관리지역?\s*\d)', combined)
             if match:
                 return match.group(1).replace(" ", "").replace("관리지역", "관리지역")
                 
-            # 분류(In/Out) 또는 텍스트 기반 구분
             is_managed = "비관리지역" if ("비관리" in combined or "Out" in combined or "out" in combined) else "관리지역"
             
-            # 번호(1, 2, 3) 추출
             num = "1"
             if "1" in env or "1" in cls or "1" in point: num = "1"
             elif "2" in env or "2" in cls or "2" in point: num = "2"
@@ -829,7 +825,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         val_col = "개체수" if "개체수" in m_forest.columns else "채집수"
         m_forest[val_col] = pd.to_numeric(m_forest[val_col], errors='coerce').fillna(0)
         
-        # 미채집 방어: 실제 채집된 개체만 필터링
         all_spot_clean = m_forest[(m_forest["종"] != "미채집") & (~m_forest["종"].str.contains("미채집", na=False)) & (m_forest[val_col] > 0)]
         
         col_f_map, col_f_graph = st.columns([5, 5])
@@ -846,7 +841,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 "남산": [37.7170, 127.6400], "삼마치": [37.6480, 127.9150]
             }
             
-            # 지도 마커 표출용 요약 (지역 단위 합계)
             region_summary = m_forest.groupby("채집지역2")[val_col].sum().reset_index()
             
             for index, row in region_summary.iterrows():
@@ -863,20 +857,17 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                     
             st_folium(m_forest_map, key="map_forest", width="100%", height=380)
             
-            # 하단 테이블 표출
             st.markdown("##### 📝 채집 상세 내역")
             display_df = m_forest[["채집지역2", "세부구역", "종명_한글", val_col]].groupby(["채집지역2", "세부구역", "종명_한글"]).sum().reset_index()
             display_df = display_df[display_df[val_col] > 0]
             st.dataframe(display_df, hide_index=True, use_container_width=True)
             
         with col_f_graph:
-            st.markdown(f"##### 📊 {selected_year} {selected_month} 세부 지점별 참진드기 채집량")
+            st.markdown(f"##### 📊 {selected_year} {selected_month} 지점별 참진드기 종별 채집량")
             
             if not all_spot_clean.empty:
-                # 💡 관리지역1~3, 비관리지역1~3 기준 누적 막대 그래프 생성
                 forest_pivot = all_spot_clean.pivot_table(index="지점_세부구역", columns="종명_한글", values=val_col, aggfunc="sum", fill_value=0)
                 
-                # 순서 정렬 (관리지역 1,2,3 -> 비관리지역 1,2,3 순서로 보기 좋게 배치)
                 def sort_key(idx):
                     try:
                         region = idx.split()[0]
@@ -890,12 +881,20 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 forest_pivot = forest_pivot.reindex(sorted_index)
                 
                 fig, ax1 = plt.subplots(figsize=(7, 5.2))
-                # 막대그래프 시각화 (색상 누적)
+                
+                # 💡 그래프 생성 및 데이터 라벨(숫자) 추가 부분
                 forest_pivot.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42', width=0.7)
-                ax1.set_ylabel('채집 개체수 (마리)')
+                
+                # 각 막대 안에 마릿수 표시
+                for container in ax1.containers:
+                    # 0마리인 경우는 텍스트를 숨겨서 깔끔하게 유지
+                    labels = [f'{int(v.get_height())}' if v.get_height() > 0 else '' for v in container]
+                    ax1.bar_label(container, labels=labels, label_type='center', fontsize=9, color='white', fontweight='bold')
+                
+                ax1.set_ylabel('채집 개체수 (마리)', fontweight='bold')
                 ax1.set_xlabel('')
                 plt.xticks(rotation=45, ha='right')
-                plt.legend(title="진드기 종")
+                plt.legend(title="진드기 종별", bbox_to_anchor=(1.05, 1), loc='upper left')
                 plt.tight_layout()
                 
                 st.pyplot(fig)
