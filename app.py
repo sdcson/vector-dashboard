@@ -797,56 +797,111 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
 
     if not m_forest.empty:
         m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
-        forest_summary = m_forest.pivot_table(index=["채집지역2"], columns="종명_한글", values="개체수", aggfunc="sum", fill_value=0).reset_index()
-        forest_summary['합계'] = forest_summary.iloc[:, 1:].sum(axis=1)
+        
+        # 💡 [핵심] 관리지역/비관리지역 자동 파싱 로직 추가
+        def parse_management_zone(row):
+            env = str(row.get('환경', '')).strip()
+            cls = str(row.get('분류', '')).strip()
+            point = str(row.get('지점번호', row.get('지점', '1'))).strip()
+            
+            combined = env + " " + cls
+            
+            # 명시적으로 '관리지역1' 등이 적혀있는 경우
+            import re
+            match = re.search(r'(비?관리지역?\s*\d)', combined)
+            if match:
+                return match.group(1).replace(" ", "").replace("관리지역", "관리지역")
+                
+            # 분류(In/Out) 또는 텍스트 기반 구분
+            is_managed = "비관리지역" if ("비관리" in combined or "Out" in combined or "out" in combined) else "관리지역"
+            
+            # 번호(1, 2, 3) 추출
+            num = "1"
+            if "1" in env or "1" in cls or "1" in point: num = "1"
+            elif "2" in env or "2" in cls or "2" in point: num = "2"
+            elif "3" in env or "3" in cls or "3" in point: num = "3"
+            
+            return f"{is_managed}{num}"
+            
+        m_forest["세부구역"] = m_forest.apply(parse_management_zone, axis=1)
+        m_forest["지점_세부구역"] = m_forest["채집지역2"] + " " + m_forest["세부구역"]
+        
+        val_col = "개체수" if "개체수" in m_forest.columns else "채집수"
+        m_forest[val_col] = pd.to_numeric(m_forest[val_col], errors='coerce').fillna(0)
+        
+        # 미채집 방어: 실제 채집된 개체만 필터링
+        all_spot_clean = m_forest[(m_forest["종"] != "미채집") & (~m_forest["종"].str.contains("미채집", na=False)) & (m_forest[val_col] > 0)]
         
         col_f_map, col_f_graph = st.columns([5, 5])
         
         with col_f_map:
             st.markdown("##### 🗺️ 구역별 채집 지점 지도")
             
-            # 강원도 중심 좌표로 지도 생성
             m_forest_map = folium.Map(location=[37.85, 128.2], zoom_start=8)
             
-            # 각 지역별 임시 좌표 딕셔너리 (필요시 정확한 주소 좌표로 수정 가능)
             forest_coords_map = {
-                "홍천": [37.6970, 127.8886],
-                "정선": [37.3801, 128.6608],
-                "춘천": [37.8813, 127.7298],
-                "인제": [38.0694, 128.1701],
-                "속초": [38.2070, 128.5918],
-                "양양": [38.0754, 128.6189],
-                "남산": [37.7170, 127.6400], 
-                "삼마치": [37.6480, 127.9150]
+                "홍천": [37.6970, 127.8886], "정선": [37.3801, 128.6608],
+                "춘천": [37.8813, 127.7298], "인제": [38.0694, 128.1701],
+                "속초": [38.2070, 128.5918], "양양": [38.0754, 128.6189],
+                "남산": [37.7170, 127.6400], "삼마치": [37.6480, 127.9150]
             }
             
-            # 데이터프레임 기반으로 지도에 마커(나뭇잎 아이콘) 추가
-            for index, row in forest_summary.iterrows():
+            # 지도 마커 표출용 요약 (지역 단위 합계)
+            region_summary = m_forest.groupby("채집지역2")[val_col].sum().reset_index()
+            
+            for index, row in region_summary.iterrows():
                 region = row["채집지역2"]
-                total_count = row["합계"]
+                total_count = row[val_col]
                 if region in forest_coords_map:
                     coords = forest_coords_map[region]
-                    tooltip_text = f"{region} 숲체험장 (총 {total_count}마리)"
+                    tooltip_text = f"{region} 숲체험장 (총 {int(total_count)}마리)"
                     folium.Marker(
                         coords, 
                         tooltip=tooltip_text,
-                        icon=folium.Icon(color='green', icon='leaf')
+                        icon=folium.Icon(color='green', icon='tree')
                     ).add_to(m_forest_map)
                     
-            # 💡 기존 st.info() 대신 실제 지도를 화면에 출력
-            st_folium(m_forest_map, key="map_forest", width="100%", height=320)
+            st_folium(m_forest_map, key="map_forest", width="100%", height=380)
             
-            # 하단에 요약 데이터프레임 표출
-            st.dataframe(forest_summary, hide_index=True, use_container_width=True)
+            # 하단 테이블 표출
+            st.markdown("##### 📝 채집 상세 내역")
+            display_df = m_forest[["채집지역2", "세부구역", "종명_한글", val_col]].groupby(["채집지역2", "세부구역", "종명_한글"]).sum().reset_index()
+            display_df = display_df[display_df[val_col] > 0]
+            st.dataframe(display_df, hide_index=True, use_container_width=True)
             
         with col_f_graph:
-            st.markdown(f"##### 📊 {selected_year} {selected_month} 구역별 채집량")
-            fig, ax1 = plt.subplots(figsize=(6, 5))
-            forest_summary.plot(x="채집지역2", y="합계", kind='bar', ax=ax1, color='#2a9d8f', edgecolor='black', width=0.4, legend=False)
-            ax1.set_ylabel('총 개체수 합계')
-            plt.xticks(rotation=0)
-            st.pyplot(fig)
-            plt.close()
+            st.markdown(f"##### 📊 {selected_year} {selected_month} 세부 지점별 참진드기 채집량")
+            
+            if not all_spot_clean.empty:
+                # 💡 관리지역1~3, 비관리지역1~3 기준 누적 막대 그래프 생성
+                forest_pivot = all_spot_clean.pivot_table(index="지점_세부구역", columns="종명_한글", values=val_col, aggfunc="sum", fill_value=0)
+                
+                # 순서 정렬 (관리지역 1,2,3 -> 비관리지역 1,2,3 순서로 보기 좋게 배치)
+                def sort_key(idx):
+                    try:
+                        region = idx.split()[0]
+                        zone = idx.split()[1]
+                    except:
+                        return (idx, 99)
+                    zone_order = {"관리지역1": 1, "관리지역2": 2, "관리지역3": 3, "비관리지역1": 4, "비관리지역2": 5, "비관리지역3": 6}
+                    return (region, zone_order.get(zone, 99))
+                
+                sorted_index = sorted(forest_pivot.index, key=sort_key)
+                forest_pivot = forest_pivot.reindex(sorted_index)
+                
+                fig, ax1 = plt.subplots(figsize=(7, 5.2))
+                # 막대그래프 시각화 (색상 누적)
+                forest_pivot.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42', width=0.7)
+                ax1.set_ylabel('채집 개체수 (마리)')
+                ax1.set_xlabel('')
+                plt.xticks(rotation=45, ha='right')
+                plt.legend(title="진드기 종")
+                plt.tight_layout()
+                
+                st.pyplot(fig)
+                plt.close()
+            else:
+                st.info("해당 연도/월에 채집된 진드기 데이터가 없습니다 (모두 미채집).")
     else:
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
