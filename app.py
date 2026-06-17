@@ -658,15 +658,32 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     loc_col = col_name
                     break
         elif selected_zone == "참진드기 권역":
-            # 💡 [요청 반영] 인제, 화천 대신 환경 지점(초지, 잡목림, 산길, 무덤)으로 변경
-            master_spots_list = ["초지", "잡목림", "산길", "무덤"]
-            loc_col = "환경" if "환경" in m_data.columns else "지역2"
+            # 💡 [요청 완벽 반영] 지역(화천/인제)과 세부환경(초지/잡목림 등)을 결합한 리스트 생성
+            master_spots_list = ["화천 초지", "화천 잡목림", "화천 산길", "화천 무덤", 
+                                 "인제 초지", "인제 잡목림", "인제 산길", "인제 무덤"]
+            loc_col = "지역2" # 기준은 지역으로 잡고, 아래에서 환경과 결합
         elif selected_zone == "털진드기 분포감시":
             master_spots_list = ["논", "밭", "저수지", "수로", "야산"]
             loc_col = "환경" if "환경" in m_data.columns else "지역2"
         else:  # 털진드기 발생감시
             master_spots_list = ["논", "밭", "수로", "초지"]
             loc_col = "환경" if "환경" in m_data.columns else "지역2"
+
+        # 💡 [핵심] 참진드기 권역일 경우 지역과 환경 컬럼을 합쳐서 새로운 식별 컬럼 생성
+        if selected_zone == "참진드기 권역" and "환경" in m_data.columns and loc_col in m_data.columns:
+            # "화천군" -> "화천" 등으로 통일하기 위한 정규화 함수
+            def clean_region(val):
+                s = str(val)
+                if "화천" in s: return "화천"
+                if "인제" in s: return "인제"
+                return s.strip()
+            
+            m_data["정규화_지역"] = m_data[loc_col].apply(clean_region)
+            m_data["정규화_환경"] = m_data["환경"].astype(str).str.strip()
+            
+            # "화천 초지" 형태로 결합된 새 컬럼 생성
+            m_data["복합_지점"] = m_data["정규화_지역"] + " " + m_data["정규화_환경"]
+            loc_col = "복합_지점" # 검색 및 매핑 기준을 복합_지점 컬럼으로 변경
 
         # 데이터에 존재하는 지점 확인 및 탭 생성
         actual_spots = m_data[loc_col].dropna().unique().tolist() if loc_col in m_data.columns else []
@@ -675,21 +692,26 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         
         cli_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot}" for spot in display_spots])
         
-        # 💡 지도 환경 유형 및 지점별 좌표 매핑 데이터 (참진드기 환경 추가)
+        # 💡 지도 좌표 분산 매핑 (참진드기의 지역+세부환경별 가상 좌표 추가)
         zone_coords_map = {
             "춘천시보건소": [37.8813, 127.7298], "퇴계동": [37.8615, 127.7295], "삼천동": [37.8700, 127.7000],
             "종가오리": [37.9300, 127.7200], "주택": [37.8800, 127.7300], "백로서식지": [37.9000, 127.7500], 
-            "일일감시(보건소)": [37.8813, 127.7298], "화천": [38.1060, 127.7035], "인제": [38.0694, 128.1701],
+            "일일감시(보건소)": [37.8813, 127.7298], 
+            # 털진드기 (환경 기준)
             "논": [37.8920, 127.7400], "밭": [37.8540, 127.7600], "저수지": [37.8300, 127.6800],
             "수로": [37.9100, 127.7100], "야산": [37.8200, 127.7800], "초지": [37.8600, 127.7900],
-            "잡목림": [37.8100, 127.7700], "산길": [37.8400, 127.8100], "무덤": [37.8800, 127.8500]
+            # 참진드기 (지역+세부환경 분산)
+            "화천 초지": [38.1060, 127.7035], "화천 잡목림": [38.1150, 127.7200], 
+            "화천 산길": [38.1250, 127.6900], "화천 무덤": [38.0950, 127.7100],
+            "인제 초지": [38.0694, 128.1701], "인제 잡목림": [38.0800, 128.1900], 
+            "인제 산길": [38.0550, 128.1500], "인제 무덤": [38.0750, 128.1400]
         }
         
         with cli_sub_tabs[0]:
             c1, c2 = st.columns([5, 5])
             with c1: 
                 st.markdown(f"##### 🗺️ {selected_zone} 감시 지점 지도")
-                m_zone = folium.Map(location=[37.85, 128.1], zoom_start=8)
+                m_zone = folium.Map(location=[38.0, 127.9], zoom_start=9) # 화천, 인제가 잘 보이도록 중심/줌 조정
                 
                 marker_color = 'orange' if '털진드기' in selected_zone else ('green' if '참진드기' in selected_zone else 'blue')
                 
@@ -702,7 +724,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                                 spot_totals[s] += row.get(val_col, 0)
 
                 for spot in display_spots:
-                    coords = zone_coords_map.get(spot, [37.85, 128.1])
+                    coords = zone_coords_map.get(spot, [38.0, 127.9])
                     total_cnt = spot_totals.get(spot, 0)
                     folium.Marker(
                         coords,
@@ -721,15 +743,21 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         return "기타지점"
                     m_data["정규화_지점"] = m_data[loc_col].apply(get_norm_spot)
                     
-                    # 미채집/0마리 항목 완전히 제외시켜 '채집된 매개체'만 그래프 표출
+                    # 미채집 제외 및 0마리 초과 데이터만 추출
                     all_spot_clean = m_data[(m_data["종"] != "미채집") & (~m_data["종"].str.contains("미채집", na=False)) & (m_data[val_col] > 0)]
                     
                     if not all_spot_clean.empty:
                         pivot_df = all_spot_clean.pivot_table(index='정규화_지점', columns='종', values=val_col, aggfunc='sum').fillna(0)
+                        
+                        # 화천/인제가 섞이지 않도록 정렬 로직 추가
+                        if selected_zone == "참진드기 권역":
+                            sort_order = [s for s in master_spots_list if s in pivot_df.index]
+                            pivot_df = pivot_df.reindex(sort_order)
+
                         fig, ax1 = plt.subplots(figsize=(6, 5.2))
                         pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42')
                         ax1.set_ylabel('총 개체수')
-                        plt.xticks(rotation=0)
+                        plt.xticks(rotation=45, ha='right') # 라벨이 길어지므로 45도 기울임
                         st.pyplot(fig)
                         plt.close()
                     else:
@@ -742,13 +770,14 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 if not m_data.empty and loc_col in m_data.columns:
                     spot_data = m_data[m_data[loc_col].astype(str).str.contains(spot_name, na=False)]
                     if not spot_data.empty and spot_data[val_col].sum() > 0:
-                        st.dataframe(spot_data.drop(columns=["위도", "경도", "정규화_지점"], errors='ignore'), hide_index=True, use_container_width=True)
+                        st.dataframe(spot_data.drop(columns=["위도", "경도", "정규화_지점", "정규화_지역", "정규화_환경", "복합_지점"], errors='ignore'), hide_index=True, use_container_width=True)
                     else:
                         st.info(f"💡 {selected_year} {selected_month}에 {spot_name} 구역에서 채집된 데이터가 없습니다.")
                 else:
                     st.info("데이터가 없습니다.")
     else:
         st.warning(f"⚠️ {selected_zone} 데이터베이스에 업로드된 자료가 없습니다.")
+
 # =================================================================================
 # 4. 참진드기조사 어린이숲체험장 레이어
 # =================================================================================
