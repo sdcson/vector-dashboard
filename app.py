@@ -799,23 +799,23 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
         
         def parse_management_zone(row):
-            env = str(row.get('환경', '')).strip()
-            cls = str(row.get('분류', '')).strip()
-            point = str(row.get('지점번호', row.get('지점', '1'))).strip()
+            env = str(row.get('환경', '')).strip().upper()
+            cls = str(row.get('분류', '')).strip().upper()
             
-            combined = env + " " + cls
+            # 💡 [보완] 엑셀에서 1.0, 2.0 으로 읽히는 현상 방어 및 여러 컬럼 탐색
+            point_raw = row.get('지점번호', row.get('지점', row.get('채집지점', '')))
+            point_str = str(point_raw).replace(".0", "").strip()
             
-            import re
-            match = re.search(r'(비?관리지역?\s*\d)', combined)
-            if match:
-                return match.group(1).replace(" ", "").replace("관리지역", "관리지역")
-                
-            is_managed = "비관리지역" if ("비관리" in combined or "Out" in combined or "out" in combined) else "관리지역"
+            combined = env + " " + cls + " " + point_str
             
+            # 1. 관리/비관리 판단
+            is_managed = "비관리지역" if ("비관리" in combined or "OUT" in combined) else "관리지역"
+            
+            # 2. 1, 2, 3 번호 판단 (3, 2, 1 역순으로 찾아야 안전)
             num = "1"
-            if "1" in env or "1" in cls or "1" in point: num = "1"
-            elif "2" in env or "2" in cls or "2" in point: num = "2"
-            elif "3" in env or "3" in cls or "3" in point: num = "3"
+            if "3" in combined: num = "3"
+            elif "2" in combined: num = "2"
+            elif "1" in combined: num = "1"
             
             return f"{is_managed}{num}"
             
@@ -863,31 +863,29 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st.dataframe(display_df, hide_index=True, use_container_width=True)
             
         with col_f_graph:
-            st.markdown(f"##### 📊 {selected_year} {selected_month} 지점별 참진드기 종별 채집량")
+            st.markdown(f"##### 📊 {selected_year} {selected_month} 세부 지점별 참진드기 채집량")
             
             if not all_spot_clean.empty:
                 forest_pivot = all_spot_clean.pivot_table(index="지점_세부구역", columns="종명_한글", values=val_col, aggfunc="sum", fill_value=0)
                 
-                def sort_key(idx):
-                    try:
-                        region = idx.split()[0]
-                        zone = idx.split()[1]
-                    except:
-                        return (idx, 99)
-                    zone_order = {"관리지역1": 1, "관리지역2": 2, "관리지역3": 3, "비관리지역1": 4, "비관리지역2": 5, "비관리지역3": 6}
-                    return (region, zone_order.get(zone, 99))
+                # 💡 [핵심] 채집된 지역(예: 홍천, 정선)을 찾은 뒤, 각각 무조건 6개의 지점 세트를 생성하여 그래프 축에 강제 고정
+                active_regions = sorted(all_spot_clean["채집지역2"].unique())
+                expected_zones = ["관리지역1", "관리지역2", "관리지역3", "비관리지역1", "비관리지역2", "비관리지역3"]
                 
-                sorted_index = sorted(forest_pivot.index, key=sort_key)
-                forest_pivot = forest_pivot.reindex(sorted_index)
+                full_index = []
+                for r in active_regions:
+                    for z in expected_zones:
+                        full_index.append(f"{r} {z}")
+                
+                # 없는 구역은 0마리로 채워서 축에 나타나도록 재정렬
+                forest_pivot = forest_pivot.reindex(full_index, fill_value=0)
                 
                 fig, ax1 = plt.subplots(figsize=(7, 5.2))
                 
-                # 💡 그래프 생성 및 데이터 라벨(숫자) 추가 부분
                 forest_pivot.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42', width=0.7)
                 
-                # 각 막대 안에 마릿수 표시
+                # 막대 안에 마릿수 표기 (0마리면 숫자 숨김)
                 for container in ax1.containers:
-                    # 0마리인 경우는 텍스트를 숨겨서 깔끔하게 유지
                     labels = [f'{int(v.get_height())}' if v.get_height() > 0 else '' for v in container]
                     ax1.bar_label(container, labels=labels, label_type='center', fontsize=9, color='white', fontweight='bold')
                 
