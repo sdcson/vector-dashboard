@@ -936,97 +936,117 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         years_list = ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]
         analysis_year = st.selectbox("분석 연도", years_list, index=years_list.index(selected_year))
     with col_c2:
-        # 💡 분석 대상 항목 추가
         target_disease = st.selectbox("분석 대상 감시망", [
             "일본뇌염 매개모기 (Culex tritaeniorhynchus)", 
             "말라리아 매개모기 (Anopheles spp.)",
-            "기후변화 모기",
-            "참진드기",
-            "털진드기",
-            "어린이숲 참진드기"
+            "기후변화 모기 권역",
+            "기후변화 참진드기 권역",
+            "털진드기 분포감시",
+            "털진드기 발생감시",
+            "어린이숲 체험장 참진드기"
         ])
     with col_c3:
-        # 💡 대상별로 지점 리스트 분기 처리
+        # 대상별 지점 리스트 동기화
         if "일본뇌염" in target_disease:
             spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
         elif "말라리아" in target_disease:
             spots_list = ["춘천시 중앙동", "춘천시 지내리", "철원군 대마리", "철원군 학사리", "화천군", "양구군", "인제군", "고성군"]
-        elif "기후변화" in target_disease:
-            spots_list = ["춘천시보건소", "백로서식지", "삼천동"]
-        elif "참진드기" == target_disease:  # 권역 참진드기
-            spots_list = ["화천군", "인제군"]
-        elif "털진드기" in target_disease:
-            spots_list = ["춘천시", "화천군", "인제군", "철원군", "기타지점"] # 필요한 지점으로 유연하게 조정 가능
+        elif "기후변화 모기" in target_disease:
+            spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
+        elif "기후변화 참진드기" in target_disease:
+            spots_list = ["화천 초지", "화천 잡목림", "화천 산길", "화천 무덤", "인제 초지", "인제 잡목림", "인제 산길", "인제 무덤"]
+        elif "털진드기 분포" in target_disease:
+            spots_list = ["논", "밭", "저수지", "수로", "야산"]
+        elif "털진드기 발생" in target_disease:
+            spots_list = ["논", "밭", "수로", "초지"]
         elif "어린이숲" in target_disease:
             spots_list = ["홍천", "정선", "춘천", "인제", "속초", "양양", "남산", "삼마치"]
+        else:
+            spots_list = ["전체"]
             
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
         climate_factors = st.multiselect("비교할 기후 인자", ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)"], default=["평균기온(°C)", "누적강수량(mm)"])
         
     st.markdown("---")
-    
-    def get_normalized_spot_for_analysis(raw_str, disease):
-        l = str(raw_str).replace(" ", "")
-        if "일본뇌염" in disease:
-            if "산대" in l or "강릉" in l: return "강릉시 산대월리"
-            if "하대" in l or "횡성" in l: return "횡성군 하대리"
-            return "춘천시 산천리"
-        elif "말라리아" in disease:
-            if "화천" in l: return "화천군"
-            if "양구" in l: return "양구군"
-            if "인제" in l: return "인제군"
-            if "고성" in l: return "고성군"
-            if "중앙" in l: return "춘천시 중앙동"
-            if "지내" in l: return "춘천시 지내리"
-            if "학사" in l: return "철원군 학사리"
-            return "철원군 대마리"
-        else:
-            # 새로 추가된 감시망들은 기본 문자열 반환 (부분 일치 검색 활용)
-            return str(raw_str).strip()
 
-    # 💡 대상 감시망별 데이터프레임 매핑 및 종(Species) 키워드 세팅
-   # (참고용) 기상 상관분석 탭의 col_c3 조건문 수정본
-        if "일본뇌염" in target_disease:
-            spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
-        elif "말라리아" in target_disease:
-            spots_list = ["춘천시 중앙동", "춘천시 지내리", "철원군 대마리", "철원군 학사리", "화천군", "양구군", "인제군", "고성군"]
-        elif "기후변화" in target_disease:
-            spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
-        elif "참진드기" == target_disease:
-            spots_list = ["화천군", "인제군"]
-        elif "털진드기" in target_disease:
-            spots_list = ["논", "밭", "저수지", "수로", "야산", "초지"]
-        elif "어린이숲" in target_disease:
-            spots_list = ["홍천", "정선", "춘천", "인제", "속초", "양양", "남산", "삼마치"]
+    # 💡 [핵심] 빈 데이터프레임으로 초기화하여 에러 원천 차단
+    df_target = pd.DataFrame()
+    species_keyword = ""
+    target_name_kr = ""
+    loc_col = "지역2"
+
+    if "일본뇌염" in target_disease:
+        df_target = base_je_df.copy()
+        species_keyword, target_name_kr = "tritaeniorhynchus", "작은빨간집모기"
+    elif "말라리아" in target_disease:
+        df_target = base_mal_df.copy()
+        species_keyword, target_name_kr = "Anopheles", "얼룩날개모기류"
+    elif "기후변화 모기" in target_disease:
+        df_target = base_cli_moq_df.copy()
+        target_name_kr = "기후변화 모기 통합"
+    elif "기후변화 참진드기" in target_disease:
+        df_target = base_cli_tick_df.copy()
+        target_name_kr = "참진드기 통합"
+        loc_col = "복합_지점" # 복합 지점 매핑용
+    elif "털진드기 분포" in target_disease:
+        df_target = base_cli_mite_dist_df.copy()
+        target_name_kr = "털진드기 통합"
+        loc_col = "환경" if "환경" in df_target.columns else "지역2"
+    elif "털진드기 발생" in target_disease:
+        df_target = base_cli_mite_gen_df.copy()
+        target_name_kr = "털진드기 통합"
+        loc_col = "환경" if "환경" in df_target.columns else "지역2"
+    elif "어린이숲" in target_disease:
+        df_target = base_forest_df.copy()
+        target_name_kr = "어린이숲 참진드기"
+        loc_col = "채집지역2"
 
     if not df_target.empty:
-        # 어린이숲 데이터 구조 분기 방어
+        # 데이터 파싱 방어 (어린이숲 제외)
         if "어린이숲" not in target_disease:
-            df_target = parse_vectornet_dataframe(df_target, analysis_year, selected_month)
-            
+            try:
+                df_target = parse_vectornet_dataframe(df_target, analysis_year, selected_month)
+            except:
+                pass
+                
         f_target = df_target[df_target["조사년도"] == analysis_year].copy()
         
-        # 💡 어린이숲은 '채집지역2' 컬럼 사용, 나머지는 '지역2'
-        loc_col = "채집지역2" if "어린이숲" in target_disease else "지역2"
-        f_target["정규화_지점"] = f_target.get(loc_col, pd.Series([""]*len(f_target))).apply(lambda x: get_normalized_spot_for_analysis(x, target_disease))
-        
-        # 지점 필터
-        if target_disease in ["일본뇌염 매개모기 (Culex tritaeniorhynchus)", "말라리아 매개모기 (Anopheles spp.)"]:
-            spot_mask = f_target["정규화_지점"] == selected_spot
-        else:
-            spot_mask = f_target["정규화_지점"].str.contains(selected_spot, na=False) # 신규 추가 항목은 포함(contains) 조건 적용
+        # 기후변화 참진드기를 위한 복합지점 생성 로직 복사
+        if "기후변화 참진드기" in target_disease and "환경" in f_target.columns and "지역2" in f_target.columns:
+            def clean_region(val):
+                s = str(val)
+                if "화천" in s: return "화천"
+                if "인제" in s: return "인제"
+                return s.strip()
+            def clean_env(val):
+                s = str(val).replace(" ", "").strip()
+                if "잡목" in s or "관목" in s: return "잡목림"
+                if "초지" in s or "풀밭" in s: return "초지"
+                if "산길" in s: return "산길"
+                if "무덤" in s or "묘지" in s: return "무덤"
+                return s
+            f_target["정규화_지역"] = f_target["지역2"].apply(clean_region)
+            f_target["정규화_환경"] = f_target["환경"].apply(clean_env)
+            f_target["복합_지점"] = f_target["정규화_지역"] + " " + f_target["정규화_환경"]
 
-        # 종(Species) 필터
+        # 지점 필터 적용
+        if loc_col in f_target.columns:
+            spot_mask = f_target[loc_col].astype(str).str.contains(selected_spot.split()[0] if "일본뇌염" in target_disease or "말라리아" in target_disease else selected_spot, na=False)
+        else:
+            spot_mask = pd.Series([True]*len(f_target))
+
+        # 종(Species) 및 미채집 필터 적용
         if species_keyword:
             species_mask = f_target["종"].str.contains(species_keyword, na=False, case=False)
         else:
-            species_mask = pd.Series([True]*len(f_target)) # 종 지정이 없으면 모두 합산
+            species_mask = pd.Series([True]*len(f_target))
             
-        f_target = f_target[spot_mask & species_mask]
-        val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
+        no_empty_mask = (f_target["종"] != "미채집") & (~f_target["종"].str.contains("미채집", na=False))
+            
+        f_target = f_target[spot_mask & species_mask & no_empty_mask]
         
-        # 결측치 방어를 위한 강제 숫자 변환
+        val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target], errors='coerce').fillna(0)
         
         if "2026" in analysis_year: months = [f"{m:02d}월" for m in range(3, 6)]
@@ -1034,13 +1054,18 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         monthly_counts = {m: 0 for m in months}
         for _, row in f_target.iterrows():
-            m_str = str(row.get("조사월", "")).strip()
+            # 월 파싱 방어
+            m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
+            m_str = m_raw if "월" in m_raw else f"{int(float(m_raw)):02d}월" if m_raw.replace('.', '').isdigit() else ""
+            
             if m_str in monthly_counts: monthly_counts[m_str] += row.get(val_col_target, 0)
                 
         plot_df = pd.DataFrame(list(monthly_counts.items()), columns=["조사월", "채집량(마리)"])
         
         with st.spinner(f"📡 {analysis_year} {selected_spot} 기상청 JSON 데이터를 불러오는 중입니다..."):
-            bulk_weather = get_kma_weather_bulk(analysis_year, selected_spot)
+            # 기상청 데이터 호출 시에는 시군 단위 지역명만 사용
+            kma_spot = selected_spot.split()[0] if "화천" in selected_spot or "인제" in selected_spot else selected_spot
+            bulk_weather = get_kma_weather_bulk(analysis_year, kma_spot)
             plot_df["평균기온(°C)"] = [bulk_weather.get(m, {}).get("temp", 0.0) for m in plot_df["조사월"]]
             plot_df["누적강수량(mm)"] = [bulk_weather.get(m, {}).get("precip", 0.0) for m in plot_df["조사월"]]
             plot_df["평균습도(%)"] = [bulk_weather.get(m, {}).get("humid", 0.0) for m in plot_df["조사월"]]
@@ -1087,4 +1112,4 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         st.markdown("##### 📝 월간 집계 상세 데이터")
         st.dataframe(plot_df, hide_index=True, use_container_width=True)
     else:
-        st.info("💡 해당 연도의 데이터가 존재하지 않아 기후 분석을 생성할 수 없습니다.")
+        st.info("💡 해당 감시망의 데이터가 존재하지 않아 기후 분석을 생성할 수 없습니다.")
