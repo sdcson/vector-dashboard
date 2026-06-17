@@ -649,7 +649,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         if val_col in m_data.columns:
             m_data[val_col] = pd.to_numeric(m_data[val_col], errors='coerce').fillna(0)
 
-        # 💡 [요청 반영] 권역별 타겟 지점 리스트 및 검색 컬럼(지역2 vs 환경) 맞춤 세팅
+        # 💡 권역별 타겟 지점 리스트 및 검색 컬럼 세팅
         if selected_zone == "모기 권역":
             master_spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
             loc_col = "지역2"
@@ -658,12 +658,9 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     loc_col = col_name
                     break
         elif selected_zone == "참진드기 권역":
-            master_spots_list = ["화천", "인제"]
-            loc_col = "지역2"
-            for col_name in ["지역2", "시군구", "채집지역", "지역"]:
-                if col_name in m_data.columns:
-                    loc_col = col_name
-                    break
+            # 💡 [요청 반영] 인제, 화천 대신 환경 지점(초지, 잡목림, 산길, 무덤)으로 변경
+            master_spots_list = ["초지", "잡목림", "산길", "무덤"]
+            loc_col = "환경" if "환경" in m_data.columns else "지역2"
         elif selected_zone == "털진드기 분포감시":
             master_spots_list = ["논", "밭", "저수지", "수로", "야산"]
             loc_col = "환경" if "환경" in m_data.columns else "지역2"
@@ -674,17 +671,18 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         # 데이터에 존재하는 지점 확인 및 탭 생성
         actual_spots = m_data[loc_col].dropna().unique().tolist() if loc_col in m_data.columns else []
         display_spots = [s for s in master_spots_list if any(s in str(a) for a in actual_spots)]
-        if not display_spots: display_spots = master_spots_list # 방어용 fallback
+        if not display_spots: display_spots = master_spots_list 
         
         cli_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot}" for spot in display_spots])
         
-        # 지도 환경 유형 및 지점별 좌표 분산 매핑 데이터
+        # 💡 지도 환경 유형 및 지점별 좌표 매핑 데이터 (참진드기 환경 추가)
         zone_coords_map = {
             "춘천시보건소": [37.8813, 127.7298], "퇴계동": [37.8615, 127.7295], "삼천동": [37.8700, 127.7000],
             "종가오리": [37.9300, 127.7200], "주택": [37.8800, 127.7300], "백로서식지": [37.9000, 127.7500], 
             "일일감시(보건소)": [37.8813, 127.7298], "화천": [38.1060, 127.7035], "인제": [38.0694, 128.1701],
             "논": [37.8920, 127.7400], "밭": [37.8540, 127.7600], "저수지": [37.8300, 127.6800],
-            "수로": [37.9100, 127.7100], "야산": [37.8200, 127.7800], "초지": [37.8600, 127.7900]
+            "수로": [37.9100, 127.7100], "야산": [37.8200, 127.7800], "초지": [37.8600, 127.7900],
+            "잡목림": [37.8100, 127.7700], "산길": [37.8400, 127.8100], "무덤": [37.8800, 127.8500]
         }
         
         with cli_sub_tabs[0]:
@@ -723,7 +721,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         return "기타지점"
                     m_data["정규화_지점"] = m_data[loc_col].apply(get_norm_spot)
                     
-                    # 💡 [핵심 해결] 미채집/0마리 항목을 완전히 제외시켜 '채집된 매개체'만 그래프로 표출
+                    # 미채집/0마리 항목 완전히 제외시켜 '채집된 매개체'만 그래프 표출
                     all_spot_clean = m_data[(m_data["종"] != "미채집") & (~m_data["종"].str.contains("미채집", na=False)) & (m_data[val_col] > 0)]
                     
                     if not all_spot_clean.empty:
@@ -751,7 +749,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     st.info("데이터가 없습니다.")
     else:
         st.warning(f"⚠️ {selected_zone} 데이터베이스에 업로드된 자료가 없습니다.")
-
 # =================================================================================
 # 4. 참진드기조사 어린이숲체험장 레이어
 # =================================================================================
