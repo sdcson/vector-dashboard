@@ -649,33 +649,42 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         if val_col in m_data.columns:
             m_data[val_col] = pd.to_numeric(m_data[val_col], errors='coerce').fillna(0)
 
-        # 💡 [핵심 해결] 유연한 컬럼명 인식 (지역2, 시군구, 채집지역 등 자동 탐색)
-        loc_col = "지역2"
-        for col_name in ["지역2", "시군구", "채집지역", "지역"]:
-            if col_name in m_data.columns:
-                loc_col = col_name
-                break
-
-        # 권역별 기본 지점 맵핑 (군/시 명칭 떼고 핵심 단어로만)
+        # 💡 [요청 반영] 권역별 타겟 지점 리스트 및 검색 컬럼(지역2 vs 환경) 맞춤 세팅
         if selected_zone == "모기 권역":
-            master_spots_list = ["춘천시보건소", "백로서식지", "삼천동"]
+            master_spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
+            loc_col = "지역2"
+            for col_name in ["지역2", "시군구", "채집지역", "지역"]:
+                if col_name in m_data.columns:
+                    loc_col = col_name
+                    break
         elif selected_zone == "참진드기 권역":
             master_spots_list = ["화천", "인제"]
-        else: # 털진드기 발생 및 분포
-            master_spots_list = ["춘천", "화천", "인제", "철원", "홍천", "정선"]
+            loc_col = "지역2"
+            for col_name in ["지역2", "시군구", "채집지역", "지역"]:
+                if col_name in m_data.columns:
+                    loc_col = col_name
+                    break
+        elif selected_zone == "털진드기 분포감시":
+            master_spots_list = ["논", "밭", "저수지", "수로", "야산"]
+            loc_col = "환경" if "환경" in m_data.columns else "지역2"
+        else:  # 털진드기 발생감시
+            master_spots_list = ["논", "밭", "수로", "초지"]
+            loc_col = "환경" if "환경" in m_data.columns else "지역2"
 
+        # 데이터에 존재하는 지점 확인 및 탭 생성
         actual_spots = m_data[loc_col].dropna().unique().tolist() if loc_col in m_data.columns else []
         display_spots = [s for s in master_spots_list if any(s in str(a) for a in actual_spots)]
-        if not display_spots: display_spots = master_spots_list # 없으면 기본값 전체 띄움
+        if not display_spots: display_spots = master_spots_list # 방어용 fallback
         
         cli_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot}" for spot in display_spots])
         
-        # 실제 지도 좌표 데이터 세팅
+        # 지도 환경 유형 및 지점별 좌표 분산 매핑 데이터
         zone_coords_map = {
-            "춘천시보건소": [37.8813, 127.7298], "백로서식지": [37.9000, 127.7500], "삼천동": [37.8700, 127.7000],
-            "화천": [38.1060, 127.7035], "인제": [38.0694, 128.1701],
-            "춘천": [37.8813, 127.7298], "철원": [38.2543, 127.2145], 
-            "홍천": [37.6970, 127.8886], "정선": [37.3801, 128.6608]
+            "춘천시보건소": [37.8813, 127.7298], "퇴계동": [37.8615, 127.7295], "삼천동": [37.8700, 127.7000],
+            "종가오리": [37.9300, 127.7200], "주택": [37.8800, 127.7300], "백로서식지": [37.9000, 127.7500], 
+            "일일감시(보건소)": [37.8813, 127.7298], "화천": [38.1060, 127.7035], "인제": [38.0694, 128.1701],
+            "논": [37.8920, 127.7400], "밭": [37.8540, 127.7600], "저수지": [37.8300, 127.6800],
+            "수로": [37.9100, 127.7100], "야산": [37.8200, 127.7800], "초지": [37.8600, 127.7900]
         }
         
         with cli_sub_tabs[0]:
@@ -684,7 +693,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 st.markdown(f"##### 🗺️ {selected_zone} 감시 지점 지도")
                 m_zone = folium.Map(location=[37.85, 128.1], zoom_start=8)
                 
-                # 아이콘 색상 (모기=파랑, 참진드기=초록, 털진드기=주황)
                 marker_color = 'orange' if '털진드기' in selected_zone else ('green' if '참진드기' in selected_zone else 'blue')
                 
                 spot_totals = {s: 0 for s in master_spots_list}
@@ -692,7 +700,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     for _, row in m_data.iterrows():
                         loc_val = str(row[loc_col]).strip()
                         for s in master_spots_list:
-                            if s in loc_val: # 부분 일치 검색
+                            if s in loc_val:
                                 spot_totals[s] += row.get(val_col, 0)
 
                 for spot in display_spots:
@@ -709,14 +717,15 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             with c2:
                 st.markdown("##### 📊 지점별 통합 채집량")
                 if not m_data.empty and "종" in m_data.columns and loc_col in m_data.columns:
-                    # 그래프 표출을 위한 지점 정규화 로직
                     def get_norm_spot(x):
                         for s in master_spots_list:
                             if s in str(x): return s
                         return "기타지점"
                     m_data["정규화_지점"] = m_data[loc_col].apply(get_norm_spot)
                     
-                    all_spot_clean = m_data[(m_data["종"] != "미채집") & (m_data[val_col] > 0)]
+                    # 💡 [핵심 해결] 미채집/0마리 항목을 완전히 제외시켜 '채집된 매개체'만 그래프로 표출
+                    all_spot_clean = m_data[(m_data["종"] != "미채집") & (~m_data["종"].str.contains("미채집", na=False)) & (m_data[val_col] > 0)]
+                    
                     if not all_spot_clean.empty:
                         pivot_df = all_spot_clean.pivot_table(index='정규화_지점', columns='종', values=val_col, aggfunc='sum').fillna(0)
                         fig, ax1 = plt.subplots(figsize=(6, 5.2))
@@ -726,19 +735,18 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         st.pyplot(fig)
                         plt.close()
                     else:
-                        st.info("📊 해당 기간에 채집된 개체가 없거나 '미채집' 데이터만 존재합니다.")
+                        st.info("📊 해당 기간에 채집된 매개체가 없거나 '미채집' 데이터만 존재합니다.")
                 else:
                     st.info(f"📊 선택한 달({selected_month})의 데이터가 존재하지 않습니다.")
                     
-        # 개별 지점 탭 내용 채우기
         for idx, spot_name in enumerate(display_spots):
             with cli_sub_tabs[idx + 1]:
                 if not m_data.empty and loc_col in m_data.columns:
-                    spot_data = m_data[m_data[loc_col].str.contains(spot_name, na=False)]
+                    spot_data = m_data[m_data[loc_col].astype(str).str.contains(spot_name, na=False)]
                     if not spot_data.empty and spot_data[val_col].sum() > 0:
                         st.dataframe(spot_data.drop(columns=["위도", "경도", "정규화_지점"], errors='ignore'), hide_index=True, use_container_width=True)
                     else:
-                        st.info(f"💡 {selected_year} {selected_month}에 {spot_name} 지점에서 채집된 데이터가 없습니다.")
+                        st.info(f"💡 {selected_year} {selected_month}에 {spot_name} 구역에서 채집된 데이터가 없습니다.")
                 else:
                     st.info("데이터가 없습니다.")
     else:
@@ -879,24 +887,19 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             return str(raw_str).strip()
 
     # 💡 대상 감시망별 데이터프레임 매핑 및 종(Species) 키워드 세팅
-    if "일본뇌염" in target_disease:
-        df_target = base_je_df.copy()
-        species_keyword, target_name_kr = "tritaeniorhynchus", "작은빨간집모기"
-    elif "말라리아" in target_disease:
-        df_target = base_mal_df.copy()
-        species_keyword, target_name_kr = "Anopheles", "얼룩날개모기류"
-    elif "기후변화" in target_disease:
-        df_target = base_cli_moq_df.copy()
-        species_keyword, target_name_kr = "", "기후변화 모기 통합"
-    elif "참진드기" == target_disease:
-        df_target = base_cli_tick_df.copy()
-        species_keyword, target_name_kr = "", "참진드기 통합"
-    elif "털진드기" in target_disease:
-        df_target = base_cli_mite_dist_df.copy()
-        species_keyword, target_name_kr = "", "털진드기 통합"
-    elif "어린이숲" in target_disease:
-        df_target = base_forest_df.copy()
-        species_keyword, target_name_kr = "", "어린이숲 참진드기"
+   # (참고용) 기상 상관분석 탭의 col_c3 조건문 수정본
+        if "일본뇌염" in target_disease:
+            spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
+        elif "말라리아" in target_disease:
+            spots_list = ["춘천시 중앙동", "춘천시 지내리", "철원군 대마리", "철원군 학사리", "화천군", "양구군", "인제군", "고성군"]
+        elif "기후변화" in target_disease:
+            spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
+        elif "참진드기" == target_disease:
+            spots_list = ["화천군", "인제군"]
+        elif "털진드기" in target_disease:
+            spots_list = ["논", "밭", "저수지", "수로", "야산", "초지"]
+        elif "어린이숲" in target_disease:
+            spots_list = ["홍천", "정선", "춘천", "인제", "속초", "양양", "남산", "삼마치"]
 
     if not df_target.empty:
         # 어린이숲 데이터 구조 분기 방어
