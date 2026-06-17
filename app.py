@@ -796,22 +796,45 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     except Exception: m_forest = pd.DataFrame()
 
     if not m_forest.empty:
-        m_forest['종명_한글'] = m_forest['종'].replace({"Hard tick": "참진드기", "Haemaphysalis longicornis": "작은소피참진드기", "Haemaphysalis flava ": "개피참진드기", "Haemaphysalis japonica": "일본참진드기"})
+        # 테이블 표출용 한글명
+        m_forest['종명_한글'] = m_forest['종'].replace({
+            "Hard tick": "참진드기", 
+            "Haemaphysalis longicornis": "작은소피참진드기", 
+            "Haemaphysalis flava ": "개피참진드기", 
+            "Haemaphysalis japonica": "일본참진드기"
+        })
+        
+        # 💡 [핵심] 그래프 표출용 영문 이탤릭체(LaTeX MathText) 변환 함수
+        def get_italic_eng_name(val):
+            v = str(val).strip()
+            italic_map = {
+                "Hard tick": r"$\mathit{Hard\ tick}$",
+                "Haemaphysalis longicornis": r"$\mathit{Haemaphysalis\ longicornis}$",
+                "Haemaphysalis flava": r"$\mathit{Haemaphysalis\ flava}$",
+                "Haemaphysalis japonica": r"$\mathit{Haemaphysalis\ japonica}$",
+                "Ixodes nipponensis": r"$\mathit{Ixodes\ nipponensis}$",
+                "참진드기": r"$\mathit{Hard\ tick}$",
+                "작은소피참진드기": r"$\mathit{Haemaphysalis\ longicornis}$",
+                "개피참진드기": r"$\mathit{Haemaphysalis\ flava}$",
+                "일본참진드기": r"$\mathit{Haemaphysalis\ japonica}$"
+            }
+            if v in italic_map: return italic_map[v]
+            # 매핑에 없는 종일 경우 강제로 영문 이탤릭 포맷 씌우기
+            return f"$\\mathit{{{v.replace(' ', r'\ ')}}}$"
+            
+        m_forest['종명_그래프_이탤릭'] = m_forest['종'].apply(get_italic_eng_name)
         
         def parse_management_zone(row):
             env = str(row.get('환경', '')).strip().upper()
             cls = str(row.get('분류', '')).strip().upper()
             
-            # 💡 [보완] 엑셀에서 1.0, 2.0 으로 읽히는 현상 방어 및 여러 컬럼 탐색
             point_raw = row.get('지점번호', row.get('지점', row.get('채집지점', '')))
             point_str = str(point_raw).replace(".0", "").strip()
             
             combined = env + " " + cls + " " + point_str
             
-            # 1. 관리/비관리 판단
             is_managed = "비관리지역" if ("비관리" in combined or "OUT" in combined) else "관리지역"
             
-            # 2. 1, 2, 3 번호 판단 (3, 2, 1 역순으로 찾아야 안전)
             num = "1"
             if "3" in combined: num = "3"
             elif "2" in combined: num = "2"
@@ -858,6 +881,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st_folium(m_forest_map, key="map_forest", width="100%", height=380)
             
             st.markdown("##### 📝 채집 상세 내역")
+            # 테이블은 보기 편하게 '종명_한글' 사용
             display_df = m_forest[["채집지역2", "세부구역", "종명_한글", val_col]].groupby(["채집지역2", "세부구역", "종명_한글"]).sum().reset_index()
             display_df = display_df[display_df[val_col] > 0]
             st.dataframe(display_df, hide_index=True, use_container_width=True)
@@ -866,9 +890,9 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st.markdown(f"##### 📊 {selected_year} {selected_month} 세부 지점별 참진드기 채집량")
             
             if not all_spot_clean.empty:
-                forest_pivot = all_spot_clean.pivot_table(index="지점_세부구역", columns="종명_한글", values=val_col, aggfunc="sum", fill_value=0)
+                # 💡 그래프는 '종명_그래프_이탤릭' 사용
+                forest_pivot = all_spot_clean.pivot_table(index="지점_세부구역", columns="종명_그래프_이탤릭", values=val_col, aggfunc="sum", fill_value=0)
                 
-                # 💡 [핵심] 채집된 지역(예: 홍천, 정선)을 찾은 뒤, 각각 무조건 6개의 지점 세트를 생성하여 그래프 축에 강제 고정
                 active_regions = sorted(all_spot_clean["채집지역2"].unique())
                 expected_zones = ["관리지역1", "관리지역2", "관리지역3", "비관리지역1", "비관리지역2", "비관리지역3"]
                 
@@ -877,14 +901,12 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                     for z in expected_zones:
                         full_index.append(f"{r} {z}")
                 
-                # 없는 구역은 0마리로 채워서 축에 나타나도록 재정렬
                 forest_pivot = forest_pivot.reindex(full_index, fill_value=0)
                 
                 fig, ax1 = plt.subplots(figsize=(7, 5.2))
                 
                 forest_pivot.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42', width=0.7)
                 
-                # 막대 안에 마릿수 표기 (0마리면 숫자 숨김)
                 for container in ax1.containers:
                     labels = [f'{int(v.get_height())}' if v.get_height() > 0 else '' for v in container]
                     ax1.bar_label(container, labels=labels, label_type='center', fontsize=9, color='white', fontweight='bold')
@@ -892,7 +914,8 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 ax1.set_ylabel('채집 개체수 (마리)', fontweight='bold')
                 ax1.set_xlabel('')
                 plt.xticks(rotation=45, ha='right')
-                plt.legend(title="진드기 종별", bbox_to_anchor=(1.05, 1), loc='upper left')
+                # 💡 범례 제목도 영어로 변경
+                plt.legend(title="Tick Species", bbox_to_anchor=(1.05, 1), loc='upper left')
                 plt.tight_layout()
                 
                 st.pyplot(fig)
