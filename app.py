@@ -965,11 +965,11 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
-        # 💡 [추가] 드롭다운 목록에 평균풍속(m/s) 항목 추가
+        # 💡 [핵심] 4가지 기상 요인 모두 기본값(default)으로 선택되게 수정
         climate_factors = st.multiselect(
             "비교할 기후 인자", 
             ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)", "평균풍속(m/s)"], 
-            default=["평균기온(°C)", "누적강수량(mm)"]
+            default=["평균기온(°C)", "누적강수량(mm)", "평균습도(%)", "평균풍속(m/s)"]
         )
         
     st.markdown("---")
@@ -1064,11 +1064,9 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             kma_spot = selected_spot.split()[0] if "화천" in selected_spot or "인제" in selected_spot else selected_spot
             bulk_weather = get_kma_weather_bulk(analysis_year, kma_spot)
             
-            # API에서 데이터 매핑
             plot_df["평균기온(°C)"] = [bulk_weather.get(m, {}).get("temp", 0.0) for m in plot_df["조사월"]]
             plot_df["누적강수량(mm)"] = [bulk_weather.get(m, {}).get("precip", 0.0) for m in plot_df["조사월"]]
             plot_df["평균습도(%)"] = [bulk_weather.get(m, {}).get("humid", 0.0) for m in plot_df["조사월"]]
-            # 💡 [추가] 풍속 데이터 매핑 (API 응답 딕셔너리의 'wind' 키 사용)
             plot_df["평균풍속(m/s)"] = [bulk_weather.get(m, {}).get("wind", 0.0) for m in plot_df["조사월"]]
         
         st.markdown(f"##### 📊 {selected_spot} {target_name_kr} 계절적 변화 추이 ({analysis_year} {months[0]}~{months[-1]})")
@@ -1086,17 +1084,19 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         if climate_factors:
             ax2 = ax1.twinx()
-            # 💡 [추가] 풍속 그래프 설정 (색상, 마커, 텍스트 위치)
             colors = {"평균기온(°C)": "#e63946", "누적강수량(mm)": "#457b9d", "평균습도(%)": "#2a9d8f", "평균풍속(m/s)": "#f4a261"}
             markers = {"평균기온(°C)": "o", "누적강수량(mm)": "s", "평균습도(%)": "^", "평균풍속(m/s)": "D"}
-            offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 15), "평균풍속(m/s)": (0, -25)}
+            
+            # 💡 숫자 겹침 방지를 위해 오프셋(텍스트 띄우는 거리) 미세 조정
+            offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 18), "평균풍속(m/s)": (0, -28)}
             
             for factor in climate_factors:
                 color = colors.get(factor, 'black')
                 ax2.plot(plot_df["조사월"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
+                
+                # 라벨(숫자) 그리기
                 for idx, val in enumerate(plot_df[factor]):
                     if pd.notna(val) and val != 0.0:
-                        # 💡 [추가] 풍속 단위 분기 처리
                         suffix = "m/s" if "풍속" in factor else ("°C" if "기온" in factor else ("mm" if "강수" in factor else "%"))
                         ax2.annotate(f"{val}{suffix}", (idx, val), textcoords="offset points", xytext=offsets.get(factor, (0, 10)), ha='center', fontsize=8, color=color, fontweight='bold')
                 
