@@ -946,7 +946,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             "어린이숲 체험장 참진드기"
         ])
     with col_c3:
-        # 대상별 지점 리스트 동기화
         if "일본뇌염" in target_disease:
             spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
         elif "말라리아" in target_disease:
@@ -966,11 +965,15 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
-        climate_factors = st.multiselect("비교할 기후 인자", ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)"], default=["평균기온(°C)", "누적강수량(mm)"])
+        # 💡 [추가] 드롭다운 목록에 평균풍속(m/s) 항목 추가
+        climate_factors = st.multiselect(
+            "비교할 기후 인자", 
+            ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)", "평균풍속(m/s)"], 
+            default=["평균기온(°C)", "누적강수량(mm)"]
+        )
         
     st.markdown("---")
 
-    # 💡 [핵심] 빈 데이터프레임으로 초기화하여 에러 원천 차단
     df_target = pd.DataFrame()
     species_keyword = ""
     target_name_kr = ""
@@ -988,7 +991,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     elif "기후변화 참진드기" in target_disease:
         df_target = base_cli_tick_df.copy()
         target_name_kr = "참진드기 통합"
-        loc_col = "복합_지점" # 복합 지점 매핑용
+        loc_col = "복합_지점"
     elif "털진드기 분포" in target_disease:
         df_target = base_cli_mite_dist_df.copy()
         target_name_kr = "털진드기 통합"
@@ -1003,7 +1006,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         loc_col = "채집지역2"
 
     if not df_target.empty:
-        # 데이터 파싱 방어 (어린이숲 제외)
         if "어린이숲" not in target_disease:
             try:
                 df_target = parse_vectornet_dataframe(df_target, analysis_year, selected_month)
@@ -1012,7 +1014,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 
         f_target = df_target[df_target["조사년도"] == analysis_year].copy()
         
-        # 기후변화 참진드기를 위한 복합지점 생성 로직 복사
         if "기후변화 참진드기" in target_disease and "환경" in f_target.columns and "지역2" in f_target.columns:
             def clean_region(val):
                 s = str(val)
@@ -1030,13 +1031,11 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             f_target["정규화_환경"] = f_target["환경"].apply(clean_env)
             f_target["복합_지점"] = f_target["정규화_지역"] + " " + f_target["정규화_환경"]
 
-        # 지점 필터 적용
         if loc_col in f_target.columns:
             spot_mask = f_target[loc_col].astype(str).str.contains(selected_spot.split()[0] if "일본뇌염" in target_disease or "말라리아" in target_disease else selected_spot, na=False)
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
-        # 종(Species) 및 미채집 필터 적용
         if species_keyword:
             species_mask = f_target["종"].str.contains(species_keyword, na=False, case=False)
         else:
@@ -1054,7 +1053,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         monthly_counts = {m: 0 for m in months}
         for _, row in f_target.iterrows():
-            # 월 파싱 방어
             m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
             m_str = m_raw if "월" in m_raw else f"{int(float(m_raw)):02d}월" if m_raw.replace('.', '').isdigit() else ""
             
@@ -1063,12 +1061,15 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         plot_df = pd.DataFrame(list(monthly_counts.items()), columns=["조사월", "채집량(마리)"])
         
         with st.spinner(f"📡 {analysis_year} {selected_spot} 기상청 JSON 데이터를 불러오는 중입니다..."):
-            # 기상청 데이터 호출 시에는 시군 단위 지역명만 사용
             kma_spot = selected_spot.split()[0] if "화천" in selected_spot or "인제" in selected_spot else selected_spot
             bulk_weather = get_kma_weather_bulk(analysis_year, kma_spot)
+            
+            # API에서 데이터 매핑
             plot_df["평균기온(°C)"] = [bulk_weather.get(m, {}).get("temp", 0.0) for m in plot_df["조사월"]]
             plot_df["누적강수량(mm)"] = [bulk_weather.get(m, {}).get("precip", 0.0) for m in plot_df["조사월"]]
             plot_df["평균습도(%)"] = [bulk_weather.get(m, {}).get("humid", 0.0) for m in plot_df["조사월"]]
+            # 💡 [추가] 풍속 데이터 매핑 (API 응답 딕셔너리의 'wind' 키 사용)
+            plot_df["평균풍속(m/s)"] = [bulk_weather.get(m, {}).get("wind", 0.0) for m in plot_df["조사월"]]
         
         st.markdown(f"##### 📊 {selected_spot} {target_name_kr} 계절적 변화 추이 ({analysis_year} {months[0]}~{months[-1]})")
         fig, ax1 = plt.subplots(figsize=(12, 5.5))
@@ -1085,16 +1086,18 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         if climate_factors:
             ax2 = ax1.twinx()
-            colors = {"평균기온(°C)": "#e63946", "누적강수량(mm)": "#457b9d", "평균습도(%)": "#2a9d8f"}
-            markers = {"평균기온(°C)": "o", "누적강수량(mm)": "s", "평균습도(%)": "^"}
-            offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 15)}
+            # 💡 [추가] 풍속 그래프 설정 (색상, 마커, 텍스트 위치)
+            colors = {"평균기온(°C)": "#e63946", "누적강수량(mm)": "#457b9d", "평균습도(%)": "#2a9d8f", "평균풍속(m/s)": "#f4a261"}
+            markers = {"평균기온(°C)": "o", "누적강수량(mm)": "s", "평균습도(%)": "^", "평균풍속(m/s)": "D"}
+            offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 15), "평균풍속(m/s)": (0, -25)}
             
             for factor in climate_factors:
                 color = colors.get(factor, 'black')
                 ax2.plot(plot_df["조사월"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
                 for idx, val in enumerate(plot_df[factor]):
                     if pd.notna(val) and val != 0.0:
-                        suffix = "°C" if "기온" in factor else ("mm" if "강수" in factor else "%")
+                        # 💡 [추가] 풍속 단위 분기 처리
+                        suffix = "m/s" if "풍속" in factor else ("°C" if "기온" in factor else ("mm" if "강수" in factor else "%"))
                         ax2.annotate(f"{val}{suffix}", (idx, val), textcoords="offset points", xytext=offsets.get(factor, (0, 10)), ha='center', fontsize=8, color=color, fontweight='bold')
                 
             ax2.set_ylabel('기상 관측 수치', fontweight='bold')
