@@ -937,7 +937,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. 💡 [신규] 연도별 맞춤형 어린이숲 연동 + 기상 상관분석
+# 5. 💡 [신규] 기후 요인 상관분석 레이어 
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -965,17 +965,13 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         elif "기후변화 모기" in target_disease:
             spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
         elif "털진드기 발생" in target_disease:
+            # 💡 [핵심] 오직 '철원군'만 선택할 수 있도록 강제 할당
             spots_list = ["철원군"]
-        # 💡 [핵심] 어린이숲 선택 시 분석 연도(analysis_year)에 따라 해당 지점만 자동 로드
         elif "어린이숲" in target_disease:
-            if "2025" in analysis_year:
-                spots_list = ["홍천", "정선"]
-            elif "2024" in analysis_year:
-                spots_list = ["춘천", "인제"]
-            elif "2023" in analysis_year:
-                spots_list = ["속초", "양양", "인제"]
-            else:
-                spots_list = ["남산", "삼마치"]
+            if "2025" in analysis_year: spots_list = ["홍천", "정선"]
+            elif "2024" in analysis_year: spots_list = ["춘천", "인제"]
+            elif "2023" in analysis_year: spots_list = ["속초", "양양", "인제"]
+            else: spots_list = ["남산", "삼마치"]
         else:
             spots_list = ["전체"]
             
@@ -1174,7 +1170,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             plot_df["평균풍속(m/s)"] = [round(x, 1) for x in winds]
         
         if is_mite_gen_mode:
-            st.markdown(f"##### 📊 {selected_spot} {target_name_kr} (논·밭·수로·초지 전체 합산) 계절적 변화 ({analysis_year} 8~12월)")
+            st.markdown(f"##### 📊 {selected_spot} {target_name_kr} (논·밭·수로·초지 합산) 계절적 변화 ({analysis_year} 8~12월)")
         else:
             st.markdown(f"##### 📊 {selected_spot} {target_name_kr} 계절적 변화 및 {window_days}일전 기상 영향 ({analysis_year})")
         
