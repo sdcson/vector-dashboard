@@ -937,7 +937,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. 💡 [신규] 기상 상관분석 레이어 (데이터 길이 일치 패치 + 털진드기 단일화)
+# 5. 💡 [신규] 기상 상관분석 레이어 (어린이숲 7일 역산 반영 및 인덱싱 완벽 수정)
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -965,7 +965,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         elif "기후변화 모기" in target_disease:
             spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
         elif "털진드기 발생" in target_disease:
-            # 💡 [핵심] 털진드기 발생감시는 지정된 유일한 감시망인 '철원군'으로 단독 세팅
             spots_list = ["철원군"]
         elif "어린이숲" in target_disease:
             if "2025" in analysis_year: spots_list = ["홍천", "정선"]
@@ -977,6 +976,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
+        # 💡 [핵심] '참진드기'가 들어간 감시망(어린이숲 포함)은 7일 역산으로 표시
         period_label = "7일" if "참진드기" in target_disease else "14일"
         climate_factors = st.multiselect(
             f"비교할 기후 인자 (채집일 과거 {period_label} 누적/평균)", 
@@ -991,7 +991,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     target_name_kr = ""
     loc_col = "지역2"
     
-    is_tick_mode = ("기후변화 참진드기" in target_disease)
+    # 💡 [핵심] 모든 종류의 '참진드기'는 tick_mode(월/일)로 처리
+    is_tick_mode = ("참진드기" in target_disease)
     is_mite_gen_mode = ("털진드기 발생" in target_disease)
     is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or is_mite_gen_mode
 
@@ -1013,8 +1014,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         loc_col = "지역2"
     elif "어린이숲" in target_disease:
         df_target = base_forest_df.copy()
-        target_name_kr = "어린이숲 참진드기"
-        loc_col = "채집지역2"
+        target_name_kr = "어린이숲 참진드기 통합"
+        loc_col = "채집지역2" # 어린이숲은 '채집지역2' 컬럼 사용
 
     if not df_target.empty:
         if "어린이숲" not in target_disease:
@@ -1067,6 +1068,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         no_empty_mask = (f_target["종"] != "미채집") & (~f_target["종"].str.contains("미채집", na=False))
             
+        # 💡 [핵심] 어린이숲 데이터 필터링 조건 엄격히 적용
         f_target = f_target[spot_mask & species_mask & no_empty_mask]
         
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
@@ -1077,17 +1079,26 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         elif "2026" in analysis_year: 
             valid_months = range(3, 6)
         else: 
-            valid_months = range(3, 11)
+            valid_months = range(3, 11) # 어린이숲 포함 나머지
         
         periods_list = []
         if is_tick_mode:
             month_to_day = {}
             for _, row in f_target.iterrows():
+                # 어린이숲은 '조사월' 포맷, VectorNet은 '월' 포맷 등 다양한 형태 대응
                 m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
-                m_str = m_raw if "월" in m_raw else f"{int(float(m_raw)):02d}월" if m_raw.replace('.', '').isdigit() else ""
+                if "월" in m_raw:
+                    m_str = m_raw
+                elif m_raw.replace('.', '').isdigit():
+                    m_str = f"{int(float(m_raw)):02d}월"
+                else:
+                    m_str = ""
+                    
                 d_str = row.get("정규화_일", "15일")
-                if m_str not in month_to_day: 
+                # 💡 [버그 완벽 수정] 해당 월의 대표 날짜(채집일)를 안전하게 딕셔너리에 저장
+                if m_str and m_str not in month_to_day: 
                     month_to_day[m_str] = d_str
+                    
             for m in valid_months:
                 m_str = f"{m:02d}월"
                 d_str = month_to_day.get(m_str, "15일")
@@ -1105,7 +1116,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         for _, row in f_target.iterrows():
             m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
-            m_str = m_raw if "월" in m_raw else f"{int(float(m_raw)):02d}월" if m_raw.replace('.', '').isdigit() else ""
+            if "월" in m_raw:
+                m_str = m_raw
+            elif m_raw.replace('.', '').isdigit():
+                m_str = f"{int(float(m_raw)):02d}월"
+            else:
+                m_str = ""
             
             if is_tick_mode:
                 d_str = row.get("정규화_일", "15일")
@@ -1116,16 +1132,17 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             else:
                 p_key = m_str
                 
+            # 💡 [버그 완벽 수정] 딕셔너리에 존재하는 키일 때만 더하도록 방어
             if p_key in period_counts: 
                 period_counts[p_key] += row.get(val_col_target, 0)
                 
         plot_df = pd.DataFrame(list(period_counts.items()), columns=["기간", "채집량(마리)"])
         
+        # 💡 [핵심] 어린이숲 포함 참진드기 권역은 무조건 7일(1주) 롤링
         window_days = 7 if is_tick_mode else (14 if is_weekly_mode else 14)
         
         with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 {window_days}일 역산 누적 중입니다..."):
             kma_spot = selected_spot.replace("군","").replace("시","").split()[0]
-            
             df_w_daily = get_kma_weather_daily(analysis_year, kma_spot)
             
             temps, precips, humids, winds = [], [], [], []
@@ -1158,7 +1175,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                             humids.append(period_w['avgRhm'].mean())
                             winds.append(period_w['avgWs'].mean())
                         else:
-                            # 💡 [버그 완벽 수정] 4개씩 넣는 것이 아니라 각 리스트에 1개씩 안전하게 삽입
                             temps.append(0.0)
                             precips.append(0.0)
                             humids.append(0.0)
