@@ -937,7 +937,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. 💡 [신규] 기후 요인 상관분석 레이어 
+# 5. 💡 [신규] 기상 상관분석 레이어 (데이터 길이 일치 패치 + 털진드기 단일화)
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -965,7 +965,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         elif "기후변화 모기" in target_disease:
             spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
         elif "털진드기 발생" in target_disease:
-            # 💡 [핵심] 오직 '철원군'만 선택할 수 있도록 강제 할당
+            # 💡 [핵심] 털진드기 발생감시는 지정된 유일한 감시망인 '철원군'으로 단독 세팅
             spots_list = ["철원군"]
         elif "어린이숲" in target_disease:
             if "2025" in analysis_year: spots_list = ["홍천", "정선"]
@@ -1158,11 +1158,21 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                             humids.append(period_w['avgRhm'].mean())
                             winds.append(period_w['avgWs'].mean())
                         else:
-                            temps.extend([0.0]*4) if len(temps) < len(plot_df) else None
+                            # 💡 [버그 완벽 수정] 4개씩 넣는 것이 아니라 각 리스트에 1개씩 안전하게 삽입
+                            temps.append(0.0)
+                            precips.append(0.0)
+                            humids.append(0.0)
+                            winds.append(0.0)
                     else:
-                        temps.extend([0.0]*4) if len(temps) < len(plot_df) else None
-                except:
-                    temps.append(0.0); precips.append(0.0); humids.append(0.0); winds.append(0.0)
+                        temps.append(0.0)
+                        precips.append(0.0)
+                        humids.append(0.0)
+                        winds.append(0.0)
+                except Exception as e:
+                    temps.append(0.0)
+                    precips.append(0.0)
+                    humids.append(0.0)
+                    winds.append(0.0)
                     
             plot_df["평균기온(°C)"] = [round(x, 1) for x in temps]
             plot_df["누적강수량(mm)"] = [round(x, 1) for x in precips]
