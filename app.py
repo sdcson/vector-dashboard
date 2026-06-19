@@ -763,9 +763,8 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     if not all_spot_clean.empty:
                         pivot_df = all_spot_clean.pivot_table(index='정규화_지점', columns='종', values=val_col, aggfunc='sum').fillna(0)
                         
-                        if selected_zone == "참진드기 권역":
-                            sort_order = [s for s in master_spots_list if s in pivot_df.index]
-                            pivot_df = pivot_df.reindex(sort_order)
+                        # 💡 [핵심] 채집량이 0인 지점도 그래프 X축에 고정 표출되도록 강제 리인덱싱
+                        pivot_df = pivot_df.reindex(master_spots_list, fill_value=0)
 
                         fig, ax1 = plt.subplots(figsize=(6, 5.2))
                         pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42')
@@ -774,7 +773,16 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         st.pyplot(fig)
                         plt.close()
                     else:
-                        st.info("📊 해당 기간에 채집된 매개체가 없거나 '미채집' 데이터만 존재합니다.")
+                        # 💡 데이터는 있으나 모두 0마리일 경우 빈 그래프를 표출하여 X축 목록은 유지
+                        pivot_df = pd.DataFrame(index=master_spots_list, columns=["미채집"], data=0)
+                        fig, ax1 = plt.subplots(figsize=(6, 5.2))
+                        pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42', color='lightgray')
+                        ax1.set_ylabel('총 개체수')
+                        ax1.set_ylim(0, 10) 
+                        plt.xticks(rotation=45, ha='right')
+                        st.pyplot(fig)
+                        plt.close()
+                        st.info("📊 해당 기간에 채집된 매개체가 모두 0마리입니다.")
                 else:
                     st.info(f"📊 선택한 달({selected_month})의 데이터가 존재하지 않습니다.")
                     
@@ -937,7 +945,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. 💡 [신규] 기상 상관분석 레이어 (어린이숲 총합 통합 & 7일 롤링 완벽 패치)
+# 5. 💡 [신규] 기상 상관분석 레이어 
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -976,7 +984,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
-        # 💡 [핵심] 어린이숲을 포함한 참진드기는 모두 7일 롤링 적용
         period_label = "7일" if "참진드기" in target_disease else "14일"
         climate_factors = st.multiselect(
             f"비교할 기후 인자 (채집일 과거 {period_label} 누적/평균)", 
@@ -1014,18 +1021,34 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     elif "어린이숲" in target_disease:
         df_target = base_forest_df.copy()
         target_name_kr = "어린이숲 참진드기 통합"
-        # 💡 어린이숲은 매핑 컬럼이 다름
         loc_col = "채집지역2" 
 
     if not df_target.empty:
-        if "어린이숲" not in target_disease:
-            try:
-                df_target = parse_vectornet_dataframe(df_target, analysis_year, selected_month)
-            except:
-                pass
-                
-        f_target = df_target[df_target["조사년도"] == analysis_year].copy()
+        year_str_val = str(analysis_year).replace("년", "").strip()
+        year_col = "조사년도" if "조사년도" in df_target.columns else ("연도" if "연도" in df_target.columns else "년도")
+        if year_col in df_target.columns:
+            f_target = df_target[df_target[year_col].astype(str).str.contains(year_str_val, na=False)].copy()
+        else:
+            f_target = df_target.copy()
         
+        def extract_month_safe(row):
+            for col in ["조사월", "월", "채집월", "월별"]:
+                if col in row.index and pd.notna(row[col]):
+                    val = str(row[col]).replace("월", "").strip()
+                    if val.replace(".", "").isdigit():
+                        return f"{int(float(val)):02d}월"
+            return ""
+
+        def extract_day_safe(row):
+            for col in ['채집일', '조사일', '일', '조사일자', '채집일자', '채집일시']:
+                if col in row.index and pd.notna(row[col]):
+                    val = str(row[col]).replace('일','').strip()
+                    if val.isdigit(): return f"{int(val):02d}일"
+            return "15일"
+            
+        f_target["정규화_월"] = f_target.apply(extract_month_safe, axis=1)
+        f_target["정규화_일"] = f_target.apply(extract_day_safe, axis=1)
+
         if is_weekly_mode:
             def extract_week(w_raw):
                 w_str = str(w_raw).strip()
@@ -1036,15 +1059,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 if "5" in w_str: return "4주" 
                 return "1주"
             f_target["정규화_주차"] = f_target.get("주차", f_target.get("조사주", "1주")).apply(extract_week)
-            
-        if is_tick_mode:
-            def extract_day(row):
-                for col in ['채집일', '조사일', '일', '조사일자', '채집일자', '채집일시']:
-                    if col in row.index and pd.notna(row[col]):
-                        val = str(row[col]).replace('일','').strip()
-                        if val.isdigit(): return f"{int(val):02d}일"
-                return "15일"
-            f_target["정규화_일"] = f_target.apply(extract_day, axis=1)
         
         if "기후변화 참진드기" in target_disease:
             def normalize_county(val):
@@ -1086,14 +1100,9 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         if is_tick_mode:
             month_to_day = {}
             for _, row in f_target.iterrows():
-                m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
-                if "월" in m_raw: m_str = m_raw
-                elif m_raw.replace('.', '').isdigit(): m_str = f"{int(float(m_raw)):02d}월"
-                else: m_str = ""
-                    
-                d_str = row.get("정규화_일", "15일")
-                if m_str and m_str not in month_to_day: 
-                    month_to_day[m_str] = d_str
+                m = row["정규화_월"]
+                if m and m not in month_to_day: 
+                    month_to_day[m] = row["정규화_일"]
                     
             for m in valid_months:
                 m_str = f"{m:02d}월"
@@ -1110,15 +1119,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         period_counts = {p: 0 for p in periods_list}
         
-        # 💡 [핵심] In, Out, 세부구역, Stage 등 모든 하위 분류의 개체수가 이 로직에서 합산(+=)됨
         for _, row in f_target.iterrows():
-            m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
-            if "월" in m_raw: m_str = m_raw
-            elif m_raw.replace('.', '').isdigit(): m_str = f"{int(float(m_raw)):02d}월"
-            else: m_str = ""
+            m_str = row["정규화_월"]
+            if not m_str: continue
             
             if is_tick_mode:
-                d_str = row.get("정규화_일", "15일")
+                d_str = row["정규화_일"]
                 p_key = f"{m_str}\n{d_str}"
             elif is_weekly_mode:
                 w_str = row.get("정규화_주차", "1주")
@@ -1131,7 +1137,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 
         plot_df = pd.DataFrame(list(period_counts.items()), columns=["기간", "채집량(마리)"])
         
-        # 💡 [핵심] 참진드기 권역 & 어린이숲 참진드기 모두 7일 롤링 강제
         window_days = 7 if is_tick_mode else (14 if is_weekly_mode else 14)
         
         with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 {window_days}일 역산 누적 중입니다..."):
@@ -1188,7 +1193,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             plot_df["평균습도(%)"] = [round(x, 1) for x in humids]
             plot_df["평균풍속(m/s)"] = [round(x, 1) for x in winds]
         
-        # 💡 [핵심] 통합 합산되었음을 제목에 명시
         sum_text = " (세부 환경 전체 합산)" if is_tick_mode or is_mite_gen_mode else ""
         
         if is_mite_gen_mode:
