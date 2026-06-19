@@ -134,7 +134,7 @@ def get_kma_weather_bulk(year_str, loc_name):
     except Exception: pass
     return weather_dict
 
-# 💡 [신규] 2주 역산 계산을 위한 일별(Daily) 기상청 데이터 호출 함수
+# 💡 2주 역산 계산을 위한 일별(Daily) 기상청 데이터 호출 함수
 @st.cache_data(ttl=3600)
 def get_kma_weather_daily(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
@@ -991,8 +991,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     target_name_kr = ""
     loc_col = "지역2"
     
-    # 💡 [핵심] 일본뇌염/말라리아는 '주별' 모드로 동작하도록 설정
-    is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease)
+    is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease)
 
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
@@ -1008,11 +1007,11 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         target_name_kr = "참진드기 통합"
         loc_col = "복합_지점"
     elif "털진드기 분포" in target_disease:
-        df_target = base_cli_mite_dist_df.copy()
+        df_target = base_cli_dist_df.copy() if "base_cli_dist_df" in locals() else base_cli_mite_dist_df.copy()
         target_name_kr = "털진드기 통합"
         loc_col = "환경" if "환경" in df_target.columns else "지역2"
     elif "털진드기 발생" in target_disease:
-        df_target = base_cli_mite_gen_df.copy()
+        df_target = base_cli_gen_df.copy() if "base_cli_gen_df" in locals() else base_cli_mite_gen_df.copy()
         target_name_kr = "털진드기 통합"
         loc_col = "환경" if "환경" in df_target.columns else "지역2"
     elif "어린이숲" in target_disease:
@@ -1029,7 +1028,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 
         f_target = df_target[df_target["조사년도"] == analysis_year].copy()
         
-        # 주차 정규화 로직 (오타 방어)
         if is_weekly_mode:
             def extract_week(w_raw):
                 w_str = str(w_raw).strip()
@@ -1037,7 +1035,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 if "2" in w_str: return "2주"
                 if "3" in w_str: return "3주"
                 if "4" in w_str: return "4주"
-                if "5" in w_str: return "4주" # 5주차는 4주차로 병합 처리
+                if "5" in w_str: return "4주" 
                 return "1주"
             f_target["정규화_주차"] = f_target.get("주차", f_target.get("조사주", "1주")).apply(extract_week)
         
@@ -1075,7 +1073,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target], errors='coerce').fillna(0)
         
-        # 💡 [핵심] 주차별 vs 월별 X축 기간 생성 로직
         if "2026" in analysis_year: valid_months = range(3, 6)
         else: valid_months = range(3, 11)
         
@@ -1083,7 +1080,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         if is_weekly_mode:
             for m in valid_months:
                 for w in ["1주", "2주", "3주", "4주"]:
-                    periods_list.append(f"{m:02d}월 {w}")
+                    # 💡 [핵심] 줄바꿈 기호(\n)를 넣어 월 아래에 주차가 표시되도록 수정
+                    periods_list.append(f"{m:02d}월\n{w}")
         else:
             for m in valid_months:
                 periods_list.append(f"{m:02d}월")
@@ -1096,7 +1094,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
             if is_weekly_mode:
                 w_str = row.get("정규화_주차", "1주")
-                p_key = f"{m_str} {w_str}"
+                p_key = f"{m_str}\n{w_str}"
             else:
                 p_key = m_str
                 
@@ -1108,25 +1106,24 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 14일 역산 누적 중입니다..."):
             kma_spot = selected_spot.split()[0] if "화천" in selected_spot or "인제" in selected_spot else selected_spot
             
-            # 💡 월별 대신 [일별(Daily)] 원본 기상 데이터 호출
             df_w_daily = get_kma_weather_daily(analysis_year, kma_spot)
             
             temps, precips, humids, winds = [], [], [], []
             y_int = int(analysis_year.replace("년", ""))
             
             for p in plot_df["기간"]:
-                # 💡 [핵심] 14일 전(과거 2주) 날짜 범위 계산
                 if is_weekly_mode:
                     m_int = int(p.split("월")[0])
-                    w_str = p.split(" ")[1]
+                    # 💡 줄바꿈으로 나눴으므로 인덱싱 기준 변경
+                    w_str = p.split("\n")[1]
                     d_int = {"1주": 7, "2주": 14, "3주": 21, "4주": 28}.get(w_str, 28)
                 else:
                     m_int = int(p.replace("월", ""))
-                    d_int = calendar.monthrange(y_int, m_int)[1] # 해당 월의 마지막 날짜
+                    d_int = calendar.monthrange(y_int, m_int)[1] 
                 
                 try:
                     target_date = pd.to_datetime(f"{y_int}-{m_int:02d}-{d_int:02d}")
-                    start_date = target_date - pd.Timedelta(days=14) # 채집일(기준일) 이전 정확히 14일!
+                    start_date = target_date - pd.Timedelta(days=14)
                     
                     if not df_w_daily.empty:
                         mask = (df_w_daily['tm'] > start_date) & (df_w_daily['tm'] <= target_date)
@@ -1134,7 +1131,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                         
                         if not period_w.empty:
                             temps.append(period_w['avgTa'].mean())
-                            precips.append(period_w['sumRn'].sum()) # 강수량은 14일 '누적(sum)'
+                            precips.append(period_w['sumRn'].sum())
                             humids.append(period_w['avgRhm'].mean())
                             winds.append(period_w['avgWs'].mean())
                         else:
@@ -1151,7 +1148,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         st.markdown(f"##### 📊 {selected_spot} {target_name_kr} 계절적 변화 및 2주전 기상 영향 ({analysis_year})")
         
-        # 가로 길이를 넓혀서 주별 막대가 안 겹치게 조정
         fig, ax1 = plt.subplots(figsize=(14 if is_weekly_mode else 12, 5.5))
         
         bars = ax1.bar(plot_df["기간"], plot_df["채집량(마리)"], color='#2b2d42', label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
@@ -1175,13 +1171,11 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 color = colors.get(factor, 'black')
                 ax2.plot(plot_df["기간"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
                 
-                # 라벨(숫자) 그리기: 주차별(Weekly)일 경우 글씨가 너무 많아지므로 강수량 등 주요 숫자만 간소화 표출
                 for idx, val in enumerate(plot_df[factor]):
                     if pd.notna(val) and val != 0.0:
                         suffix = "m/s" if "풍속" in factor else ("°C" if "기온" in factor else ("mm" if "강수" in factor else "%"))
                         ha_val = 'left' if "풍속" in factor else 'center'
                         
-                        # 주별 모드일 때는 너무 복잡해지는 것을 막기 위해 '강수량'과 '풍속'만 숫자로 표시 (기온/습도는 선형으로만 파악)
                         if is_weekly_mode and factor not in ["누적강수량(mm)", "평균풍속(m/s)"]:
                             continue
                             
@@ -1196,8 +1190,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         plt.grid(axis='y', linestyle='--', alpha=0.4)
         
-        # 💡 [핵심] 주별(Weekly) 표시일 경우 라벨이 겹치지 않도록 45도 기울임 처리
-        plt.xticks(rotation=45 if is_weekly_mode else 0, ha='right' if is_weekly_mode else 'center')
+        # 💡 [핵심] 글자 겹침 방지: 줄바꿈을 적용했으므로 기울기 0도(세로), 가운데 정렬, 글씨 크기 축소로 깔끔하게 표시
+        plt.xticks(rotation=0, ha='center', fontsize=8 if is_weekly_mode else 10)
         plt.tight_layout()
         st.pyplot(fig)
         plt.close()
