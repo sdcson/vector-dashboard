@@ -964,9 +964,9 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             spots_list = ["춘천시 중앙동", "춘천시 지내리", "철원군 대마리", "철원군 학사리", "화천군", "양구군", "인제군", "고성군"]
         elif "기후변화 모기" in target_disease:
             spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
-        # 💡 [핵심] 털진드기 발생감시 선택 시 세부환경(논/밭) 대신 시/군 권역 리스트 출력
+        # 💡 [핵심] 털진드기 발생감시는 지정된 유일한 감시망인 '철원군'으로 단독 세팅
         elif "털진드기 발생" in target_disease:
-            spots_list = ["철원군", "화천군", "양구군", "인제군", "고성군", "춘천시"]
+            spots_list = ["철원군"]
         elif "어린이숲" in target_disease:
             spots_list = ["홍천", "정선", "춘천", "인제", "속초", "양양", "남산", "삼마치"]
         else:
@@ -1007,7 +1007,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     elif "털진드기 발생" in target_disease:
         df_target = base_cli_gen_df.copy() if "base_cli_gen_df" in locals() else base_cli_mite_gen_df.copy()
         target_name_kr = "털진드기 통합"
-        # 💡 [핵심] '환경'을 쓰지 않고 '지역2'(예: 철원군)를 매핑 컬럼으로 지정
         loc_col = "지역2"
     elif "어린이숲" in target_disease:
         df_target = base_forest_df.copy()
@@ -1053,7 +1052,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             loc_col = "정규화_지역"
 
         if loc_col in f_target.columns:
-            # 💡 [핵심] 시군 통합을 위해 '군/시' 글자를 자르고 '철원' 등 코어 지역명으로 필터링
             clean_spot = selected_spot.replace("군","").replace("시","") if ("참진드기" in target_disease or "털진드기" in target_disease) else (selected_spot.split()[0] if "일본뇌염" in target_disease or "말라리아" in target_disease else selected_spot)
             spot_mask = f_target[loc_col].astype(str).str.contains(clean_spot, na=False)
         else:
@@ -1123,7 +1121,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         window_days = 7 if is_tick_mode else (14 if is_weekly_mode else 14)
         
         with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 {window_days}일 역산 누적 중입니다..."):
-            # 💡 [핵심] 기상청 좌표를 가져오기 위한 스팟 파싱 처리 (철원군 -> 철원)
             kma_spot = selected_spot.replace("군","").replace("시","").split()[0]
             
             df_w_daily = get_kma_weather_daily(analysis_year, kma_spot)
@@ -1169,7 +1166,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             plot_df["평균습도(%)"] = [round(x, 1) for x in humids]
             plot_df["평균풍속(m/s)"] = [round(x, 1) for x in winds]
         
-        # 제목 분기
         if is_mite_gen_mode:
             st.markdown(f"##### 📊 {selected_spot} {target_name_kr} (논·밭·수로·초지 전체 합산) 계절적 변화 ({analysis_year} 8~12월)")
         else:
