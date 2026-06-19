@@ -103,10 +103,12 @@ def get_kma_weather_bulk(year_str, loc_name):
         tm1, tm2 = f"{y}0301", f"{y}0531"
         weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 6)}
     else:
-        tm1, tm2 = f"{y}0301", f"{y}1031"
-        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 11)}
+        # 💡 [핵심] 가을/겨울철 진드기를 위해 12월 31일까지 범위 확장
+        tm1, tm2 = f"{y}0301", f"{y}1231"
+        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 13)}
     
-    url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=300&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
+    # 💡 [핵심] 일년치 365일을 담기 위해 numOfRows를 400으로 넉넉하게 수정
+    url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=400&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
     try:
         res = requests.get(url, timeout=15)
         if res.status_code == 200:
@@ -138,9 +140,10 @@ def get_kma_weather_bulk(year_str, loc_name):
 def get_kma_weather_daily(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
-    tm1, tm2 = f"{y}0215", (f"{y}0531" if "2026" in year_str else f"{y}1031")
+    # 💡 12월 말까지 데이터를 수용하기 위한 로직
+    tm1, tm2 = f"{y}0215", (f"{y}0531" if "2026" in year_str else f"{y}1231")
     
-    url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=300&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
+    url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=400&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
     try:
         res = requests.get(url, timeout=15)
         if res.status_code == 200:
@@ -937,7 +940,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. 💡 [신규] 2주(모기) 및 1주(진드기) 역산 적용 기상 상관분석 레이어 
+# 5. 💡 [신규] 2주(모기/털진드기) 및 1주(참진드기) 역산 적용 기상 상관분석 레이어
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -947,12 +950,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         years_list = ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]
         analysis_year = st.selectbox("분석 연도", years_list, index=years_list.index(selected_year))
     with col_c2:
+        # 💡 [핵심] '털진드기 분포감시' 제거
         target_disease = st.selectbox("분석 대상 감시망", [
             "기후변화 참진드기 권역",
             "일본뇌염 매개모기 (Culex tritaeniorhynchus)", 
             "말라리아 매개모기 (Anopheles spp.)",
             "기후변화 모기 권역",
-            "털진드기 분포감시",
             "털진드기 발생감시",
             "어린이숲 체험장 참진드기"
         ])
@@ -965,8 +968,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             spots_list = ["춘천시 중앙동", "춘천시 지내리", "철원군 대마리", "철원군 학사리", "화천군", "양구군", "인제군", "고성군"]
         elif "기후변화 모기" in target_disease:
             spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
-        elif "털진드기 분포" in target_disease:
-            spots_list = ["논", "밭", "저수지", "수로", "야산"]
         elif "털진드기 발생" in target_disease:
             spots_list = ["논", "밭", "수로", "초지"]
         elif "어린이숲" in target_disease:
@@ -976,7 +977,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
-        # 💡 선택한 매개체에 따라 동적으로 라벨 표시
         period_label = "7일" if "참진드기" in target_disease else "14일"
         climate_factors = st.multiselect(
             f"비교할 기후 인자 (채집일 과거 {period_label} 누적/평균)", 
@@ -991,9 +991,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     target_name_kr = ""
     loc_col = "지역2"
     
-    # 💡 [핵심 엔진 분기] 진드기는 월/일 모드, 모기는 주별 모드
+    # 💡 [핵심] 분기 로직: 참진드기(월/일) vs 모기/털진드기(주별)
     is_tick_mode = ("기후변화 참진드기" in target_disease)
-    is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease)
+    is_mite_gen_mode = ("털진드기 발생" in target_disease)
+    is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or is_mite_gen_mode
 
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
@@ -1007,10 +1008,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     elif "기후변화 참진드기" in target_disease:
         df_target = base_cli_tick_df.copy()
         target_name_kr = "참진드기 통합"
-    elif "털진드기 분포" in target_disease:
-        df_target = base_cli_dist_df.copy() if "base_cli_dist_df" in locals() else base_cli_mite_dist_df.copy()
-        target_name_kr = "털진드기 통합"
-        loc_col = "환경" if "환경" in df_target.columns else "지역2"
     elif "털진드기 발생" in target_disease:
         df_target = base_cli_gen_df.copy() if "base_cli_gen_df" in locals() else base_cli_mite_gen_df.copy()
         target_name_kr = "털진드기 통합"
@@ -1040,7 +1037,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 return "1주"
             f_target["정규화_주차"] = f_target.get("주차", f_target.get("조사주", "1주")).apply(extract_week)
             
-        # 💡 [핵심] 참진드기 데이터의 '일(Day)' 텍스트 추출 로직 (없으면 15일 고정)
         if is_tick_mode:
             def extract_day(row):
                 for col in ['채집일', '조사일', '일', '조사일자', '채집일자', '채집일시']:
@@ -1076,12 +1072,16 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target], errors='coerce').fillna(0)
         
-        if "2026" in analysis_year: valid_months = range(3, 6)
-        else: valid_months = range(3, 11)
+        # 💡 [핵심] 털진드기 발생감시는 가을/겨울(8~12월) 기간으로 강제 할당
+        if is_mite_gen_mode:
+            valid_months = range(8, 13)
+        elif "2026" in analysis_year: 
+            valid_months = range(3, 6)
+        else: 
+            valid_months = range(3, 11)
         
         periods_list = []
         if is_tick_mode:
-            # 진드기는 매월 며칠에 수거했는지 찾아서 매핑
             month_to_day = {}
             for _, row in f_target.iterrows():
                 m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
@@ -1122,7 +1122,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 
         plot_df = pd.DataFrame(list(period_counts.items()), columns=["기간", "채집량(마리)"])
         
-        # 💡 [핵심] 역산 기간(window) 동적 할당
         window_days = 7 if is_tick_mode else (14 if is_weekly_mode else 14)
         
         with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 {window_days}일 역산 누적 중입니다..."):
