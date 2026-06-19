@@ -134,12 +134,10 @@ def get_kma_weather_bulk(year_str, loc_name):
     except Exception: pass
     return weather_dict
 
-# 💡 2주 역산 계산을 위한 일별(Daily) 기상청 데이터 호출 함수
 @st.cache_data(ttl=3600)
 def get_kma_weather_daily(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
-    # 2주 전 롤링을 위해 2월 15일부터 넉넉하게 호출
     tm1, tm2 = f"{y}0215", (f"{y}0531" if "2026" in year_str else f"{y}1031")
     
     url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=300&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
@@ -575,7 +573,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                 if "양구" in l: return "양구군", mal_coords_map["양구군"]
                 if "인제" in l: return "인제군", mal_coords_map["인제군"]
                 if "고성" in l: return "고성군", mal_coords_map["고성군"]
-                return "철원군 대마리", mal_coords_map["철원군 대마리"] # 대마리 기본값
+                return "철원군 대마리", mal_coords_map["철원군 대마리"] 
                 
             res_tuples = mal_df_loc_clean.map(find_mal_coords)
             df_mal["지역2_정규화"] = [x[0] for x in res_tuples]
@@ -684,7 +682,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         elif selected_zone == "털진드기 분포감시":
             master_spots_list = ["논", "밭", "저수지", "수로", "야산"]
             loc_col = "환경" if "환경" in m_data.columns else "지역2"
-        else:  # 털진드기 발생감시
+        else: 
             master_spots_list = ["논", "밭", "수로", "초지"]
             loc_col = "환경" if "환경" in m_data.columns else "지역2"
 
@@ -858,8 +856,8 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             
             return f"{is_managed}{num}"
             
-        m_forest["세부구역"] = m_forest.apply(parse_management_zone, axis=1)
-        m_forest["지점_세부구역"] = m_forest["채집지역2"] + " " + m_forest["세부구역"]
+        m_forest["sebu"] = m_forest.apply(parse_management_zone, axis=1)
+        m_forest["지점_세부구역"] = m_forest["채집지역2"] + " " + m_forest["sebu"]
         
         val_col = "개체수" if "개체수" in m_forest.columns else "채집수"
         m_forest[val_col] = pd.to_numeric(m_forest[val_col], errors='coerce').fillna(0)
@@ -897,7 +895,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st_folium(m_forest_map, key="map_forest", width="100%", height=380)
             
             st.markdown("##### 📝 채집 상세 내역")
-            display_df = m_forest[["채집지역2", "세부구역", "종명_한글", val_col]].groupby(["채집지역2", "세부구역", "종명_한글"]).sum().reset_index()
+            display_df = m_forest[["채집지역2", "sebu", "종명_한글", val_col]].groupby(["채집지역2", "sebu", "종명_한글"]).sum().reset_index()
             display_df = display_df[display_df[val_col] > 0]
             st.dataframe(display_df, hide_index=True, use_container_width=True)
             
@@ -939,7 +937,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. 💡 [신규] 2주 역산 적용 기상 상관분석 레이어 (주별 세분화 반영)
+# 5. 💡 [신규] 2주 역산 적용 기상 상관분석 레이어 (화천·인제 단순 지점화 리팩토링)
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석 (14일 롤링 역산 적용)")
@@ -950,23 +948,24 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         analysis_year = st.selectbox("분석 연도", years_list, index=years_list.index(selected_year))
     with col_c2:
         target_disease = st.selectbox("분석 대상 감시망", [
+            "기후변화 참진드기 권역",
             "일본뇌염 매개모기 (Culex tritaeniorhynchus)", 
             "말라리아 매개모기 (Anopheles spp.)",
             "기후변화 모기 권역",
-            "기후변화 참진드기 권역",
             "털진드기 분포감시",
             "털진드기 발생감시",
             "어린이숲 체험장 참진드기"
         ])
     with col_c3:
-        if "일본뇌염" in target_disease:
+        # 💡 [핵심 해결] 참진드기 권역 선택 시 드롭다운 지점 목록을 '화천군', '인제군'으로 직관화
+        if "기후변화 참진드기" in target_disease:
+            spots_list = ["화천군", "인제군"]
+        elif "일본뇌염" in target_disease:
             spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
         elif "말라리아" in target_disease:
             spots_list = ["춘천시 중앙동", "춘천시 지내리", "철원군 대마리", "철원군 학사리", "화천군", "양구군", "인제군", "고성군"]
         elif "기후변화 모기" in target_disease:
             spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
-        elif "기후변화 참진드기" in target_disease:
-            spots_list = ["화천 초지", "화천 잡목림", "화천 산길", "화천 무덤", "인제 초지", "인제 잡목림", "인제 산길", "인제 무덤"]
         elif "털진드기 분포" in target_disease:
             spots_list = ["논", "밭", "저수지", "수로", "야산"]
         elif "털진드기 발생" in target_disease:
@@ -991,7 +990,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     target_name_kr = ""
     loc_col = "지역2"
     
-    is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease)
+    # 💡 참진드기도 주별 감시망 성격을 띠므로 주별 표시 플래그 활성화
+    is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or ("기후변화 참진드기" in target_disease)
 
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
@@ -1005,13 +1005,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     elif "기후변화 참진드기" in target_disease:
         df_target = base_cli_tick_df.copy()
         target_name_kr = "참진드기 통합"
-        loc_col = "복합_지점"
     elif "털진드기 분포" in target_disease:
-        df_target = base_cli_dist_df.copy() if "base_cli_dist_df" in locals() else base_cli_mite_dist_df.copy()
+        df_target = base_cli_mite_dist_df.copy()
         target_name_kr = "털진드기 통합"
         loc_col = "환경" if "환경" in df_target.columns else "지역2"
     elif "털진드기 발생" in target_disease:
-        df_target = base_cli_gen_df.copy() if "base_cli_gen_df" in locals() else base_cli_mite_gen_df.copy()
+        df_target = base_cli_mite_gen_df.copy()
         target_name_kr = "털진드기 통합"
         loc_col = "환경" if "환경" in df_target.columns else "지역2"
     elif "어린이숲" in target_disease:
@@ -1039,25 +1038,19 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 return "1주"
             f_target["정규화_주차"] = f_target.get("주차", f_target.get("조사주", "1주")).apply(extract_week)
         
-        if "기후변화 참진드기" in target_disease and "환경" in f_target.columns and "지역2" in f_target.columns:
-            def clean_region(val):
+        # 💡 [핵심 수정] 기후변화 참진드기의 복잡한 지점 전처리를 제거하고 오직 '화천', '인제' 텍스트 매칭으로 단순화
+        if "기후변화 참진드기" in target_disease:
+            def normalize_county(val):
                 s = str(val)
-                if "화천" in s: return "화천"
-                if "인제" in s: return "인제"
-                return s.strip()
-            def clean_env(val):
-                s = str(val).replace(" ", "").strip()
-                if "잡목" in s or "관목" in s: return "잡목림"
-                if "초지" in s or "풀밭" in s: return "초지"
-                if "산길" in s: return "산길"
-                if "무덤" in s or "묘지" in s: return "무덤"
+                if "화천" in s: return "화천군"
+                if "인제" in s: return "인제군"
                 return s
-            f_target["정규화_지역"] = f_target["지역2"].apply(clean_region)
-            f_target["정규화_환경"] = f_target["환경"].apply(clean_env)
-            f_target["복합_지점"] = f_target["정규화_지역"] + " " + f_target["정규화_환경"]
+            f_target["정규화_지역"] = f_target["지역2"].apply(normalize_county)
+            loc_col = "정규화_지역"
 
         if loc_col in f_target.columns:
-            spot_mask = f_target[loc_col].astype(str).str.contains(selected_spot.split()[0] if "일본뇌염" in target_disease or "말라리아" in target_disease else selected_spot, na=False)
+            # 💡 글자 수 마스크 방어
+            spot_mask = f_target[loc_col].astype(str).str.contains(selected_spot.replace("군","") if "참진드기" in target_disease else (selected_spot.split()[0] if "일본뇌염" in target_disease or "말라리아" in target_disease else selected_spot), na=False)
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
@@ -1080,7 +1073,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         if is_weekly_mode:
             for m in valid_months:
                 for w in ["1주", "2주", "3주", "4주"]:
-                    # 💡 [핵심] 줄바꿈 기호(\n)를 넣어 월 아래에 주차가 표시되도록 수정
                     periods_list.append(f"{m:02d}월\n{w}")
         else:
             for m in valid_months:
@@ -1104,7 +1096,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         plot_df = pd.DataFrame(list(period_counts.items()), columns=["기간", "채집량(마리)"])
         
         with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 14일 역산 누적 중입니다..."):
-            kma_spot = selected_spot.split()[0] if "화천" in selected_spot or "인제" in selected_spot else selected_spot
+            kma_spot = selected_spot.replace("군","") if "참진드기" in target_disease else (selected_spot.split()[0] if "화천" in selected_spot or "인제" in selected_spot else selected_spot)
             
             df_w_daily = get_kma_weather_daily(analysis_year, kma_spot)
             
@@ -1114,7 +1106,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             for p in plot_df["기간"]:
                 if is_weekly_mode:
                     m_int = int(p.split("월")[0])
-                    # 💡 줄바꿈으로 나눴으므로 인덱싱 기준 변경
                     w_str = p.split("\n")[1]
                     d_int = {"1주": 7, "2주": 14, "3주": 21, "4주": 28}.get(w_str, 28)
                 else:
@@ -1190,7 +1181,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         plt.grid(axis='y', linestyle='--', alpha=0.4)
         
-        # 💡 [핵심] 글자 겹침 방지: 줄바꿈을 적용했으므로 기울기 0도(세로), 가운데 정렬, 글씨 크기 축소로 깔끔하게 표시
         plt.xticks(rotation=0, ha='center', fontsize=8 if is_weekly_mode else 10)
         plt.tight_layout()
         st.pyplot(fig)
