@@ -937,10 +937,10 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. 💡 [신규] 2주 역산 적용 기상 상관분석 레이어 (화천·인제 단순 지점화 리팩토링)
+# 5. 💡 [신규] 2주(모기) 및 1주(진드기) 역산 적용 기상 상관분석 레이어 
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
-    st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석 (14일 롤링 역산 적용)")
+    st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
     
     col_c1, col_c2, col_c3, col_c4 = st.columns([2, 3, 3, 3])
     with col_c1:
@@ -957,7 +957,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             "어린이숲 체험장 참진드기"
         ])
     with col_c3:
-        # 💡 [핵심 해결] 참진드기 권역 선택 시 드롭다운 지점 목록을 '화천군', '인제군'으로 직관화
         if "기후변화 참진드기" in target_disease:
             spots_list = ["화천군", "인제군"]
         elif "일본뇌염" in target_disease:
@@ -977,8 +976,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
+        # 💡 선택한 매개체에 따라 동적으로 라벨 표시
+        period_label = "7일" if "참진드기" in target_disease else "14일"
         climate_factors = st.multiselect(
-            "비교할 기후 인자 (채집일 과거 2주)", 
+            f"비교할 기후 인자 (채집일 과거 {period_label} 누적/평균)", 
             ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)", "평균풍속(m/s)"], 
             default=["평균기온(°C)", "누적강수량(mm)", "평균습도(%)", "평균풍속(m/s)"]
         )
@@ -990,8 +991,9 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     target_name_kr = ""
     loc_col = "지역2"
     
-    # 💡 참진드기도 주별 감시망 성격을 띠므로 주별 표시 플래그 활성화
-    is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or ("기후변화 참진드기" in target_disease)
+    # 💡 [핵심 엔진 분기] 진드기는 월/일 모드, 모기는 주별 모드
+    is_tick_mode = ("기후변화 참진드기" in target_disease)
+    is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease)
 
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
@@ -1006,11 +1008,11 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         df_target = base_cli_tick_df.copy()
         target_name_kr = "참진드기 통합"
     elif "털진드기 분포" in target_disease:
-        df_target = base_cli_mite_dist_df.copy()
+        df_target = base_cli_dist_df.copy() if "base_cli_dist_df" in locals() else base_cli_mite_dist_df.copy()
         target_name_kr = "털진드기 통합"
         loc_col = "환경" if "환경" in df_target.columns else "지역2"
     elif "털진드기 발생" in target_disease:
-        df_target = base_cli_mite_gen_df.copy()
+        df_target = base_cli_gen_df.copy() if "base_cli_gen_df" in locals() else base_cli_mite_gen_df.copy()
         target_name_kr = "털진드기 통합"
         loc_col = "환경" if "환경" in df_target.columns else "지역2"
     elif "어린이숲" in target_disease:
@@ -1037,8 +1039,17 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 if "5" in w_str: return "4주" 
                 return "1주"
             f_target["정규화_주차"] = f_target.get("주차", f_target.get("조사주", "1주")).apply(extract_week)
+            
+        # 💡 [핵심] 참진드기 데이터의 '일(Day)' 텍스트 추출 로직 (없으면 15일 고정)
+        if is_tick_mode:
+            def extract_day(row):
+                for col in ['채집일', '조사일', '일', '조사일자', '채집일자', '채집일시']:
+                    if col in row.index and pd.notna(row[col]):
+                        val = str(row[col]).replace('일','').strip()
+                        if val.isdigit(): return f"{int(val):02d}일"
+                return "15일"
+            f_target["정규화_일"] = f_target.apply(extract_day, axis=1)
         
-        # 💡 [핵심 수정] 기후변화 참진드기의 복잡한 지점 전처리를 제거하고 오직 '화천', '인제' 텍스트 매칭으로 단순화
         if "기후변화 참진드기" in target_disease:
             def normalize_county(val):
                 s = str(val)
@@ -1049,7 +1060,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             loc_col = "정규화_지역"
 
         if loc_col in f_target.columns:
-            # 💡 글자 수 마스크 방어
             spot_mask = f_target[loc_col].astype(str).str.contains(selected_spot.replace("군","") if "참진드기" in target_disease else (selected_spot.split()[0] if "일본뇌염" in target_disease or "말라리아" in target_disease else selected_spot), na=False)
         else:
             spot_mask = pd.Series([True]*len(f_target))
@@ -1070,7 +1080,21 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else: valid_months = range(3, 11)
         
         periods_list = []
-        if is_weekly_mode:
+        if is_tick_mode:
+            # 진드기는 매월 며칠에 수거했는지 찾아서 매핑
+            month_to_day = {}
+            for _, row in f_target.iterrows():
+                m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
+                m_str = m_raw if "월" in m_raw else f"{int(float(m_raw)):02d}월" if m_raw.replace('.', '').isdigit() else ""
+                d_str = row.get("정규화_일", "15일")
+                if m_str not in month_to_day: 
+                    month_to_day[m_str] = d_str
+            for m in valid_months:
+                m_str = f"{m:02d}월"
+                d_str = month_to_day.get(m_str, "15일")
+                periods_list.append(f"{m_str}\n{d_str}")
+                
+        elif is_weekly_mode:
             for m in valid_months:
                 for w in ["1주", "2주", "3주", "4주"]:
                     periods_list.append(f"{m:02d}월\n{w}")
@@ -1084,7 +1108,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
             m_str = m_raw if "월" in m_raw else f"{int(float(m_raw)):02d}월" if m_raw.replace('.', '').isdigit() else ""
             
-            if is_weekly_mode:
+            if is_tick_mode:
+                d_str = row.get("정규화_일", "15일")
+                p_key = f"{m_str}\n{d_str}"
+            elif is_weekly_mode:
                 w_str = row.get("정규화_주차", "1주")
                 p_key = f"{m_str}\n{w_str}"
             else:
@@ -1095,7 +1122,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 
         plot_df = pd.DataFrame(list(period_counts.items()), columns=["기간", "채집량(마리)"])
         
-        with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 14일 역산 누적 중입니다..."):
+        # 💡 [핵심] 역산 기간(window) 동적 할당
+        window_days = 7 if is_tick_mode else (14 if is_weekly_mode else 14)
+        
+        with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 {window_days}일 역산 누적 중입니다..."):
             kma_spot = selected_spot.replace("군","") if "참진드기" in target_disease else (selected_spot.split()[0] if "화천" in selected_spot or "인제" in selected_spot else selected_spot)
             
             df_w_daily = get_kma_weather_daily(analysis_year, kma_spot)
@@ -1104,7 +1134,11 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             y_int = int(analysis_year.replace("년", ""))
             
             for p in plot_df["기간"]:
-                if is_weekly_mode:
+                if is_tick_mode:
+                    m_int = int(p.split("월")[0])
+                    d_str = p.split("\n")[1].replace("일", "")
+                    d_int = int(d_str) if d_str.isdigit() else 15
+                elif is_weekly_mode:
                     m_int = int(p.split("월")[0])
                     w_str = p.split("\n")[1]
                     d_int = {"1주": 7, "2주": 14, "3주": 21, "4주": 28}.get(w_str, 28)
@@ -1114,7 +1148,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 
                 try:
                     target_date = pd.to_datetime(f"{y_int}-{m_int:02d}-{d_int:02d}")
-                    start_date = target_date - pd.Timedelta(days=14)
+                    start_date = target_date - pd.Timedelta(days=window_days)
                     
                     if not df_w_daily.empty:
                         mask = (df_w_daily['tm'] > start_date) & (df_w_daily['tm'] <= target_date)
@@ -1137,7 +1171,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             plot_df["평균습도(%)"] = [round(x, 1) for x in humids]
             plot_df["평균풍속(m/s)"] = [round(x, 1) for x in winds]
         
-        st.markdown(f"##### 📊 {selected_spot} {target_name_kr} 계절적 변화 및 2주전 기상 영향 ({analysis_year})")
+        st.markdown(f"##### 📊 {selected_spot} {target_name_kr} 계절적 변화 및 {window_days}일전 기상 영향 ({analysis_year})")
         
         fig, ax1 = plt.subplots(figsize=(14 if is_weekly_mode else 12, 5.5))
         
@@ -1172,7 +1206,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                             
                         ax2.annotate(f"{val}{suffix}", (idx, val), textcoords="offset points", xytext=offsets.get(factor, (0, 10)), ha=ha_val, va='center' if "풍속" in factor else 'bottom', fontsize=8, color=color, fontweight='bold')
                 
-            ax2.set_ylabel('14일 누적/평균 기상 관측 수치', fontweight='bold')
+            ax2.set_ylabel(f'{window_days}일 누적/평균 기상 관측 수치', fontweight='bold')
             lines_1, labels_1 = ax1.get_legend_handles_labels()
             lines_2, labels_2 = ax2.get_legend_handles_labels()
             ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', bbox_to_anchor=(0.02, 0.98))
@@ -1186,7 +1220,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         st.pyplot(fig)
         plt.close()
         
-        st.markdown("##### 📝 집계 상세 데이터 (채집일 과거 14일 기준)")
+        st.markdown(f"##### 📝 집계 상세 데이터 (채집일 과거 {window_days}일 기준)")
         st.dataframe(plot_df, hide_index=True, use_container_width=True)
     else:
         st.info("💡 해당 감시망의 데이터가 존재하지 않아 기후 분석을 생성할 수 없습니다.")
