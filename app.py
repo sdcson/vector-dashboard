@@ -81,12 +81,19 @@ def get_kma_weather(year_str, month_str, week_str, loc_name):
             items = data.get('response', {}).get('body', {}).get('items', {}).get('item', [])
             if items:
                 df_w = pd.DataFrame(items)
-                t_avg = pd.to_numeric(df_w['avgTa'], errors='coerce').mean()
-                p_sum = pd.to_numeric(df_w['sumRn'], errors='coerce').fillna(0.0).sum()
-                h_avg = pd.to_numeric(df_w['avgRhm'], errors='coerce').mean()
-                return {"temp": round(t_avg, 1) if not pd.isna(t_avg) else 0.0, "precip": round(p_sum, 1) if not pd.isna(p_sum) else 0.0, "humid": round(h_avg, 1) if not pd.isna(h_avg) else 0.0}
+                t_avg = pd.to_numeric(df_w.get('avgTa', 0), errors='coerce').mean()
+                p_sum = pd.to_numeric(df_w.get('sumRn', 0), errors='coerce').fillna(0.0).sum()
+                h_avg = pd.to_numeric(df_w.get('avgRhm', 0), errors='coerce').mean()
+                # 💡 [수정] 풍속 추가
+                w_avg = pd.to_numeric(df_w.get('avgWs', 0), errors='coerce').mean()
+                return {
+                    "temp": round(t_avg, 1) if not pd.isna(t_avg) else 0.0, 
+                    "precip": round(p_sum, 1) if not pd.isna(p_sum) else 0.0, 
+                    "humid": round(h_avg, 1) if not pd.isna(h_avg) else 0.0,
+                    "wind": round(w_avg, 1) if not pd.isna(w_avg) else 0.0
+                }
     except Exception: pass
-    return {"temp": 0.0, "precip": 0.0, "humid": 0.0}
+    return {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0}
 
 @st.cache_data(ttl=3600)
 def get_kma_weather_bulk(year_str, loc_name):
@@ -94,10 +101,11 @@ def get_kma_weather_bulk(year_str, loc_name):
     stn = get_kma_stn(loc_name)
     if "2026" in year_str:
         tm1, tm2 = f"{y}0301", f"{y}0531"
-        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0} for m in range(3, 6)}
+        # 💡 [수정] wind 기본값 추가
+        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 6)}
     else:
         tm1, tm2 = f"{y}0301", f"{y}1031"
-        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0} for m in range(3, 11)}
+        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 11)}
     
     url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=300&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
     try:
@@ -109,12 +117,23 @@ def get_kma_weather_bulk(year_str, loc_name):
                 df_w = pd.DataFrame(items)
                 df_w["month_str"] = df_w['tm'].str[5:7] + "월"
                 df_w = df_w[df_w["month_str"].isin(weather_dict.keys())]
-                df_w['avgTa'] = pd.to_numeric(df_w['avgTa'], errors='coerce')
-                df_w['sumRn'] = pd.to_numeric(df_w['sumRn'], errors='coerce').fillna(0.0)
-                df_w['avgRhm'] = pd.to_numeric(df_w['avgRhm'], errors='coerce')
-                grouped = df_w.groupby("month_str").agg({'avgTa': 'mean', 'sumRn': 'sum', 'avgRhm': 'mean'})
+                
+                df_w['avgTa'] = pd.to_numeric(df_w.get('avgTa', 0), errors='coerce')
+                df_w['sumRn'] = pd.to_numeric(df_w.get('sumRn', 0), errors='coerce').fillna(0.0)
+                df_w['avgRhm'] = pd.to_numeric(df_w.get('avgRhm', 0), errors='coerce')
+                # 💡 [수정] 풍속 숫자형 파싱 추가
+                df_w['avgWs'] = pd.to_numeric(df_w.get('avgWs', 0), errors='coerce')
+                
+                # 💡 [수정] groupby aggregation에 풍속(avgWs) 추가
+                grouped = df_w.groupby("month_str").agg({'avgTa': 'mean', 'sumRn': 'sum', 'avgRhm': 'mean', 'avgWs': 'mean'})
+                
                 for m_idx, row in grouped.iterrows():
-                    weather_dict[m_idx] = {"temp": round(row['avgTa'], 1) if not pd.isna(row['avgTa']) else 0.0, "precip": round(row['sumRn'], 1) if not pd.isna(row['sumRn']) else 0.0, "humid": round(row['avgRhm'], 1) if not pd.isna(row['avgRhm']) else 0.0}
+                    weather_dict[m_idx] = {
+                        "temp": round(row['avgTa'], 1) if not pd.isna(row['avgTa']) else 0.0, 
+                        "precip": round(row['sumRn'], 1) if not pd.isna(row['sumRn']) else 0.0, 
+                        "humid": round(row['avgRhm'], 1) if not pd.isna(row['avgRhm']) else 0.0,
+                        "wind": round(row['avgWs'], 1) if not pd.isna(row['avgWs']) else 0.0 # 💡 추가된 반환값
+                    }
     except Exception: pass
     return weather_dict
 
@@ -282,8 +301,6 @@ st.sidebar.markdown("### 📅 통합 시간 동기화 필터")
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"])
 selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"], index=2)
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
-# --- (기존 코드 위치 참고용: 이 부분 아래에 붙여넣으세요) ---
-# selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=4)
 
 # =================================================================================
 # 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진
@@ -395,8 +412,6 @@ with chat_container:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-# --- (기존 코드 위치 참고용: 이 부분 위에 붙여넣으세요) ---
-# tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", ...]
 tabs = ["🔴 일본뇌염 매개모기 감시", "🔵 말라리아 매개모기 감시", "🟢 기후변화 대응 매개체 감시", "🟡 참진드기조사(어린이숲체험장)", "☁️ 기상 요인 상관분석"]
 selected_tab = st.radio("📡 감시사업 카테고리 선택", tabs, horizontal=True)
 
@@ -496,7 +511,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                             folium.Marker(je_coords_map[spot_name.split(' (')[0]], tooltip=spot_name, icon=folium.Icon(color='red', icon='star')).add_to(m_spot)
                             st_folium(m_spot, key=f"map_je_spot_{idx}", width="100%", height=380)
                         with c2:
-                            # 💡 0마리여도 그래프가 그려지게 필터 삭제
                             sum_df = spot_data.groupby("종")[val_col_je].sum().reset_index().sort_values(by=val_col_je)
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
                             bars = plt_ax.barh(sum_df["종"], sum_df[val_col_je], color='#ef233c', edgecolor='#2b2d42')
@@ -527,7 +541,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 
     if not df_mal.empty:
         df_mal = parse_vectornet_dataframe(df_mal, selected_year, selected_month)
-        # 💡 [핵심 패치 2] 8개 지역 모두 복구
         mal_coords_map = {
             "춘천시 중앙동": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
             "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
@@ -570,7 +583,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 
         if not f_mal.empty:
             val_col_mal = "개체수" if "개체수" in f_mal.columns else "채집수"
-            # 💡 [핵심] 문자열 방어를 위해 강제 숫자 변환
             f_mal[val_col_mal] = pd.to_numeric(f_mal[val_col_mal], errors='coerce').fillna(0)
             
             mal_spots_list = list(mal_coords_map.keys())
@@ -611,7 +623,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             folium.Marker(mal_coords_map[spot_name], tooltip=spot_name, icon=folium.Icon(color='purple', icon='star')).add_to(m_spot)
                             st_folium(m_spot, key=f"map_mal_spot_{idx}", width="100%", height=380)
                         with c2:
-                            # 💡 0마리여도 그래프가 뻗지 않도록 처리
                             sum_df = spot_data.groupby("종")[val_col_mal].sum().reset_index().sort_values(by=val_col_mal)
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
                             bars = plt_ax.barh(sum_df["종"], sum_df[val_col_mal], color=['#1d3557' if 'Anopheles' in str(s) else '#c4cbde' for s in sum_df["종"]], edgecolor='#2b2d42')
@@ -676,7 +687,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 return s.strip()
             
             def clean_env(val):
-                s = str(val).replace(" ", "").strip() # 보이지 않는 띄어쓰기 전부 제거
+                s = str(val).replace(" ", "").strip() 
                 if "잡목" in s or "관목" in s: return "잡목림"
                 if "초지" in s or "풀밭" in s: return "초지"
                 if "산길" in s: return "산길"
@@ -688,7 +699,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             m_data["복합_지점"] = m_data["정규화_지역"] + " " + m_data["정규화_환경"]
             loc_col = "복합_지점"
 
-        # 💡 [핵심 해결] 데이터 누락시 숨기지 않고 무조건 전체 마커 및 탭 고정 표출!
         display_spots = master_spots_list
         
         cli_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot}" for spot in display_spots])
@@ -796,7 +806,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     except Exception: m_forest = pd.DataFrame()
 
     if not m_forest.empty:
-        # 테이블 표출용 한글명
         m_forest['종명_한글'] = m_forest['종'].replace({
             "Hard tick": "참진드기", 
             "Haemaphysalis longicornis": "작은소피참진드기", 
@@ -804,7 +813,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             "Haemaphysalis japonica": "일본참진드기"
         })
         
-        # 💡 [핵심] 그래프 표출용 영문 이탤릭체(LaTeX MathText) 변환 함수
         def get_italic_eng_name(val):
             v = str(val).strip()
             italic_map = {
@@ -819,7 +827,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 "일본참진드기": r"$\mathit{Haemaphysalis\ japonica}$"
             }
             if v in italic_map: return italic_map[v]
-            # 매핑에 없는 종일 경우 강제로 영문 이탤릭 포맷 씌우기
             return f"$\\mathit{{{v.replace(' ', r'\ ')}}}$"
             
         m_forest['종명_그래프_이탤릭'] = m_forest['종'].apply(get_italic_eng_name)
@@ -881,7 +888,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st_folium(m_forest_map, key="map_forest", width="100%", height=380)
             
             st.markdown("##### 📝 채집 상세 내역")
-            # 테이블은 보기 편하게 '종명_한글' 사용
             display_df = m_forest[["채집지역2", "세부구역", "종명_한글", val_col]].groupby(["채집지역2", "세부구역", "종명_한글"]).sum().reset_index()
             display_df = display_df[display_df[val_col] > 0]
             st.dataframe(display_df, hide_index=True, use_container_width=True)
@@ -890,7 +896,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st.markdown(f"##### 📊 {selected_year} {selected_month} 세부 지점별 참진드기 채집량")
             
             if not all_spot_clean.empty:
-                # 💡 그래프는 '종명_그래프_이탤릭' 사용
                 forest_pivot = all_spot_clean.pivot_table(index="지점_세부구역", columns="종명_그래프_이탤릭", values=val_col, aggfunc="sum", fill_value=0)
                 
                 active_regions = sorted(all_spot_clean["채집지역2"].unique())
@@ -914,7 +919,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 ax1.set_ylabel('채집 개체수 (마리)', fontweight='bold')
                 ax1.set_xlabel('')
                 plt.xticks(rotation=45, ha='right')
-                # 💡 범례 제목도 영어로 변경
                 plt.legend(title="Tick Species", bbox_to_anchor=(1.05, 1), loc='upper left')
                 plt.tight_layout()
                 
@@ -965,7 +969,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
-        # 💡 [핵심] 4가지 기상 요인 모두 기본값(default)으로 선택되게 수정
         climate_factors = st.multiselect(
             "비교할 기후 인자", 
             ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)", "평균풍속(m/s)"], 
@@ -1087,14 +1090,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             colors = {"평균기온(°C)": "#e63946", "누적강수량(mm)": "#457b9d", "평균습도(%)": "#2a9d8f", "평균풍속(m/s)": "#f4a261"}
             markers = {"평균기온(°C)": "o", "누적강수량(mm)": "s", "평균습도(%)": "^", "평균풍속(m/s)": "D"}
             
-            # 💡 숫자 겹침 방지를 위해 오프셋(텍스트 띄우는 거리) 미세 조정
             offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 18), "평균풍속(m/s)": (0, -28)}
             
             for factor in climate_factors:
                 color = colors.get(factor, 'black')
                 ax2.plot(plot_df["조사월"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
                 
-                # 라벨(숫자) 그리기
                 for idx, val in enumerate(plot_df[factor]):
                     if pd.notna(val) and val != 0.0:
                         suffix = "m/s" if "풍속" in factor else ("°C" if "기온" in factor else ("mm" if "강수" in factor else "%"))
