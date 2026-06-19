@@ -10,6 +10,7 @@ import urllib.request
 import os
 import requests
 import base64
+import calendar
 
 # 페이지 설정
 st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
@@ -42,7 +43,7 @@ def init_korean_font_and_get_prop():
 f_prop = init_korean_font_and_get_prop()
 
 st.title("🔬 감염병 매개체 감시사업 통합 데이터")
-st.markdown("질병조사과 주요 감시사업별 결과 및 기상 데이터(기온/강수량/습도) 교차 분석")
+st.markdown("질병조사과 주요 감시사업별 결과 및 기상 데이터(기온/강수량/습도/풍속) 교차 분석")
 
 # -----------------------------------------------------------------
 # [💡 공공데이터포털 JSON API 실시간 연동 모듈]
@@ -132,6 +133,31 @@ def get_kma_weather_bulk(year_str, loc_name):
                     }
     except Exception: pass
     return weather_dict
+
+# 💡 [신규] 2주 역산 계산을 위한 일별(Daily) 기상청 데이터 호출 함수
+@st.cache_data(ttl=3600)
+def get_kma_weather_daily(year_str, loc_name):
+    y = str(year_str).replace("년", "").strip()
+    stn = get_kma_stn(loc_name)
+    # 2주 전 롤링을 위해 2월 15일부터 넉넉하게 호출
+    tm1, tm2 = f"{y}0215", (f"{y}0531" if "2026" in year_str else f"{y}1031")
+    
+    url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=300&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
+    try:
+        res = requests.get(url, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            items = data.get('response', {}).get('body', {}).get('items', {}).get('item', [])
+            if items:
+                df_w = pd.DataFrame(items)
+                df_w['tm'] = pd.to_datetime(df_w['tm'])
+                df_w['avgTa'] = pd.to_numeric(df_w.get('avgTa', 0), errors='coerce').fillna(0)
+                df_w['sumRn'] = pd.to_numeric(df_w.get('sumRn', 0), errors='coerce').fillna(0)
+                df_w['avgRhm'] = pd.to_numeric(df_w.get('avgRhm', 0), errors='coerce').fillna(0)
+                df_w['avgWs'] = pd.to_numeric(df_w.get('avgWs', 0), errors='coerce').fillna(0)
+                return df_w[['tm', 'avgTa', 'sumRn', 'avgRhm', 'avgWs']]
+    except Exception: pass
+    return pd.DataFrame(columns=['tm', 'avgTa', 'sumRn', 'avgRhm', 'avgWs'])
 
 # -----------------------------------------------------------------
 # [💡 GitHub API 연동 데이터베이스 엔진 및 포맷터]
@@ -314,7 +340,6 @@ def load_faq_ai_engine():
         file_loaded = False
         df_faq = pd.DataFrame()
 
-        # 1. 파일 자동 탐색 (CSV 최우선 탐색)
         csv_candidates = [
             "매개체감염병_지식베이스_통합본_최종.csv", 
             "매개체감염병_지식베이스_카카오형식.xlsx - FAQ Set.csv",
@@ -323,21 +348,20 @@ def load_faq_ai_engine():
         
         for csv_file in csv_candidates:
             if os.path.exists(csv_file):
-                try: # 한글 인코딩 에러 방지 (utf-8-sig -> cp949)
+                try: 
                     df_faq = pd.read_csv(csv_file, encoding='utf-8-sig')
                 except UnicodeDecodeError:
                     df_faq = pd.read_csv(csv_file, encoding='cp949')
                 file_loaded = True
                 break
         
-        # 2. CSV가 없으면 기존 엑셀 로드 시도 (시트명 에러 방지 포함)
         if not file_loaded:
             excel_name = "매개체감염병_지식베이스_카카오형식.xlsx"
             if os.path.exists(excel_name):
                 try:
                     df_faq = pd.read_excel(excel_name, sheet_name="FAQ Set", engine="openpyxl")
                 except ValueError:
-                    df_faq = pd.read_excel(excel_name, sheet_name=0, engine="openpyxl") # 시트 못 찾으면 첫 번째 시트 강제 로드
+                    df_faq = pd.read_excel(excel_name, sheet_name=0, engine="openpyxl") 
                 file_loaded = True
 
         if df_faq.empty:
@@ -360,9 +384,6 @@ df_faq, vectorizer, tfidf_matrix = load_faq_ai_engine()
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "매개체감염병에 대해 질문해 주세요! (예: 일본뇌염, 말라리아 예방)"}]
 
-# -----------------------------------------------------------------
-# 1. AI 챗봇 두뇌 엔진 (질문 입력 시 실행)
-# -----------------------------------------------------------------
 if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
     st.session_state.messages.append({"role": "user", "content": user_query})
     
@@ -372,7 +393,6 @@ if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
         import re
         clean_query = re.sub(r'[^\w\s]', '', user_query).strip()
         
-        # 키워드 직접 매칭 (정규식 이스케이프 적용으로 특수문자 에러 원천 차단)
         if len(clean_query) >= 2:
             exact_match_df = df_faq[df_faq["Question"].str.contains(re.escape(clean_query), na=False, case=False)]
         else:
@@ -381,7 +401,6 @@ if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
         if not exact_match_df.empty:
             matched_answer = exact_match_df.iloc[0]["Answer"]
         elif vectorizer is not None and tfidf_matrix is not None:
-            # AI 유사도 매칭
             from sklearn.metrics.pairwise import cosine_similarity
             query_vec = vectorizer.transform([user_query])
             similarities = cosine_similarity(query_vec, tfidf_matrix).flatten()
@@ -394,13 +413,9 @@ if user_query := st.sidebar.chat_input("질문을 입력하세요..."):
             else:
                 matched_answer = "지식베이스에서 정확히 일치하는 내용을 찾지 못했습니다. '일본뇌염 증상'처럼 핵심 단어를 포함해 질문해 보세요!"
 
-    # 찾은 답변을 세션에 저장하기 전 이스케이프 처리
     safe_answer = matched_answer.replace("~", r"\~")
     st.session_state.messages.append({"role": "assistant", "content": safe_answer})
 
-# -----------------------------------------------------------------
-# 2. UI 렌더링: 스크롤 전용 고정 창
-# -----------------------------------------------------------------
 chat_container = st.sidebar.container(height=450)
 
 with chat_container:
@@ -466,7 +481,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
 
         if not f_je.empty:
             val_col_je = "개체수" if "개체수" in f_je.columns else "채집수"
-            # 💡 [핵심] 문자열(미채집 등) 방어를 위해 강제 숫자 변환
             f_je[val_col_je] = pd.to_numeric(f_je[val_col_je], errors='coerce').fillna(0)
             
             je_spots = ["춘천시 산천리 (우사 거점)", "강릉시 산대월리 (우사 거점)", "횡성군 하대리 (우사 거점)"]
@@ -674,7 +688,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             master_spots_list = ["논", "밭", "수로", "초지"]
             loc_col = "환경" if "환경" in m_data.columns else "지역2"
 
-        # 💡 참진드기 권역: 오타 방어 및 복합 지점 생성
         if selected_zone == "참진드기 권역" and "환경" in m_data.columns and loc_col in m_data.columns:
             def clean_region(val):
                 s = str(val)
@@ -802,7 +815,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     except Exception: m_forest = pd.DataFrame()
 
     if not m_forest.empty:
-        # 테이블 표출용 한글명
         m_forest['종명_한글'] = m_forest['종'].replace({
             "Hard tick": "참진드기", 
             "Haemaphysalis longicornis": "작은소피참진드기", 
@@ -885,7 +897,6 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st_folium(m_forest_map, key="map_forest", width="100%", height=380)
             
             st.markdown("##### 📝 채집 상세 내역")
-            # 테이블은 보기 편하게 '종명_한글' 사용
             display_df = m_forest[["채집지역2", "세부구역", "종명_한글", val_col]].groupby(["채집지역2", "세부구역", "종명_한글"]).sum().reset_index()
             display_df = display_df[display_df[val_col] > 0]
             st.dataframe(display_df, hide_index=True, use_container_width=True)
@@ -928,10 +939,10 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. 💡 [신규] 공공데이터포털 JSON API 기반 기상 상관분석 레이어
+# 5. 💡 [신규] 2주 역산 적용 기상 상관분석 레이어 (주별 세분화 반영)
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
-    st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
+    st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석 (14일 롤링 역산 적용)")
     
     col_c1, col_c2, col_c3, col_c4 = st.columns([2, 3, 3, 3])
     with col_c1:
@@ -968,7 +979,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         selected_spot = st.selectbox("조사지점 선택", spots_list)
     with col_c4:
         climate_factors = st.multiselect(
-            "비교할 기후 인자", 
+            "비교할 기후 인자 (채집일 과거 2주)", 
             ["평균기온(°C)", "누적강수량(mm)", "평균습도(%)", "평균풍속(m/s)"], 
             default=["평균기온(°C)", "누적강수량(mm)", "평균습도(%)", "평균풍속(m/s)"]
         )
@@ -979,6 +990,9 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     species_keyword = ""
     target_name_kr = ""
     loc_col = "지역2"
+    
+    # 💡 [핵심] 일본뇌염/말라리아는 '주별' 모드로 동작하도록 설정
+    is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease)
 
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
@@ -1015,6 +1029,18 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 
         f_target = df_target[df_target["조사년도"] == analysis_year].copy()
         
+        # 주차 정규화 로직 (오타 방어)
+        if is_weekly_mode:
+            def extract_week(w_raw):
+                w_str = str(w_raw).strip()
+                if "1" in w_str: return "1주"
+                if "2" in w_str: return "2주"
+                if "3" in w_str: return "3주"
+                if "4" in w_str: return "4주"
+                if "5" in w_str: return "4주" # 5주차는 4주차로 병합 처리
+                return "1주"
+            f_target["정규화_주차"] = f_target.get("주차", f_target.get("조사주", "1주")).apply(extract_week)
+        
         if "기후변화 참진드기" in target_disease and "환경" in f_target.columns and "지역2" in f_target.columns:
             def clean_region(val):
                 s = str(val)
@@ -1049,32 +1075,87 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target], errors='coerce').fillna(0)
         
-        if "2026" in analysis_year: months = [f"{m:02d}월" for m in range(3, 6)]
-        else: months = [f"{m:02d}월" for m in range(3, 11)]
+        # 💡 [핵심] 주차별 vs 월별 X축 기간 생성 로직
+        if "2026" in analysis_year: valid_months = range(3, 6)
+        else: valid_months = range(3, 11)
+        
+        periods_list = []
+        if is_weekly_mode:
+            for m in valid_months:
+                for w in ["1주", "2주", "3주", "4주"]:
+                    periods_list.append(f"{m:02d}월 {w}")
+        else:
+            for m in valid_months:
+                periods_list.append(f"{m:02d}월")
             
-        monthly_counts = {m: 0 for m in months}
+        period_counts = {p: 0 for p in periods_list}
+        
         for _, row in f_target.iterrows():
             m_raw = str(row.get("조사월", row.get("월", ""))).strip().zfill(3)
             m_str = m_raw if "월" in m_raw else f"{int(float(m_raw)):02d}월" if m_raw.replace('.', '').isdigit() else ""
             
-            if m_str in monthly_counts: monthly_counts[m_str] += row.get(val_col_target, 0)
+            if is_weekly_mode:
+                w_str = row.get("정규화_주차", "1주")
+                p_key = f"{m_str} {w_str}"
+            else:
+                p_key = m_str
                 
-        plot_df = pd.DataFrame(list(monthly_counts.items()), columns=["조사월", "채집량(마리)"])
+            if p_key in period_counts: 
+                period_counts[p_key] += row.get(val_col_target, 0)
+                
+        plot_df = pd.DataFrame(list(period_counts.items()), columns=["기간", "채집량(마리)"])
         
-        with st.spinner(f"📡 {analysis_year} {selected_spot} 기상청 JSON 데이터를 불러오는 중입니다..."):
+        with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 14일 역산 누적 중입니다..."):
             kma_spot = selected_spot.split()[0] if "화천" in selected_spot or "인제" in selected_spot else selected_spot
-            bulk_weather = get_kma_weather_bulk(analysis_year, kma_spot)
             
-            plot_df["평균기온(°C)"] = [bulk_weather.get(m, {}).get("temp", 0.0) for m in plot_df["조사월"]]
-            plot_df["누적강수량(mm)"] = [bulk_weather.get(m, {}).get("precip", 0.0) for m in plot_df["조사월"]]
-            plot_df["평균습도(%)"] = [bulk_weather.get(m, {}).get("humid", 0.0) for m in plot_df["조사월"]]
-            plot_df["평균풍속(m/s)"] = [bulk_weather.get(m, {}).get("wind", 0.0) for m in plot_df["조사월"]]
+            # 💡 월별 대신 [일별(Daily)] 원본 기상 데이터 호출
+            df_w_daily = get_kma_weather_daily(analysis_year, kma_spot)
+            
+            temps, precips, humids, winds = [], [], [], []
+            y_int = int(analysis_year.replace("년", ""))
+            
+            for p in plot_df["기간"]:
+                # 💡 [핵심] 14일 전(과거 2주) 날짜 범위 계산
+                if is_weekly_mode:
+                    m_int = int(p.split("월")[0])
+                    w_str = p.split(" ")[1]
+                    d_int = {"1주": 7, "2주": 14, "3주": 21, "4주": 28}.get(w_str, 28)
+                else:
+                    m_int = int(p.replace("월", ""))
+                    d_int = calendar.monthrange(y_int, m_int)[1] # 해당 월의 마지막 날짜
+                
+                try:
+                    target_date = pd.to_datetime(f"{y_int}-{m_int:02d}-{d_int:02d}")
+                    start_date = target_date - pd.Timedelta(days=14) # 채집일(기준일) 이전 정확히 14일!
+                    
+                    if not df_w_daily.empty:
+                        mask = (df_w_daily['tm'] > start_date) & (df_w_daily['tm'] <= target_date)
+                        period_w = df_w_daily[mask]
+                        
+                        if not period_w.empty:
+                            temps.append(period_w['avgTa'].mean())
+                            precips.append(period_w['sumRn'].sum()) # 강수량은 14일 '누적(sum)'
+                            humids.append(period_w['avgRhm'].mean())
+                            winds.append(period_w['avgWs'].mean())
+                        else:
+                            temps.extend([0.0]*4) if len(temps) < len(plot_df) else None
+                    else:
+                        temps.extend([0.0]*4) if len(temps) < len(plot_df) else None
+                except:
+                    temps.append(0.0); precips.append(0.0); humids.append(0.0); winds.append(0.0)
+                    
+            plot_df["평균기온(°C)"] = [round(x, 1) for x in temps]
+            plot_df["누적강수량(mm)"] = [round(x, 1) for x in precips]
+            plot_df["평균습도(%)"] = [round(x, 1) for x in humids]
+            plot_df["평균풍속(m/s)"] = [round(x, 1) for x in winds]
         
-        st.markdown(f"##### 📊 {selected_spot} {target_name_kr} 계절적 변화 추이 ({analysis_year} {months[0]}~{months[-1]})")
-        fig, ax1 = plt.subplots(figsize=(12, 5.5))
+        st.markdown(f"##### 📊 {selected_spot} {target_name_kr} 계절적 변화 및 2주전 기상 영향 ({analysis_year})")
         
-        bars = ax1.bar(plot_df["조사월"], plot_df["채집량(마리)"], color='#2b2d42', label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
-        ax1.set_ylabel('월별 총 채집량 (마리)', color='#2b2d42', fontweight='bold')
+        # 가로 길이를 넓혀서 주별 막대가 안 겹치게 조정
+        fig, ax1 = plt.subplots(figsize=(14 if is_weekly_mode else 12, 5.5))
+        
+        bars = ax1.bar(plot_df["기간"], plot_df["채집량(마리)"], color='#2b2d42', label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
+        ax1.set_ylabel('총 채집량 (마리)', color='#2b2d42', fontweight='bold')
         ax1.tick_params(axis='y', labelcolor='#2b2d42')
         max_count = plot_df["채집량(마리)"].max()
         ax1.set_ylim(0, max_count * 1.2 if max_count > 0 else 10)
@@ -1088,24 +1169,25 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             colors = {"평균기온(°C)": "#e63946", "누적강수량(mm)": "#457b9d", "평균습도(%)": "#2a9d8f", "평균풍속(m/s)": "#f4a261"}
             markers = {"평균기온(°C)": "o", "누적강수량(mm)": "s", "평균습도(%)": "^", "평균풍속(m/s)": "D"}
             
-            # 💡 [핵심] 풍속(wind)의 라벨을 마커 점의 오른쪽 옆으로(x방향 12만큼) 이동
             offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 18), "평균풍속(m/s)": (12, 0)}
             
             for factor in climate_factors:
                 color = colors.get(factor, 'black')
-                ax2.plot(plot_df["조사월"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
+                ax2.plot(plot_df["기간"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
                 
-                # 라벨(숫자) 그리기
+                # 라벨(숫자) 그리기: 주차별(Weekly)일 경우 글씨가 너무 많아지므로 강수량 등 주요 숫자만 간소화 표출
                 for idx, val in enumerate(plot_df[factor]):
                     if pd.notna(val) and val != 0.0:
                         suffix = "m/s" if "풍속" in factor else ("°C" if "기온" in factor else ("mm" if "강수" in factor else "%"))
-                        
-                        # 💡 [핵심] 풍속일 경우에만 텍스트를 마커의 왼쪽에서 시작(left-aligned)하여 옆에 딱 붙게 만듦
                         ha_val = 'left' if "풍속" in factor else 'center'
                         
+                        # 주별 모드일 때는 너무 복잡해지는 것을 막기 위해 '강수량'과 '풍속'만 숫자로 표시 (기온/습도는 선형으로만 파악)
+                        if is_weekly_mode and factor not in ["누적강수량(mm)", "평균풍속(m/s)"]:
+                            continue
+                            
                         ax2.annotate(f"{val}{suffix}", (idx, val), textcoords="offset points", xytext=offsets.get(factor, (0, 10)), ha=ha_val, va='center' if "풍속" in factor else 'bottom', fontsize=8, color=color, fontweight='bold')
                 
-            ax2.set_ylabel('기상 관측 수치', fontweight='bold')
+            ax2.set_ylabel('14일 누적/평균 기상 관측 수치', fontweight='bold')
             lines_1, labels_1 = ax1.get_legend_handles_labels()
             lines_2, labels_2 = ax2.get_legend_handles_labels()
             ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', bbox_to_anchor=(0.02, 0.98))
@@ -1113,11 +1195,14 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             ax1.legend(loc='upper left')
             
         plt.grid(axis='y', linestyle='--', alpha=0.4)
+        
+        # 💡 [핵심] 주별(Weekly) 표시일 경우 라벨이 겹치지 않도록 45도 기울임 처리
+        plt.xticks(rotation=45 if is_weekly_mode else 0, ha='right' if is_weekly_mode else 'center')
         plt.tight_layout()
         st.pyplot(fig)
         plt.close()
         
-        st.markdown("##### 📝 월간 집계 상세 데이터")
+        st.markdown("##### 📝 집계 상세 데이터 (채집일 과거 14일 기준)")
         st.dataframe(plot_df, hide_index=True, use_container_width=True)
     else:
         st.info("💡 해당 감시망의 데이터가 존재하지 않아 기후 분석을 생성할 수 없습니다.")
