@@ -84,7 +84,6 @@ def get_kma_weather(year_str, month_str, week_str, loc_name):
                 t_avg = pd.to_numeric(df_w.get('avgTa', 0), errors='coerce').mean()
                 p_sum = pd.to_numeric(df_w.get('sumRn', 0), errors='coerce').fillna(0.0).sum()
                 h_avg = pd.to_numeric(df_w.get('avgRhm', 0), errors='coerce').mean()
-                # 💡 [수정] 풍속 추가
                 w_avg = pd.to_numeric(df_w.get('avgWs', 0), errors='coerce').mean()
                 return {
                     "temp": round(t_avg, 1) if not pd.isna(t_avg) else 0.0, 
@@ -101,7 +100,6 @@ def get_kma_weather_bulk(year_str, loc_name):
     stn = get_kma_stn(loc_name)
     if "2026" in year_str:
         tm1, tm2 = f"{y}0301", f"{y}0531"
-        # 💡 [수정] wind 기본값 추가
         weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 6)}
     else:
         tm1, tm2 = f"{y}0301", f"{y}1031"
@@ -121,10 +119,8 @@ def get_kma_weather_bulk(year_str, loc_name):
                 df_w['avgTa'] = pd.to_numeric(df_w.get('avgTa', 0), errors='coerce')
                 df_w['sumRn'] = pd.to_numeric(df_w.get('sumRn', 0), errors='coerce').fillna(0.0)
                 df_w['avgRhm'] = pd.to_numeric(df_w.get('avgRhm', 0), errors='coerce')
-                # 💡 [수정] 풍속 숫자형 파싱 추가
                 df_w['avgWs'] = pd.to_numeric(df_w.get('avgWs', 0), errors='coerce')
                 
-                # 💡 [수정] groupby aggregation에 풍속(avgWs) 추가
                 grouped = df_w.groupby("month_str").agg({'avgTa': 'mean', 'sumRn': 'sum', 'avgRhm': 'mean', 'avgWs': 'mean'})
                 
                 for m_idx, row in grouped.iterrows():
@@ -132,7 +128,7 @@ def get_kma_weather_bulk(year_str, loc_name):
                         "temp": round(row['avgTa'], 1) if not pd.isna(row['avgTa']) else 0.0, 
                         "precip": round(row['sumRn'], 1) if not pd.isna(row['sumRn']) else 0.0, 
                         "humid": round(row['avgRhm'], 1) if not pd.isna(row['avgRhm']) else 0.0,
-                        "wind": round(row['avgWs'], 1) if not pd.isna(row['avgWs']) else 0.0 # 💡 추가된 반환값
+                        "wind": round(row['avgWs'], 1) if not pd.isna(row['avgWs']) else 0.0
                     }
     except Exception: pass
     return weather_dict
@@ -806,6 +802,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     except Exception: m_forest = pd.DataFrame()
 
     if not m_forest.empty:
+        # 테이블 표출용 한글명
         m_forest['종명_한글'] = m_forest['종'].replace({
             "Hard tick": "참진드기", 
             "Haemaphysalis longicornis": "작은소피참진드기", 
@@ -888,6 +885,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
             st_folium(m_forest_map, key="map_forest", width="100%", height=380)
             
             st.markdown("##### 📝 채집 상세 내역")
+            # 테이블은 보기 편하게 '종명_한글' 사용
             display_df = m_forest[["채집지역2", "세부구역", "종명_한글", val_col]].groupby(["채집지역2", "세부구역", "종명_한글"]).sum().reset_index()
             display_df = display_df[display_df[val_col] > 0]
             st.dataframe(display_df, hide_index=True, use_container_width=True)
@@ -1090,16 +1088,22 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             colors = {"평균기온(°C)": "#e63946", "누적강수량(mm)": "#457b9d", "평균습도(%)": "#2a9d8f", "평균풍속(m/s)": "#f4a261"}
             markers = {"평균기온(°C)": "o", "누적강수량(mm)": "s", "평균습도(%)": "^", "평균풍속(m/s)": "D"}
             
-            offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 18), "평균풍속(m/s)": (0, -28)}
+            # 💡 [핵심] 풍속(wind)의 라벨을 마커 점의 오른쪽 옆으로(x방향 12만큼) 이동
+            offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 18), "평균풍속(m/s)": (12, 0)}
             
             for factor in climate_factors:
                 color = colors.get(factor, 'black')
                 ax2.plot(plot_df["조사월"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
                 
+                # 라벨(숫자) 그리기
                 for idx, val in enumerate(plot_df[factor]):
                     if pd.notna(val) and val != 0.0:
                         suffix = "m/s" if "풍속" in factor else ("°C" if "기온" in factor else ("mm" if "강수" in factor else "%"))
-                        ax2.annotate(f"{val}{suffix}", (idx, val), textcoords="offset points", xytext=offsets.get(factor, (0, 10)), ha='center', fontsize=8, color=color, fontweight='bold')
+                        
+                        # 💡 [핵심] 풍속일 경우에만 텍스트를 마커의 왼쪽에서 시작(left-aligned)하여 옆에 딱 붙게 만듦
+                        ha_val = 'left' if "풍속" in factor else 'center'
+                        
+                        ax2.annotate(f"{val}{suffix}", (idx, val), textcoords="offset points", xytext=offsets.get(factor, (0, 10)), ha=ha_val, va='center' if "풍속" in factor else 'bottom', fontsize=8, color=color, fontweight='bold')
                 
             ax2.set_ylabel('기상 관측 수치', fontweight='bold')
             lines_1, labels_1 = ax1.get_legend_handles_labels()
