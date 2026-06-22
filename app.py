@@ -462,8 +462,9 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             df_je["지점명"] = "춘천시 산천리 (우사 거점)"
 
+        # 💡 [핵심 패치] 유연한 텍스트/숫자 주차 파싱으로 3주차 오류 완벽 방어
         if "주차" in df_je.columns:
-            def _extract_week_je(w):
+            def _extract_week_je_fixed(w):
                 w_str = str(w).strip()
                 if "1" in w_str: return "1주"
                 if "2" in w_str: return "2주"
@@ -471,7 +472,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                 if "4" in w_str: return "4주"
                 if "5" in w_str: return "4주"
                 return "1주"
-            df_je["조사주"] = df_je["주차"].apply(_extract_week_je)
+            df_je["조사주"] = df_je["주차"].apply(_extract_week_je_fixed)
         else:
             df_je["조사주"] = "1주"
 
@@ -500,7 +501,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_spot_name} (우사 거점)", icon=folium.Icon(color='red', icon='home')).add_to(m_je_all)
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 with c2:
-                    st.markdown("##### 📊 Culex tritaeniorhynchus 지점별 채집량")
+                    st.markdown("##### 📊 주요 매개체 지점별 채집량")
                     df_ct = f_je[f_je["종"].str.contains("tritaeniorhynchus", na=False, case=False)]
                     
                     spot_dict = {s.split(' (')[0]: 0 for s in je_spots}
@@ -528,7 +529,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         with c2:
                             sum_df = spot_data.groupby("종")[val_col_je].sum().reset_index().sort_values(by=val_col_je)
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                            # 💡 [핵심 패치] 작은빨간집모기(tritaeniorhynchus)만 빨간색(#ef233c)으로, 나머지는 회색(#c4cbde)으로 강조 처리
                             bar_colors = ['#ef233c' if 'tritaeniorhynchus' in str(s).lower() else '#c4cbde' for s in sum_df["종"]]
                             bars = plt_ax.barh(sum_df["종"], sum_df[val_col_je], color=bar_colors, edgecolor='#2b2d42')
                             for bar in bars: plt_ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', fontsize=8)
@@ -537,7 +537,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         st.dataframe(spot_data.drop(columns=["위도", "경도"], errors='ignore'), hide_index=True, use_container_width=True)
                     else: st.info(f"💡 {spot_name} 지점의 채집 데이터가 없습니다.")
         else:
-            st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다.")
+            st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다. 상단에서 파일을 업로드해 주세요.")
 
 # =================================================================================
 # 2. 말라리아 레이어
@@ -703,7 +703,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         if val_col in m_data.columns: m_data[val_col] = pd.to_numeric(m_data[val_col], errors='coerce').fillna(0)
 
         if selected_zone == "모기 권역":
-            master_spots_list = ["춘시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
+            master_spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
             loc_col = "지역2"
             for col_name in ["지역2", "시군구", "채집지역", "지역"]:
                 if col_name in m_data.columns:
@@ -937,7 +937,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. ☁️ 기상 상관분석 레이어 
+# 5. ☁️ 기상 상관분석 레이어
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
