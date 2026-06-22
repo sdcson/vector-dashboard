@@ -462,7 +462,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             df_je["지점명"] = "춘천시 산천리 (우사 거점)"
 
-        # 💡 [핵심 패치] 데이터 순서에 의존하는 factorize를 버리고 텍스트 직관 추출 로직으로 고정
         if "주차" in df_je.columns:
             def _extract_week_je(w):
                 w_str = str(w).strip()
@@ -529,7 +528,9 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         with c2:
                             sum_df = spot_data.groupby("종")[val_col_je].sum().reset_index().sort_values(by=val_col_je)
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col_je], color='#ef233c', edgecolor='#2b2d42')
+                            # 💡 [핵심 패치] 작은빨간집모기(tritaeniorhynchus)만 빨간색(#ef233c)으로, 나머지는 회색(#c4cbde)으로 강조 처리
+                            bar_colors = ['#ef233c' if 'tritaeniorhynchus' in str(s).lower() else '#c4cbde' for s in sum_df["종"]]
+                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col_je], color=bar_colors, edgecolor='#2b2d42')
                             for bar in bars: plt_ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', fontsize=8)
                             st.pyplot(fig)
                             plt.close()
@@ -566,7 +567,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
         
-        # 💡 [핵심 패치] 말라리아 역시 텍스트 추출 로직으로 고정
         if "주차" in df_mal.columns:
             def _extract_week_mal(w):
                 w_str = str(w).strip()
@@ -703,7 +703,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
         if val_col in m_data.columns: m_data[val_col] = pd.to_numeric(m_data[val_col], errors='coerce').fillna(0)
 
         if selected_zone == "모기 권역":
-            master_spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
+            master_spots_list = ["춘시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
             loc_col = "지역2"
             for col_name in ["지역2", "시군구", "채집지역", "지역"]:
                 if col_name in m_data.columns:
@@ -937,7 +937,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. ☁️ 기상 상관분석 레이어
+# 5. ☁️ 기상 상관분석 레이어 
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -957,7 +957,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         ])
     with col_c3:
         if "기후변화 참진드기" in target_disease: spots_list = ["화천군", "인제군"]
-        elif "일본뇌염" in target_disease: spots_list = ["춘시 산천리", "강릉시 산대월리", "횡성군 하대리"]
+        elif "일본뇌염" in target_disease: spots_list = ["춘천시 산천리", "강릉시 산대월리", "횡성군 하대리"]
         elif "말라리아" in target_disease: spots_list = ["춘천시 중앙동", "춘천시 지내리", "철원군 대마리", "철원군 학사리", "화천군", "양구군", "인제군", "고성군"]
         elif "기후변화 모기" in target_disease: spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
         elif "털진드기 발생" in target_disease: spots_list = ["철원군"]
