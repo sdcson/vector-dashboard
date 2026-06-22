@@ -500,7 +500,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_spot_name} (우사 거점)", icon=folium.Icon(color='red', icon='home')).add_to(m_je_all)
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 with c2:
-                    st.markdown("##### 📊 주요 매개체 지점별 채집량")
+                    st.markdown("##### 📊 Culex tritaeniorhynchus 지점별 채집량")
                     df_ct = f_je[f_je["종"].str.contains("tritaeniorhynchus", na=False, case=False)]
                     
                     spot_dict = {s.split(' (')[0]: 0 for s in je_spots}
