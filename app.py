@@ -202,14 +202,54 @@ def safe_parse_month_series(series, default_val):
         except: return str(default_val)
     return series.apply(_parse)
 
+# 💡 [핵심 패치] 수거일(날짜) 기반 연/월/주차 자동 추출 알고리즘
 def parse_vectornet_dataframe(df, default_year, default_month):
-    df.columns = [c.strip() for c in df.columns]
-    if "월.1" in df.columns and "월" in df.columns:
-        df["조사년도"] = safe_parse_year_series(df["월"], default_year)
-        df["조사월"] = safe_parse_month_series(df["월.1"], default_month)
-    else:
+    df.columns = [str(c).strip() for c in df.columns]
+    
+    # 엑셀 파일 내 날짜형 컬럼(수거일 등) 찾기
+    date_cols = ['수거일', '채집일', '조사일', '조사일자', '채집일자', '채집일시']
+    found_col = next((c for c in date_cols if c in df.columns), None)
+    
+    if found_col:
+        # 날짜 데이터가 있으면 날짜 기준으로 년, 월, 주차를 100% 덮어쓰기
+        dt_series = pd.to_datetime(df[found_col], errors='coerce')
+        valid_mask = dt_series.notna()
+        
+        # 디폴트 값 할당
         df["조사년도"] = safe_parse_year_series(df["연도"] if "연도" in df.columns else df.get("년도", default_year), default_year)
         df["조사월"] = safe_parse_month_series(df.get("월", default_month), default_month)
+        df["조사주"] = "1주"
+        
+        # 유효한 날짜가 있는 열만 추출된 날짜로 덮어쓰기
+        df.loc[valid_mask, "조사년도"] = dt_series[valid_mask].dt.year.apply(lambda x: f"{int(x)}년")
+        df.loc[valid_mask, "조사월"] = dt_series[valid_mask].dt.month.apply(lambda x: f"{int(x):02d}월")
+        # 일(day)을 기준으로 1~4주차 계산: 1~7일(1주), 8~14일(2주), 15~21일(3주), 22일~(4주)
+        df.loc[valid_mask, "조사주"] = dt_series[valid_mask].dt.day.apply(lambda x: f"{min((int(x) - 1) // 7 + 1, 4)}주")
+        df["주차"] = df["조사주"] # DB 병합을 위해 '주차' 컬럼 강제 동기화
+        
+    else:
+        # 날짜 컬럼이 아예 없을 때의 예비 로직
+        if "월.1" in df.columns and "월" in df.columns:
+            df["조사년도"] = safe_parse_year_series(df["월"], default_year)
+            df["조사월"] = safe_parse_month_series(df["월.1"], default_month)
+        else:
+            df["조사년도"] = safe_parse_year_series(df["연도"] if "연도" in df.columns else df.get("년도", default_year), default_year)
+            df["조사월"] = safe_parse_month_series(df.get("월", default_month), default_month)
+            
+        if "주차" in df.columns:
+            def _clean_w(w):
+                s = str(w)
+                if "1" in s: return "1주"
+                if "2" in s: return "2주"
+                if "3" in s: return "3주"
+                if "4" in s or "5" in s: return "4주"
+                return "1주"
+            df["조사주"] = df["주차"].apply(_clean_w)
+            df["주차"] = df["조사주"]
+        else:
+            df["조사주"] = "1주"
+            df["주차"] = "1주"
+            
     return df
 
 def rename_duplicate_columns(df):
@@ -462,20 +502,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             df_je["지점명"] = "춘천시 산천리 (우사 거점)"
 
-        # 💡 [핵심 패치] 유연한 텍스트/숫자 주차 파싱으로 3주차 오류 완벽 방어
-        if "주차" in df_je.columns:
-            def _extract_week_je_fixed(w):
-                w_str = str(w).strip()
-                if "1" in w_str: return "1주"
-                if "2" in w_str: return "2주"
-                if "3" in w_str: return "3주"
-                if "4" in w_str: return "4주"
-                if "5" in w_str: return "4주"
-                return "1주"
-            df_je["조사주"] = df_je["주차"].apply(_extract_week_je_fixed)
-        else:
-            df_je["조사주"] = "1주"
-
         if selected_week != "전체":
             f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)].copy()
         else:
@@ -561,24 +587,12 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
     if not df_mal.empty:
         df_mal = parse_vectornet_dataframe(df_mal, selected_year, selected_month)
         mal_coords_map = {
-            "춘천시 중앙동": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
+            "춘시 중앙동": [37.8813, 127.7298], "춘천시 지내리": [37.9250, 127.7410],
             "철원군 대마리": [38.2543, 127.2145], "철원군 학사리": [38.2520, 127.4415],
             "화천군": [38.1060, 127.7035], "양구군": [38.1055, 127.9880],
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
         
-        if "주차" in df_mal.columns:
-            def _extract_week_mal(w):
-                w_str = str(w).strip()
-                if "1" in w_str: return "1주"
-                if "2" in w_str: return "2주"
-                if "3" in w_str: return "3주"
-                if "4" in w_str: return "4주"
-                if "5" in w_str: return "4주"
-                return "1주"
-            df_mal["조사주"] = df_mal["주차"].apply(_extract_week_mal)
-        else: df_mal["조사주"] = "1주"
-
         if "지역2" in df_mal.columns:
             mal_df_loc_clean = df_mal["지역2"].astype(str).str.strip()
             def find_mal_coords(loc_str):
@@ -700,7 +714,9 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)].copy()
         val_col = "개체수" if "개체수" in m_data.columns else ("채집수" if "채집수" in m_data.columns else "개체수")
-        if val_col in m_data.columns: m_data[val_col] = pd.to_numeric(m_data[val_col], errors='coerce').fillna(0)
+        
+        if val_col in m_data.columns:
+            m_data[val_col] = pd.to_numeric(m_data[val_col], errors='coerce').fillna(0)
 
         if selected_zone == "모기 권역":
             master_spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
@@ -937,7 +953,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
         st.info("해당 연도/월에 어린이 숲 체험장 조사 데이터가 없습니다.")
 
 # =================================================================================
-# 5. ☁️ 기상 상관분석 레이어
+# 5. ☁️ 기상 상관분석 레이어 
 # =================================================================================
 elif selected_tab == "☁️ 기상 요인 상관분석":
     st.header(f"☁️ 기후 요인 및 매개체 발생 상관분석")
@@ -1018,25 +1034,19 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                     if val.replace(".", "").isdigit(): return f"{int(float(val)):02d}월"
             return ""
         def extract_day_safe(row):
-            for col in ['채집일', '조사일', '일', '조사일자', '채집일자', '채집일시']:
+            date_cols = ['수거일', '채집일', '조사일', '일', '조사일자', '채집일자', '채집일시']
+            for col in date_cols:
                 if col in row.index and pd.notna(row[col]):
-                    val = str(row[col]).replace('일','').strip()
-                    if val.isdigit(): return f"{int(val):02d}일"
+                    try:
+                        return f"{pd.to_datetime(row[col]).day:02d}일"
+                    except: pass
             return "15일"
             
         f_target["정규화_월"] = f_target.apply(extract_month_safe, axis=1)
         f_target["정규화_일"] = f_target.apply(extract_day_safe, axis=1)
 
         if is_weekly_mode:
-            def extract_week(w_raw):
-                w_str = str(w_raw).strip()
-                if "1" in w_str: return "1주"
-                elif "2" in w_str: return "2주"
-                elif "3" in w_str: return "3주"
-                elif "4" in w_str: return "4주"
-                elif "5" in w_str: return "4주" 
-                return "1주"
-            f_target["정규화_주차"] = f_target.get("주차", f_target.get("조사주", "1주")).apply(extract_week)
+            f_target["정규화_주차"] = f_target.apply(convert_absolute_to_monthly_week, axis=1)
         
         if "기후변화 참진드기" in target_disease:
             def normalize_county(val):
@@ -1176,6 +1186,16 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             for factor in climate_factors:
                 color = colors.get(factor, 'black')
                 ax2.plot(plot_df["기간"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
+                
+                for idx, val in enumerate(plot_df[factor]):
+                    if pd.notna(val) and val != 0.0:
+                        suffix = "m/s" if "풍속" in factor else ("°C" if "기온" in factor else ("mm" if "강수" in factor else "%"))
+                        ha_val = 'left' if "풍속" in factor else 'center'
+                        
+                        if is_weekly_mode and factor not in ["누적강수량(mm)", "평균풍속(m/s)"]:
+                            continue
+                            
+                        ax2.annotate(f"{val}{suffix}", (idx, val), textcoords="offset points", xytext=offsets.get(factor, (0, 10)), ha=ha_val, va='center' if "풍속" in factor else 'bottom', fontsize=8, color=color, fontweight='bold')
                 
             ax2.set_ylabel(f'{window_days}일 누적/평균 기상 관측 수치', fontweight='bold')
             lines_1, labels_1 = ax1.get_legend_handles_labels()
