@@ -374,7 +374,7 @@ selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=1)
 
 # =================================================================================
-# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진 (전체 완벽 복구)
+# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진
 # =================================================================================
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💬 매개체감염병 AI 챗봇")
@@ -542,10 +542,11 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_spot_name} (우사 거점)", icon=folium.Icon(color='red', icon='home')).add_to(m_je_all)
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 with c2:
-                    # 💡 [핵심 패치] 지점전체에서도 모기 종별 누적 막대그래프(Stacked Bar) 표출
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                    if not f_je.empty and f_je[val_col_je].sum() > 0:
-                        df_plot = f_je.copy()
+                    # 💡 [핵심 패치] 일본뇌염 '지점전체'에서 Culex tritaeniorhynchus만 남기기
+                    f_je_filtered = f_je[f_je["종"].str.contains("tritaeniorhynchus", na=False, case=False)].copy()
+                    if not f_je_filtered.empty and f_je_filtered[val_col_je].sum() > 0:
+                        df_plot = f_je_filtered.copy()
                         df_plot["지점_클린"] = df_plot["지점명"].apply(lambda x: str(x).split(' (')[0])
                         pivot_df = df_plot.pivot_table(index='지점_클린', columns='종', values=val_col_je, aggfunc='sum').fillna(0)
                         clean_je_spots = [s.split(' (')[0] for s in je_spots]
@@ -556,12 +557,24 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         bar_colors = ['#ef233c' if 'tritaeniorhynchus' in str(c).lower() else cmap(i%8) for i, c in enumerate(pivot_df.columns)]
                         pivot_df.plot(kind='bar', stacked=True, ax=ax1, color=bar_colors, edgecolor='#2b2d42')
                         ax1.set_ylabel('총 개체수')
+                        
+                        # 💡 [핵심 패치] 막대그래프 내부에 숫자 라벨 표시
+                        for container in ax1.containers:
+                            labels = [f'{int(v.get_height())}' if v.get_height() > 0 else '' for v in container]
+                            ax1.bar_label(container, labels=labels, label_type='center', fontsize=8, fontweight='bold', color='white')
+                            
                         plt.xticks(rotation=45, ha='right')
-                        plt.legend(title="모기 종", bbox_to_anchor=(1.05, 1), loc='upper left')
+                        plt.legend(title="모기 종(Culex tritaeniorhynchus)", bbox_to_anchor=(1.05, 1), loc='upper left')
                         st.pyplot(fig)
                         plt.close()
                     else:
-                        st.info("해당 기간에 채집된 모기가 없습니다.")
+                        fig, ax1 = plt.subplots(figsize=(6, 5.2))
+                        ax1.text(0.5, 0.5, f"해당 주차({selected_week}) 채집량 0마리\n(Culex tritaeniorhynchus 미검출)", ha='center', va='center', color='gray', fontsize=12, fontweight='bold')
+                        ax1.set_xlim(0, 1)
+                        ax1.set_ylim(0, 1)
+                        ax1.axis('off')
+                        st.pyplot(fig)
+                        plt.close()
 
             for idx, spot_name in enumerate(je_spots):
                 with je_sub_tabs[idx + 1]:
@@ -675,10 +688,10 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name}", icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal_all)
                     st_folium(m_mal_all, key="map_mal_all", width="100%", height=380)
                 with c2:
-                    # 💡 [핵심 패치] 지점전체에서도 모기 종별 누적 막대그래프(Stacked Bar) 표출
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                    if not f_mal.empty and f_mal[val_col_mal].sum() > 0:
-                        df_plot = f_mal.copy()
+                    f_mal_filtered = f_mal[f_mal["종"].str.contains("Anopheles", na=False, case=False)].copy()
+                    if not f_mal_filtered.empty and f_mal_filtered[val_col_mal].sum() > 0:
+                        df_plot = f_mal_filtered.copy()
                         df_plot["지점_클린"] = df_plot["지점명"].apply(lambda x: str(x).split(' (')[0])
                         pivot_df = df_plot.pivot_table(index='지점_클린', columns='종', values=val_col_mal, aggfunc='sum').fillna(0)
                         pivot_df = pivot_df.reindex(mal_spots_list, fill_value=0)
@@ -688,16 +701,29 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         bar_colors = ['#1d3557' if 'anopheles' in str(c).lower() else cmap(i%8) for i, c in enumerate(pivot_df.columns)]
                         pivot_df.plot(kind='bar', stacked=True, ax=ax1, color=bar_colors, edgecolor='#2b2d42')
                         ax1.set_ylabel('총 개체수')
+                        
+                        # 💡 [핵심 패치] 막대그래프 내부에 숫자 라벨 표시
+                        for container in ax1.containers:
+                            labels = [f'{int(v.get_height())}' if v.get_height() > 0 else '' for v in container]
+                            ax1.bar_label(container, labels=labels, label_type='center', fontsize=8, fontweight='bold', color='white')
+                            
                         plt.xticks(rotation=45, ha='right')
-                        plt.legend(title="모기 종", bbox_to_anchor=(1.05, 1), loc='upper left')
+                        plt.legend(title="모기 종(Anopheles spp.)", bbox_to_anchor=(1.05, 1), loc='upper left')
                         st.pyplot(fig)
                         plt.close()
                     else:
-                        st.info("해당 기간에 채집된 모기가 없습니다.")
+                        fig, ax1 = plt.subplots(figsize=(6, 5.2))
+                        ax1.text(0.5, 0.5, f"해당 주차({selected_week}) 채집량 0마리\n(Anopheles spp. 미검출)", ha='center', va='center', color='gray', fontsize=12, fontweight='bold')
+                        ax1.set_xlim(0, 1)
+                        ax1.set_ylim(0, 1)
+                        ax1.axis('off')
+                        st.pyplot(fig)
+                        plt.close()
 
             for idx, spot_name in enumerate(mal_spots_list):
                 with mal_sub_tabs[idx + 1]:
                     spot_data = f_mal[f_mal["지점명"].str.contains(spot_name, na=False)].copy()
+                    spot_data = spot_data[spot_data["종"].str.contains("Anopheles", na=False, case=False)]
                     
                     c1, c2 = st.columns([5, 5])
                     with c1:
@@ -718,7 +744,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             plt.close()
                         else:
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                            plt_ax.text(0.5, 0.5, f"해당 주차({selected_week}) 채집량 0마리\n(모기 미검출)", ha='center', va='center', color='gray', fontsize=12, fontweight='bold')
+                            plt_ax.text(0.5, 0.5, f"해당 주차({selected_week}) 채집량 0마리\n(Anopheles spp. 미검출)", ha='center', va='center', color='gray', fontsize=12, fontweight='bold')
                             plt_ax.set_xlim(0, 1)
                             plt_ax.set_ylim(0, 1)
                             plt_ax.axis('off')
@@ -726,9 +752,9 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             plt.close()
                             
                     if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
-                        st.dataframe(spot_data.drop(columns=["위도", "경도", "지역2_정규화"], errors='ignore'), hide_index=True, use_container_width=True)
+                        st.dataframe(spot_data.drop(columns=["위도", "경도"], errors='ignore'), hide_index=True, use_container_width=True)
                     else:
-                        st.info(f"💡 {selected_year} {selected_month} {selected_week}에 {spot_name} 지점에서 채집된 모기가 없습니다.")
+                        st.info(f"💡 {selected_year} {selected_month} {selected_week}에 {spot_name} 지점에서 채집된 Anopheles 매개모기가 없습니다.")
         else:
             st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다.")
 
@@ -859,6 +885,12 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         fig, ax1 = plt.subplots(figsize=(6, 5.2))
                         pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42')
                         ax1.set_ylabel('총 개체수')
+                        
+                        # 💡 [핵심 패치] 막대그래프 내부에 숫자 라벨 표시
+                        for container in ax1.containers:
+                            labels = [f'{int(v.get_height())}' if v.get_height() > 0 else '' for v in container]
+                            ax1.bar_label(container, labels=labels, label_type='center', fontsize=8, fontweight='bold')
+                            
                         plt.xticks(rotation=45, ha='right')
                         st.pyplot(fig)
                         plt.close()
@@ -993,6 +1025,8 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
                 
                 fig, ax1 = plt.subplots(figsize=(7, 5.2))
                 forest_pivot.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42', width=0.7)
+                
+                # 💡 [핵심 패치] 막대그래프 내부에 숫자 라벨 표시
                 for container in ax1.containers:
                     labels = [f'{int(v.get_height())}' if v.get_height() > 0 else '' for v in container]
                     ax1.bar_label(container, labels=labels, label_type='center', fontsize=9, color='white', fontweight='bold')
