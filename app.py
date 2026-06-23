@@ -161,10 +161,6 @@ def get_kma_weather_daily(year_str, loc_name):
 # [💡 VectorNet 전용: 절대 주차(1~52주) -> 월별 주차(1~4주) 매핑 엔진]
 # -----------------------------------------------------------------
 def convert_absolute_to_monthly_week(row):
-    """
-    VectorNet 엑셀에 입력된 연간 절대 주차(예: 25)를 
-    달력 기준의 월간 상대 주차(예: 6월 3주차)로 자동 환산하는 스마트 엔진
-    """
     y_str = row.get("조사년도", "2025")
     w_str = row.get("주차", row.get("조사주", "1"))
     try:
@@ -375,10 +371,10 @@ base_forest_df = rename_duplicate_columns(load_df_from_github("database_forest.c
 st.sidebar.markdown("### 📅 통합 시간 동기화 필터")
 selected_year = st.sidebar.selectbox("조사년도 선택", ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"])
 selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05월", "06월", "07월", "08월", "09월", "10월", "11월", "12월"], index=3)
-selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=2)
+selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=1)
 
 # =================================================================================
-# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진 (전체 복구)
+# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진
 # =================================================================================
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💬 매개체감염병 AI 챗봇")
@@ -517,7 +513,15 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             df_je["지점명"] = "춘천시 산천리 (우사 거점)"
 
         if "주차" in df_je.columns:
-            df_je["조사주"] = df_je.apply(convert_absolute_to_monthly_week, axis=1)
+            def _extract_week_je_fixed(w):
+                w_str = str(w).strip()
+                if "1" in w_str: return "1주"
+                if "2" in w_str: return "2주"
+                if "3" in w_str: return "3주"
+                if "4" in w_str: return "4주"
+                if "5" in w_str: return "4주"
+                return "1주"
+            df_je["조사주"] = df_je["주차"].apply(_extract_week_je_fixed)
         else:
             df_je["조사주"] = "1주"
 
@@ -624,9 +628,16 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         }
         
         if "주차" in df_mal.columns:
-            df_mal["조사주"] = df_mal.apply(convert_absolute_to_monthly_week, axis=1)
-        else: 
-            df_mal["조사주"] = "1주"
+            def _extract_week_mal(w):
+                w_str = str(w).strip()
+                if "1" in w_str: return "1주"
+                if "2" in w_str: return "2주"
+                if "3" in w_str: return "3주"
+                if "4" in w_str: return "4주"
+                if "5" in w_str: return "4주"
+                return "1주"
+            df_mal["조사주"] = df_mal["주차"].apply(_extract_week_mal)
+        else: df_mal["조사주"] = "1주"
 
         if "지역2" in df_mal.columns:
             mal_df_loc_clean = df_mal["지역2"].astype(str).str.strip()
@@ -689,7 +700,10 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
 
             for idx, spot_name in enumerate(mal_spots_list):
                 with mal_sub_tabs[idx + 1]:
-                    spot_data = f_mal[f_mal["지점명"].str.contains(spot_name, na=False)]
+                    spot_data = f_mal[f_mal["지점명"].str.contains(spot_name, na=False)].copy()
+                    # 💡 [핵심 패치] 말라리아 세부 지점 그래프는 Anopheles 속(spp.)만 필터링하여 표출
+                    spot_data = spot_data[spot_data["종"].str.contains("Anopheles", na=False, case=False)]
+                    
                     c1, c2 = st.columns([5, 5])
                     with c1:
                         m_spot = folium.Map(location=mal_coords_map[spot_name], zoom_start=11)
@@ -699,7 +713,8 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
                             sum_df = spot_data.groupby("종")[val_col_mal].sum().reset_index().sort_values(by=val_col_mal)
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col_mal], color=['#1d3557' if 'Anopheles' in str(s) else '#c4cbde' for s in sum_df["종"]], edgecolor='#2b2d42')
+                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col_mal], color='#1d3557', edgecolor='#2b2d42')
+                            # 💡 [핵심 패치] 정수로 변환하여 1.0마리가 아닌 1마리로 출력
                             for bar in bars: plt_ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', fontsize=8)
                             st.pyplot(fig)
                             plt.close()
@@ -715,7 +730,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
                         st.dataframe(spot_data.drop(columns=["위도", "경도"], errors='ignore'), hide_index=True, use_container_width=True)
                     else:
-                        st.info(f"💡 {selected_year} {selected_month} {selected_week}에 {spot_name} 지점에서 채집된 모기가 없습니다.")
+                        st.info(f"💡 {selected_year} {selected_month} {selected_week}에 {spot_name} 지점에서 채집된 Anopheles 매개모기가 없습니다.")
         else:
             st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다.")
 
@@ -760,9 +775,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             
         m_data = df_zone[(df_zone["조사년도"] == selected_year) & (df_zone["조사월"] == selected_month)].copy()
         val_col = "개체수" if "개체수" in m_data.columns else ("채집수" if "채집수" in m_data.columns else "개체수")
-        
-        if val_col in m_data.columns:
-            m_data[val_col] = pd.to_numeric(m_data[val_col], errors='coerce').fillna(0)
+        if val_col in m_data.columns: m_data[val_col] = pd.to_numeric(m_data[val_col], errors='coerce').fillna(0)
 
         if selected_zone == "모기 권역":
             master_spots_list = ["춘천시보건소", "퇴계동", "삼천동", "종가오리", "주택", "백로서식지", "일일감시(보건소)"]
