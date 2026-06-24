@@ -1119,10 +1119,28 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target], errors='coerce').fillna(0)
         
-        if is_mite_gen_mode: valid_months = range(8, 13)
-        elif "어린이숲" in target_disease: valid_months = range(3, 12) 
-        elif "2026" in analysis_year: valid_months = range(3, 6)
-        else: valid_months = range(3, 11) 
+        # -----------------------------------------------------------------
+        # [💡 수정 사항: 업로드된 최신 데이터에 맞춰 분석 범위 동적 계산 생성]
+        # -----------------------------------------------------------------
+        start_month = 8 if is_mite_gen_mode else 3  # 기본 시작 월 세팅
+        end_month = 12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10) # 기본 종료 월 세팅
+
+        if not f_target.empty:
+            # 정규화_월 컬럼에서 숫자만 추출하여 데이터에 존재하는 가장 마지막 월(Max Month) 산출
+            valid_months_in_data = f_target["정규화_월"].str.replace("월", "").dropna()
+            valid_months_in_data = pd.to_numeric(valid_months_in_data, errors='coerce').dropna()
+            
+            if not valid_months_in_data.empty:
+                max_month_in_data = int(valid_months_in_data.max())
+                # 현재 데이터가 기본 end_month보다 더 미래의 월을 가지고 있다면 확장 적용
+                if max_month_in_data > end_month:
+                    end_month = min(max_month_in_data, 12)
+                # 만약 2026년 데이터인데 5월을 넘어 6월, 7월 데이터가 생성되었다면 그에 맞춤 변동
+                elif "2026" in analysis_year:
+                    end_month = max(5, max_month_in_data)
+
+        valid_months = range(start_month, end_month + 1)
+        # -----------------------------------------------------------------
         
         periods_list = []
         if is_tick_mode:
