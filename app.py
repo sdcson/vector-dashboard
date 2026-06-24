@@ -99,9 +99,10 @@ def get_kma_weather(year_str, month_str, week_str, loc_name):
 def get_kma_weather_bulk(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
+    # 💡 6월 데이터 조회를 위해 6월 30일까지 연장
     if "2026" in year_str:
-        tm1, tm2 = f"{y}0301", f"{y}0531"
-        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 6)}
+        tm1, tm2 = f"{y}0301", f"{y}0630"
+        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 7)}
     else:
         tm1, tm2 = f"{y}0301", f"{y}1231"
         weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 13)}
@@ -138,7 +139,8 @@ def get_kma_weather_bulk(year_str, loc_name):
 def get_kma_weather_daily(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
-    tm1, tm2 = f"{y}0215", (f"{y}0531" if "2026" in year_str else f"{y}1231")
+    # 💡 일별 기상 데이터 조회도 6월 30일까지 연장
+    tm1, tm2 = f"{y}0215", (f"{y}0630" if "2026" in year_str else f"{y}1231")
     
     url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=400&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
     try:
@@ -1121,7 +1123,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         if is_mite_gen_mode: valid_months = range(8, 13)
         elif "어린이숲" in target_disease: valid_months = range(3, 12) 
-        elif "2026" in analysis_year: valid_months = range(3, 6)
+        elif "2026" in analysis_year: valid_months = range(3, 7)
         else: valid_months = range(3, 11) 
         
         periods_list = []
@@ -1156,110 +1158,4 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             else:
                 p_key = m_str
                 
-            if p_key in period_counts: 
-                period_counts[p_key] += row.get(val_col_target, 0)
-                
-        plot_df = pd.DataFrame(list(period_counts.items()), columns=["기간", "채집량(마리)"])
-        
-        window_days = 7 if is_tick_mode else (14 if is_weekly_mode else 14)
-        
-        with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 {window_days}일 역산 누적 중입니다..."):
-            kma_spot = selected_spot.replace("군","").replace("시","").split()[0]
-            df_w_daily = get_kma_weather_daily(analysis_year, kma_spot)
-            
-            temps, precips, humids, winds = [], [], [], []
-            y_int = int(analysis_year.replace("년", ""))
-            
-            for p in plot_df["기간"]:
-                if is_tick_mode:
-                    m_int = int(p.split("월")[0])
-                    d_str = p.split("\n")[1].replace("일", "")
-                    d_int = int(d_str) if d_str.isdigit() else 15
-                elif is_weekly_mode:
-                    m_int = int(p.split("월")[0])
-                    w_str = p.split("\n")[1]
-                    d_int = {"1주": 7, "2주": 14, "3주": 21, "4주": 28}.get(w_str, 28)
-                else:
-                    m_int = int(p.replace("월", ""))
-                    d_int = calendar.monthrange(y_int, m_int)[1] 
-                
-                try:
-                    target_date = pd.to_datetime(f"{y_int}-{m_int:02d}-{d_int:02d}")
-                    start_date = target_date - pd.Timedelta(days=window_days)
-                    
-                    if not df_w_daily.empty:
-                        mask = (df_w_daily['tm'] > start_date) & (df_w_daily['tm'] <= target_date)
-                        period_w = df_w_daily[mask]
-                        if not period_w.empty:
-                            temps.append(period_w['avgTa'].mean())
-                            precips.append(period_w['sumRn'].sum())
-                            humids.append(period_w['avgRhm'].mean())
-                            winds.append(period_w['avgWs'].mean())
-                        else:
-                            temps.append(0.0); precips.append(0.0); humids.append(0.0); winds.append(0.0)
-                    else:
-                        temps.append(0.0); precips.append(0.0); humids.append(0.0); winds.append(0.0)
-                except Exception:
-                    temps.append(0.0); precips.append(0.0); humids.append(0.0); winds.append(0.0)
-                    
-            plot_df["평균기온(°C)"] = [round(x, 1) for x in temps]
-            plot_df["누적강수량(mm)"] = [round(x, 1) for x in precips]
-            plot_df["평균습도(%)"] = [round(x, 1) for x in humids]
-            plot_df["평균풍속(m/s)"] = [round(x, 1) for x in winds]
-        
-        sum_text = " (세부 환경 전체 합산)" if is_tick_mode or is_mite_gen_mode else ""
-        
-        if is_mite_gen_mode:
-            st.markdown(f"##### 📊 {selected_spot} {target_name_kr}{sum_text} 계절적 변화 ({analysis_year} 8~12월)")
-        else:
-            st.markdown(f"##### 📊 {selected_spot} {target_name_kr}{sum_text} 계절적 변화 및 {window_days}일전 기상 영향 ({analysis_year})")
-        
-        fig, ax1 = plt.subplots(figsize=(14 if is_weekly_mode else 12, 5.5))
-        
-        bars = ax1.bar(plot_df["기간"], plot_df["채집량(마리)"], color='#2b2d42', label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
-        ax1.set_ylabel('총 채집량 합산 (마리)', color='#2b2d42', fontweight='bold')
-        ax1.tick_params(axis='y', labelcolor='#2b2d42')
-        max_count = plot_df["채집량(마리)"].max()
-        ax1.set_ylim(0, max_count * 1.2 if max_count > 0 else 10)
-        
-        for bar in bars:
-            height = bar.get_height()
-            if height > 0: ax1.text(bar.get_x() + bar.get_width()/2., height, f'{int(height)}', ha='center', va='bottom', fontsize=9)
-        
-        if climate_factors:
-            ax2 = ax1.twinx()
-            colors = {"평균기온(°C)": "#e63946", "누적강수량(mm)": "#457b9d", "평균습도(%)": "#2a9d8f", "평균풍속(m/s)": "#f4a261"}
-            markers = {"평균기온(°C)": "o", "누적강수량(mm)": "s", "평균습도(%)": "^", "평균풍속(m/s)": "D"}
-            offsets = {"평균기온(°C)": (0, 10), "누적강수량(mm)": (0, -15), "평균습도(%)": (0, 18), "평균풍속(m/s)": (12, 0)}
-            
-            for factor in climate_factors:
-                color = colors.get(factor, 'black')
-                ax2.plot(plot_df["기간"], plot_df[factor], color=color, marker=markers.get(factor, 'o'), linestyle='-', linewidth=2.5, markersize=8, label=factor)
-                
-                for idx, val in enumerate(plot_df[factor]):
-                    if pd.notna(val) and val != 0.0:
-                        suffix = "m/s" if "풍속" in factor else ("°C" if "기온" in factor else ("mm" if "강수" in factor else "%"))
-                        ha_val = 'left' if "풍속" in factor else 'center'
-                        
-                        if is_weekly_mode and factor not in ["누적강수량(mm)", "평균풍속(m/s)"]:
-                            continue
-                            
-                        ax2.annotate(f"{val}{suffix}", (idx, val), textcoords="offset points", xytext=offsets.get(factor, (0, 10)), ha=ha_val, va='center' if "풍속" in factor else 'bottom', fontsize=8, color=color, fontweight='bold')
-                
-            ax2.set_ylabel(f'{window_days}일 누적/평균 기상 관측 수치', fontweight='bold')
-            lines_1, labels_1 = ax1.get_legend_handles_labels()
-            lines_2, labels_2 = ax2.get_legend_handles_labels()
-            ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='upper left', bbox_to_anchor=(0.02, 0.98))
-        else:
-            ax1.legend(loc='upper left')
-            
-        plt.grid(axis='y', linestyle='--', alpha=0.4)
-        plt.xticks(rotation=0, ha='center', fontsize=8 if is_weekly_mode else 10)
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close()
-        
-        st.markdown(f"##### 📝 집계 상세 데이터 (채집일 과거 {window_days}일 기준)")
-        st.dataframe(plot_df, hide_index=True, use_container_width=True)
-    else:
-        st.info("💡 해당 감시망의 데이터가 존재하지 않아 기후 분석을 생성할 수 없습니다.")
+            if p_key in period_counts:
