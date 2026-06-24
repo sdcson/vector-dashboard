@@ -11,6 +11,7 @@ import os
 import requests
 import base64
 import calendar
+import datetime
 
 # 페이지 설정
 st.set_page_config(page_title="강원특별자치도 매개체 감시 시스템", layout="wide")
@@ -138,7 +139,15 @@ def get_kma_weather_bulk(year_str, loc_name):
 def get_kma_weather_daily(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
-    tm1, tm2 = f"{y}0215", (f"{y}0531" if "2026" in year_str else f"{y}1231")
+    
+    # 💡 [수정] 5월 31일 하드코딩 제거 및 현재 날짜 동적 반영
+    now = datetime.datetime.now()
+    if y == str(now.year):
+        tm2 = now.strftime("%Y%m%d")
+    else:
+        tm2 = f"{y}1231"
+        
+    tm1 = f"{y}0215" 
     
     url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=400&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
     try:
@@ -1105,10 +1114,39 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             f_target["정규화_지역"] = f_target["지역2"].apply(normalize_county)
             loc_col = "정규화_지역"
 
+        # -----------------------------------------------------------------
+        # [💡 수정 사항: 일본뇌염/말라리아 지점 정규화 엔진 (마스킹 누락 방지)]
+        # -----------------------------------------------------------------
         if loc_col in f_target.columns:
-            clean_spot = selected_spot.replace("군","").replace("시","") if ("참진드기" in target_disease or "털진드기" in target_disease) else (selected_spot.split()[0] if "일본뇌염" in target_disease or "말라리아" in target_disease else selected_spot)
+            if "일본뇌염" in target_disease:
+                def norm_je(x):
+                    s = str(x)
+                    if "산대" in s or "강릉" in s: return "강릉시 산대월리"
+                    if "하대" in s or "횡성" in s: return "횡성군 하대리"
+                    return "춘천시 산천리"
+                f_target["정규화_지점"] = f_target[loc_col].apply(norm_je)
+                loc_col = "정규화_지점"
+                clean_spot = selected_spot
+            elif "말라리아" in target_disease:
+                def norm_mal(x):
+                    l = str(x).replace(" ", "")
+                    if "중앙" in l: return "춘천시 중앙동"
+                    if "지내" in l: return "춘천시 지내리"
+                    if "학사" in l: return "철원군 학사리"
+                    if "화천" in l: return "화천군"
+                    if "양구" in l: return "양구군"
+                    if "인제" in l: return "인제군"
+                    if "고성" in l: return "고성군"
+                    return "철원군 대마리"
+                f_target["정규화_지점"] = f_target[loc_col].apply(norm_mal)
+                loc_col = "정규화_지점"
+                clean_spot = selected_spot
+            else:
+                clean_spot = selected_spot.replace("군","").replace("시","") if ("참진드기" in target_disease or "털진드기" in target_disease) else selected_spot
+                
             spot_mask = f_target[loc_col].astype(str).str.contains(clean_spot, na=False)
-        else: spot_mask = pd.Series([True]*len(f_target))
+        else: 
+            spot_mask = pd.Series([True]*len(f_target))
 
         if species_keyword: species_mask = f_target["종"].str.contains(species_keyword, na=False, case=False)
         else: species_mask = pd.Series([True]*len(f_target))
@@ -1119,28 +1157,21 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target], errors='coerce').fillna(0)
         
-        # -----------------------------------------------------------------
-        # [💡 수정 사항: 업로드된 최신 데이터에 맞춰 분석 범위 동적 계산 생성]
-        # -----------------------------------------------------------------
-        start_month = 8 if is_mite_gen_mode else 3  # 기본 시작 월 세팅
-        end_month = 12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10) # 기본 종료 월 세팅
+        start_month = 8 if is_mite_gen_mode else 3  
+        end_month = 12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10) 
 
         if not f_target.empty:
-            # 정규화_월 컬럼에서 숫자만 추출하여 데이터에 존재하는 가장 마지막 월(Max Month) 산출
             valid_months_in_data = f_target["정규화_월"].str.replace("월", "").dropna()
             valid_months_in_data = pd.to_numeric(valid_months_in_data, errors='coerce').dropna()
             
             if not valid_months_in_data.empty:
                 max_month_in_data = int(valid_months_in_data.max())
-                # 현재 데이터가 기본 end_month보다 더 미래의 월을 가지고 있다면 확장 적용
                 if max_month_in_data > end_month:
                     end_month = min(max_month_in_data, 12)
-                # 만약 2026년 데이터인데 5월을 넘어 6월, 7월 데이터가 생성되었다면 그에 맞춤 변동
                 elif "2026" in analysis_year:
                     end_month = max(5, max_month_in_data)
 
         valid_months = range(start_month, end_month + 1)
-        # -----------------------------------------------------------------
         
         periods_list = []
         if is_tick_mode:
@@ -1152,10 +1183,26 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 m_str = f"{m:02d}월"
                 d_str = month_to_day.get(m_str, "15일")
                 periods_list.append(f"{m_str}\n{d_str}")
+                
+        # -----------------------------------------------------------------
+        # [💡 수정 사항: 해당 월의 최대 보유 주차까지만 x축 동적 생성]
+        # -----------------------------------------------------------------
         elif is_weekly_mode:
+            max_m = max(valid_months)
+            max_w = 4
+            
+            if not f_target.empty:
+                last_m_df = f_target[f_target["정규화_월"] == f"{max_m:02d}월"]
+                if not last_m_df.empty:
+                    try: max_w = last_m_df["정규화_주차"].str.replace("주", "").astype(int).max()
+                    except: max_w = 4
+            
             for m in valid_months:
-                for w in ["1주", "2주", "3주", "4주"]:
-                    periods_list.append(f"{m:02d}월\n{w}")
+                for w in range(1, 5):
+                    # 가장 최신 달이면서, 데이터에 존재하는 주차(max_w)를 초과하면 그리지 않음
+                    if m == max_m and w > max_w:
+                        continue
+                    periods_list.append(f"{m:02d}월\n{w}주")
         else:
             for m in valid_months: periods_list.append(f"{m:02d}월")
             
