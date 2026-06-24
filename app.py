@@ -374,7 +374,7 @@ selected_month = st.sidebar.selectbox("조사월 선택", ["03월", "04월", "05
 selected_week = st.sidebar.selectbox("조사주 선택", ["1주", "2주", "3주", "4주", "전체"], index=1)
 
 # =================================================================================
-# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진
+# 💡 [신규] 사이드바 챗봇 UI 및 AI 기반 하이브리드 검색 엔진 (전체 완벽 복구)
 # =================================================================================
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💬 매개체감염병 AI 챗봇")
@@ -566,7 +566,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         st.pyplot(fig)
                         plt.close()
                     else:
-                        # 💡 엑스박스 예방: 안전한 HTML 공란 표출
                         st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 전체 지점 채집량 0마리<br>🚫 Culex tritaeniorhynchus 미검출</div>", unsafe_allow_html=True)
 
             for idx, spot_name in enumerate(je_spots):
@@ -590,8 +589,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                             st.pyplot(fig)
                             plt.close()
                         else:
-                            # 💡 엑스박스 예방
-                            st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리<br>🚫 Culex tritaeniorhynchus 미검출</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리<br>🚫 모기 미검출</div>", unsafe_allow_html=True)
                             
                     if not spot_data.empty and spot_data[val_col_je].sum() > 0:
                         st.dataframe(spot_data.drop(columns=["위도", "경도", "지역2_정규화"], errors='ignore'), hide_index=True, use_container_width=True)
@@ -865,15 +863,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                         st.pyplot(fig)
                         plt.close()
                     else:
-                        pivot_df = pd.DataFrame(index=master_spots_list, columns=["미채집"], data=0)
-                        fig, ax1 = plt.subplots(figsize=(6, 5.2))
-                        pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42', color='lightgray')
-                        ax1.set_ylabel('총 개체수')
-                        ax1.set_ylim(0, 10) 
-                        plt.xticks(rotation=45, ha='right')
-                        st.pyplot(fig)
-                        plt.close()
-                        st.info("📊 해당 기간에 채집된 매개체가 모두 0마리입니다.")
+                        st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 월({selected_month}) 전체 지점 채집량 0마리<br>🚫 매개체 미검출</div>", unsafe_allow_html=True)
                 else: st.info(f"📊 선택한 달({selected_month})의 데이터가 존재하지 않습니다.")
                     
         for idx, spot_name in enumerate(display_spots):
