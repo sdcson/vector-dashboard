@@ -610,7 +610,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다. 상단에서 파일을 업로드해 주세요.")
 
 # =================================================================================
-# 2. 말라리아 레이어
+# 2. 말라리아 레이어 (수정본)
 # =================================================================================
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
@@ -637,30 +637,24 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
         
-        if "주차" in df_mal.columns:
-            df_mal["조사주"] = df_mal.apply(convert_absolute_to_monthly_week, axis=1)
-        else: 
-            df_mal["조사주"] = "1주"
+        # 주차 정규화 및 지역 정규화
+        if "주차" in df_mal.columns: df_mal["조사주"] = df_mal.apply(convert_absolute_to_monthly_week, axis=1)
+        else: df_mal["조사주"] = "1주"
 
-        if "지역2" in df_mal.columns:
-            mal_df_loc_clean = df_mal["지역2"].astype(str).str.strip()
-            def find_mal_coords(loc_str):
-                l = str(loc_str).replace(" ", "")
-                if "중앙" in l: return "춘천시 중앙동", mal_coords_map["춘천시 중앙동"]
-                if "지내" in l: return "춘천시 지내리", mal_coords_map["춘천시 지내리"]
-                if "학사" in l: return "철원군 학사리", mal_coords_map["철원군 학사리"]
-                if "화천" in l: return "화천군", mal_coords_map["화천군"]
-                if "양구" in l: return "양구군", mal_coords_map["양구군"]
-                if "인제" in l: return "인제군", mal_coords_map["인제군"]
-                if "고성" in l: return "고성군", mal_coords_map["고성군"]
-                return "철원군 대마리", mal_coords_map["철원군 대마리"] 
-                
-            res_tuples = mal_df_loc_clean.map(find_mal_coords)
-            df_mal["지역2_정규화"] = [x[0] for x in res_tuples]
-            df_mal["위도"] = [x[1][0] for x in res_tuples]
-            df_mal["경도"] = [x[1][1] for x in res_tuples]
-            df_mal["지점명"] = df_mal["지역2_정규화"].map(lambda x: f"{x} (우사 거점)")
-        else: df_mal["지점명"] = "철원군 대마리 (우사 거점)"
+        def find_mal_coords(loc_str):
+            l = str(loc_str).replace(" ", "")
+            if "중앙" in l: return "춘천시 중앙동", mal_coords_map["춘천시 중앙동"]
+            if "지내" in l: return "춘천시 지내리", mal_coords_map["춘천시 지내리"]
+            if "학사" in l: return "철원군 학사리", mal_coords_map["철원군 학사리"]
+            if "화천" in l: return "화천군", mal_coords_map["화천군"]
+            if "양구" in l: return "양구군", mal_coords_map["양구군"]
+            if "인제" in l: return "인제군", mal_coords_map["인제군"]
+            if "고성" in l: return "고성군", mal_coords_map["고성군"]
+            return "철원군 대마리", mal_coords_map["철원군 대마리"] 
+            
+        res_tuples = df_mal["지역2"].astype(str).map(find_mal_coords)
+        df_mal["지역2_정규화"] = [x[0] for x in res_tuples]
+        df_mal["지점명"] = df_mal["지역2_정규화"].map(lambda x: f"{x} (우사 거점)")
 
         f_mal = df_mal[(df_mal["조사년도"] == selected_year) & (df_mal["조사월"] == selected_month)].copy()
         if selected_week != "전체": f_mal = f_mal[f_mal["조사주"] == selected_week]
@@ -676,75 +670,42 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             mal_spots_list = list(mal_coords_map.keys())
             mal_sub_tabs = st.tabs(["📍 지점전체"] + [f"📍 {spot.split(' (')[0]}" for spot in mal_spots_list])
             
+            # [전체 지점 탭]
             with mal_sub_tabs[0]:
-                c1, c2 = st.columns([5, 5])
-                with c1:
-                    st.markdown("##### 🗺️ GIS 말라리아 거점 지도")
-                    m_mal_all = folium.Map(location=[38.15, 127.8], zoom_start=9)
-                    for target_mal_name, coords in mal_coords_map.items():
-                        folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name}", icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal_all)
-                    st_folium(m_mal_all, key="map_mal_all", width="100%", height=380)
-                with c2:
-                    st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                    # 💡 영문 학명과 한글 명칭 모두 완벽하게 필터링
-                    if "종" in f_mal.columns:
-                        f_mal_filtered = f_mal[f_mal["종"].astype(str).str.contains("anopheles|얼룩날개", na=False, case=False)].copy()
-                    else:
-                        f_mal_filtered = pd.DataFrame()
-                        
-                    if not f_mal_filtered.empty and f_mal_filtered[val_col_mal].sum() > 0:
-                        df_plot = f_mal_filtered.copy()
-                        df_plot["지점_클린"] = df_plot["지점명"].apply(lambda x: str(x).split(' (')[0])
-                        pivot_df = df_plot.pivot_table(index='지점_클린', columns='종', values=val_col_mal, aggfunc='sum').fillna(0)
-                        pivot_df = pivot_df.reindex(mal_spots_list, fill_value=0)
-                        
-                        fig, ax1 = plt.subplots(figsize=(6, 5.2))
-                        cmap = plt.get_cmap('Pastel2')
-                        bar_colors = ['#1d3557' if 'anopheles' in str(c).lower() or '얼룩날개' in str(c) else cmap(i%8) for i, c in enumerate(pivot_df.columns)]
-                        pivot_df.plot(kind='bar', stacked=True, ax=ax1, color=bar_colors, edgecolor='#2b2d42')
-                        ax1.set_ylabel('총 개체수')
-                        
-                        for container in ax1.containers:
-                            labels = [f'{int(v.get_height())}' if v.get_height() > 0 else '' for v in container]
-                            ax1.bar_label(container, labels=labels, label_type='center', fontsize=8, fontweight='bold', color='white')
-                            
-                        plt.xticks(rotation=45, ha='right')
-                        plt.legend(title="말라리아 매개모기(얼룩날개모기류)", bbox_to_anchor=(1.05, 1), loc='upper left')
-                        st.pyplot(fig)
-                        plt.close()
-                    else:
-                        st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 전체 지점 채집량 0마리<br>🚫 얼룩날개모기류 미검출</div>", unsafe_allow_html=True)
+                st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
+                pivot_df = f_mal.pivot_table(index='지역2_정규화', columns='종', values=val_col_mal, aggfunc='sum').fillna(0)
+                fig, ax1 = plt.subplots(figsize=(10, 5))
+                pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42')
+                plt.xticks(rotation=45, ha='right')
+                st.pyplot(fig)
+                plt.close()
 
+            # [개별 세부 지점 탭]
             for idx, spot_name in enumerate(mal_spots_list):
                 with mal_sub_tabs[idx + 1]:
-                    spot_data = f_mal[f_mal["지점명"].str.contains(spot_name, na=False)].copy()
-                    if "종" in spot_data.columns:
-                        spot_data = spot_data[spot_data["종"].astype(str).str.contains("anopheles|얼룩날개", na=False, case=False)]
+                    spot_data = f_mal[f_mal["지역2_정규화"] == spot_name].copy()
                     
-                    c1, c2 = st.columns([5, 5])
-                    with c1:
-                        st.markdown(f"##### 🗺️ {spot_name} 거점 지도")
-                        m_spot = folium.Map(location=mal_coords_map[spot_name], zoom_start=11)
-                        folium.Marker(mal_coords_map[spot_name], tooltip=spot_name, icon=folium.Icon(color='purple', icon='star')).add_to(m_spot)
-                        st_folium(m_spot, key=f"map_mal_spot_{idx}", width="100%", height=380)
-                    with c2:
-                        st.markdown(f"##### 📊 {spot_name} 모기 종별 채집량")
-                        if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
-                            sum_df = spot_data.groupby("종")[val_col_mal].sum().reset_index().sort_values(by=val_col_mal)
-                            fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                            bar_colors = ['#1d3557' if 'anopheles' in str(s).lower() or '얼룩날개' in str(s) else '#c4cbde' for s in sum_df["종"]]
-                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col_mal], color=bar_colors, edgecolor='#2b2d42')
-                            for bar in bars: plt_ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', fontsize=8)
-                            plt_ax.set_xlabel('개체수 (마리)')
-                            st.pyplot(fig)
-                            plt.close()
-                        else:
-                            st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리<br>🚫 얼룩날개모기류 미검출</div>", unsafe_allow_html=True)
-                            
-                    if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
-                        st.dataframe(spot_data.drop(columns=["위도", "경도"], errors='ignore'), hide_index=True, use_container_width=True)
-        else:
-            st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다.")
+                    st.markdown(f"##### 📊 {spot_name} 모기 종별 채집량")
+                    if not spot_data.empty:
+                        sum_df = spot_data.groupby("종")[val_col_mal].sum().reset_index()
+                        fig, plt_ax = plt.subplots(figsize=(8, 4))
+                        
+                        # 말라리아 매개모기 강조 색상 설정
+                        colors = ['#ef233c' if 'anopheles' in str(s).lower() or '얼룩날개' in str(s) else '#c4cbde' for s in sum_df["종"]]
+                        bars = plt_ax.bar(sum_df["종"], sum_df[val_col_mal], color=colors, edgecolor='#2b2d42')
+                        
+                        # 매개모기 개체수 숫자 강조 표시
+                        for bar in bars:
+                            h = bar.get_height()
+                            plt_ax.text(bar.get_x() + bar.get_width()/2., h, f'{int(h)}', ha='center', va='bottom', 
+                                        fontsize=10, fontweight='bold', color='red' if h > 0 and 'anopheles' in str(bar.get_label()).lower() else 'black')
+                        
+                        plt.xticks(rotation=45, ha='right')
+                        st.pyplot(fig)
+                        plt.close()
+                        st.dataframe(spot_data, hide_index=True, use_container_width=True)
+                    else:
+                        st.info("데이터가 없습니다.")
 
 # =================================================================================
 # 3. 기후변화 대응 매개체 감시 레이어
