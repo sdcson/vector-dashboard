@@ -1021,11 +1021,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         years_list = ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]
         analysis_year = st.selectbox("분석 연도", years_list, index=years_list.index(selected_year))
     with col_c2:
+        # 💡 [수정됨] 드롭다운 메뉴 순서를 요청하신 대로 재배치했습니다.
         target_disease = st.selectbox("분석 대상 감시망", [
-            "기후변화 참진드기 권역",
             "일본뇌염 매개모기 (Culex tritaeniorhynchus)", 
             "말라리아 매개모기 (Anopheles spp.)",
             "기후변화 모기 권역",
+            "기후변화 참진드기 권역",
             "털진드기 발생감시",
             "어린이숲 체험장 참진드기"
         ])
