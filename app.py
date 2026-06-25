@@ -590,7 +590,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_spot_name} (우사 거점)", icon=folium.Icon(color='red', icon='home')).add_to(m_je_all)
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 
-                # 💡 일본뇌염 전체 지점 정밀 필터링
+                # 💡 일본뇌염 전체 지점 정밀 핀셋 필터링
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
                     species_col_je = "종" if "종" in f_je.columns else None
@@ -737,7 +737,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name}", icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal_all)
                     st_folium(m_mal_all, key="map_mal_all", width="100%", height=380)
                 
-                # 💡 말라리아 전체 지점 정밀 필터링
+                # 💡 말라리아 매개모기(Anopheles/얼룩날개) 핀셋 필터링 적용 (복구 완료)
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
                     species_col_mal = "종" if "종" in f_mal.columns else None
@@ -1155,16 +1155,18 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     is_mite_gen_mode = ("털진드기 발생" in target_disease)
     is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or is_mite_gen_mode
 
-    # =================================================================================
-    # 💡 [정규식 키워드 통일] 기후 탭에서도 사용자 제안 정규식 그대로 활용
-    # =================================================================================
+    # -------------------------------------------------------------------------
+    # 1. 분석 대상 및 타겟 키워드 설정 (말라리아, 일본뇌염 정밀 필터링 키워드)
+    # -------------------------------------------------------------------------
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
+        # 💡 오직 작은빨간집모기(Culex tritaeniorhynchus)만 잡는 정규식
         species_keyword = r"\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집"
         target_name_kr = "일본뇌염 매개모기(작은빨간집모기)"
     elif "말라리아" in target_disease:
         df_target = base_mal_df.copy()
-        species_keyword = r"\bAnopheles\b|얼룩날개"
+        # 💡 오직 얼룩날개모기류(Anopheles)만 잡는 정규식
+        species_keyword = r"\bAnopheles\b|anopheles|얼룩날개"
         target_name_kr = "말라리아 매개모기(얼룩날개모기류)"
     elif "기후변화 모기" in target_disease:
         df_target = base_cli_moq_df.copy()
@@ -1227,11 +1229,14 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             max_w_in_data = 4
 
-        # 💡 [초강력 합계 행 원천 차단] 전체 집계 시 합계 데이터가 합산되어 뻥튀기 되는 것 방지
+        # -------------------------------------------------------------------------
+        # 2. 초강력 정밀 필터링 (합계 행 제거 & 특정 '종' 열에서만 핀셋 추출)
+        # -------------------------------------------------------------------------
+        # 1) 전체 데이터 중 '합계', '총계' 등의 글자가 들어간 뻥튀기 방지 행 삭제
         exclude_mask = f_target.astype(str).apply(lambda x: x.str.contains('합계|총계|누계', na=False, regex=True)).any(axis=1)
         f_target = f_target[~exclude_mask]
 
-        # 💡 [초강력 지점 필터링] (사용자 요구사항 I열 대응)
+        # 2) 지점 마스킹
         loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
         found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
         
@@ -1261,12 +1266,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
-        # =================================================================================
-        # 💡 [초강력 정밀 종명 필터링] (사용자 요구사항 대응)
-        # 다른 열은 일절 무시하고 반드시 '종' 관련 단일 열에서만 핀셋 검색합니다.
-        # =================================================================================
+        # 3) 💡 [핵심] 오직 '종' 관련 열에서만 핀셋 필터링 검사 수행
         if species_keyword:
-            # "종" 열이 없을 경우 대체할 수 있는 열을 먼저 찾습니다.
             species_col = "종" if "종" in f_target.columns else None
             if not species_col:
                 fallback_cols = ["학명", "모기종", "종명", "매개체명", "종류"]
@@ -1274,21 +1275,21 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
 
             if species_col:
                 species_mask = f_target[species_col].astype(str).str.strip().str.contains(
-                    species_keyword, 
-                    case=False, 
-                    regex=True, 
-                    na=False
+                    species_keyword, case=False, regex=True, na=False
                 )
             else:
-                species_mask = pd.Series(False, index=f_target.index) # 열이 없으면 아예 0마리로 차단
+                species_mask = pd.Series(False, index=f_target.index)
         else:
             species_mask = pd.Series([True]*len(f_target))
-        # =================================================================================
             
         no_empty_mask = ~f_target.astype(str).apply(lambda x: x.str.contains("미채집", na=False, regex=False)).any(axis=1)
             
+        # 모든 마스크 적용하여 최종 타겟 데이터 확정
         f_target = f_target[spot_mask & species_mask & no_empty_mask]
         
+        # -------------------------------------------------------------------------
+        # 3. 개체수 쉼표 제거 및 주차별 합산 (Grouping)
+        # -------------------------------------------------------------------------
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         
         # 쉼표 있는 숫자도 완벽하게 카운팅하도록 방어
@@ -1327,12 +1328,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 d_str = row["정규화_일"]
                 p_key = f"{m_str}\n{d_str}"
             elif is_weekly_mode:
-                # F열 대응
                 w_str = row.get("정규화_주차", "1주")
                 p_key = f"{m_str}\n{w_str}"
             else:
                 p_key = m_str
                 
+            # 타겟 모기 마리수 합산
             if p_key in period_counts: 
                 period_counts[p_key] += row.get(val_col_target, 0)
                 
