@@ -1223,9 +1223,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
-        # 💡 [초강력 종명 필터링] 모든 열을 스캔하여 일치하는 종명만 추출
+        # 💡 [정밀 종명 필터링] 정확히 '종' 열에서만 매개모기 필터링 (일본뇌염/말라리아 개체수 오류 수정 적용)
         if species_keyword:
-            species_mask = f_target.astype(str).apply(lambda x: x.str.contains(species_keyword, case=False, regex=True)).any(axis=1)
+            if "종" in f_target.columns:
+                species_mask = f_target["종"].astype(str).str.contains(species_keyword, case=False, regex=True)
+            else:
+                species_mask = f_target.astype(str).apply(lambda x: x.str.contains(species_keyword, case=False, regex=True)).any(axis=1)
         else:
             species_mask = pd.Series([True]*len(f_target))
             
