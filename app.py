@@ -232,7 +232,6 @@ def safe_parse_month_series(series, default_val):
         except Exception: return str(default_val)
     return series.apply(_parse)
 
-# 💡 [핵심 방어] 파일 업로드 시 모기종, 채집수 등의 열 이름을 무조건 표준으로 통일시킵니다.
 def parse_vectornet_dataframe(df, default_year, default_month):
     df.columns = [str(c).strip() for c in df.columns]
     
@@ -591,7 +590,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                    # 💡 [필터링 방어] 행 단위 검사로 완벽히 분리
                     mask = f_je.astype(str).apply(lambda x: x.str.contains("tritaeniorhynchus|작은빨간집", case=False, regex=True)).any(axis=1)
                     f_je_filtered = f_je[mask].copy()
                         
@@ -1224,14 +1222,22 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             spot_mask = pd.Series([True]*len(f_target))
 
         # =================================================================================
-        # 💡 [초강력 정밀 종명 필터링] 예외처리 완전 삭제! 오직 '종' 열만 바라봅니다.
+        # 💡 [극강 정밀 종명 필터링] 
+        # 데이터에 '대상종', '사업명' 등 이름이 비슷한 열이 섞여있어 다른 모기가 합산되는 현상을 차단!
+        # 정확히 모기 종류가 적힌 단 하나의 열만 핀셋으로 집어서 검사합니다. (any 검색 원천 차단)
         # =================================================================================
         if species_keyword:
             if "종" in f_target.columns:
                 species_mask = f_target["종"].astype(str).str.contains(species_keyword, case=False, regex=True)
             else:
-                # 종 열이 없으면 아예 아무것도 합산하지 않도록 강제 차단 (다른 모기가 섞이는 것 방지)
-                species_mask = pd.Series([False] * len(f_target), index=f_target.index)
+                # '종'이라는 열 이름이 없을 때만 정확히 일치하는 대체 열명 검색 (부분일치 절대 금지)
+                fallback_cols = ["학명", "모기종", "종명", "매개체명", "종류"]
+                exact_col = next((c for c in f_target.columns if c in fallback_cols), None)
+                if exact_col:
+                    species_mask = f_target[exact_col].astype(str).str.contains(species_keyword, case=False, regex=True)
+                else:
+                    # 완벽히 검증된 종 열이 없으면 아예 0마리로 처리 (다른 모기 합산 원천 차단)
+                    species_mask = pd.Series([False] * len(f_target), index=f_target.index)
         else:
             species_mask = pd.Series([True]*len(f_target))
         # =================================================================================
