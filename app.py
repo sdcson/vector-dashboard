@@ -140,7 +140,7 @@ def get_kma_weather_daily(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
     
-    # 💡 [수정] 5월 31일 하드코딩 제거 및 현재 날짜 동적 반영
+    # 5월 31일 하드코딩 제거 및 현재 날짜 동적 반영
     now = datetime.datetime.now()
     if y == str(now.year):
         tm2 = now.strftime("%Y%m%d")
@@ -1114,9 +1114,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             f_target["정규화_지역"] = f_target["지역2"].apply(normalize_county)
             loc_col = "정규화_지역"
 
-        # -----------------------------------------------------------------
-        # [💡 수정 사항: 일본뇌염/말라리아 지점 정규화 엔진 (마스킹 누락 방지)]
-        # -----------------------------------------------------------------
         if loc_col in f_target.columns:
             if "일본뇌염" in target_disease:
                 def norm_je(x):
@@ -1159,6 +1156,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         start_month = 8 if is_mite_gen_mode else 3  
         end_month = 12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10) 
+        
+        max_w_in_data = 4 
 
         if not f_target.empty:
             valid_months_in_data = f_target["정규화_월"].str.replace("월", "").dropna()
@@ -1166,10 +1165,19 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
             if not valid_months_in_data.empty:
                 max_month_in_data = int(valid_months_in_data.max())
-                if max_month_in_data > end_month:
+                
+                now_year = str(datetime.datetime.now().year)
+                if now_year in analysis_year:
+                    end_month = max(start_month, max_month_in_data)
+                elif max_month_in_data > end_month:
                     end_month = min(max_month_in_data, 12)
-                elif "2026" in analysis_year:
-                    end_month = max(5, max_month_in_data)
+                    
+                last_m_df = f_target[f_target["정규화_월"] == f"{max_month_in_data:02d}월"]
+                if is_weekly_mode and not last_m_df.empty:
+                    try:
+                        max_w_in_data = last_m_df["정규화_주차"].str.replace("주", "").astype(int).max()
+                    except:
+                        max_w_in_data = 4
 
         valid_months = range(start_month, end_month + 1)
         
@@ -1184,27 +1192,15 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 d_str = month_to_day.get(m_str, "15일")
                 periods_list.append(f"{m_str}\n{d_str}")
                 
-        # -----------------------------------------------------------------
-        # [💡 수정 사항: 해당 월의 최대 보유 주차까지만 x축 동적 생성]
-        # -----------------------------------------------------------------
         elif is_weekly_mode:
-            max_m = max(valid_months)
-            max_w = 4
-            
-            if not f_target.empty:
-                last_m_df = f_target[f_target["정규화_월"] == f"{max_m:02d}월"]
-                if not last_m_df.empty:
-                    try: max_w = last_m_df["정규화_주차"].str.replace("주", "").astype(int).max()
-                    except: max_w = 4
-            
             for m in valid_months:
                 for w in range(1, 5):
-                    # 가장 최신 달이면서, 데이터에 존재하는 주차(max_w)를 초과하면 그리지 않음
-                    if m == max_m and w > max_w:
+                    if m == end_month and w > max_w_in_data:
                         continue
                     periods_list.append(f"{m:02d}월\n{w}주")
         else:
-            for m in valid_months: periods_list.append(f"{m:02d}월")
+            for m in valid_months: 
+                periods_list.append(f"{m:02d}월")
             
         period_counts = {p: 0 for p in periods_list}
         
