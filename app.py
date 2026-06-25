@@ -63,8 +63,7 @@ def get_kma_stn(loc_name):
         "횡성": "114", "하대": "114"
     }
     for k, v in stn_map.items():
-        if k in str(loc_name):
-            return v
+        if k in str(loc_name): return v
     return "101" 
 
 @st.cache_data(ttl=3600)
@@ -94,8 +93,7 @@ def get_kma_weather(year_str, month_str, week_str, loc_name):
                     "humid": round(h_avg, 1) if not pd.isna(h_avg) else 0.0,
                     "wind": round(w_avg, 1) if not pd.isna(w_avg) else 0.0
                 }
-    except Exception:
-        pass
+    except Exception: pass
     return {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0}
 
 @st.cache_data(ttl=3600)
@@ -134,8 +132,7 @@ def get_kma_weather_bulk(year_str, loc_name):
                         "humid": round(row['avgRhm'], 1) if not pd.isna(row['avgRhm']) else 0.0,
                         "wind": round(row['avgWs'], 1) if not pd.isna(row['avgWs']) else 0.0
                     }
-    except Exception:
-        pass
+    except Exception: pass
     return weather_dict
 
 @st.cache_data(ttl=3600)
@@ -165,8 +162,7 @@ def get_kma_weather_daily(year_str, loc_name):
                 df_w['avgRhm'] = pd.to_numeric(df_w.get('avgRhm', 0), errors='coerce').fillna(0)
                 df_w['avgWs'] = pd.to_numeric(df_w.get('avgWs', 0), errors='coerce').fillna(0)
                 return df_w[['tm', 'avgTa', 'sumRn', 'avgRhm', 'avgWs']]
-    except Exception:
-        pass
+    except Exception: pass
     return pd.DataFrame(columns=['tm', 'avgTa', 'sumRn', 'avgRhm', 'avgWs'])
 
 # -----------------------------------------------------------------
@@ -178,8 +174,7 @@ def convert_absolute_to_monthly_week(row):
     try:
         y = int(str(y_str).replace("년", "").strip())
         w_digits = ''.join(filter(str.isdigit, str(w_str)))
-        if not w_digits:
-            return "1주"
+        if not w_digits: return "1주"
         
         w = int(w_digits)
         if w <= 5: 
@@ -195,15 +190,12 @@ def convert_absolute_to_monthly_week(row):
 # [💡 GitHub API 연동 데이터베이스 엔진 및 포맷터]
 # -----------------------------------------------------------------
 def get_github_credentials():
-    try:
-        return st.secrets["GITHUB_TOKEN"], st.secrets["GITHUB_REPO"]
-    except Exception:
-        return None, None
+    try: return st.secrets["GITHUB_TOKEN"], st.secrets["GITHUB_REPO"]
+    except Exception: return None, None
 
 def save_df_to_github(df, filename_on_github, commit_message="Update"):
     token, repo = get_github_credentials()
-    if not token or not repo:
-        return False
+    if not token or not repo: return False
     csv_bytes = df.to_csv(index=False).encode('utf-8-sig')
     base64_content = base64.b64encode(csv_bytes).decode('utf-8')
     url = f"https://api.github.com/repos/{repo}/contents/{filename_on_github}"
@@ -211,47 +203,58 @@ def save_df_to_github(df, filename_on_github, commit_message="Update"):
     res = requests.get(url, headers=headers)
     sha = res.json().get("sha") if res.status_code == 200 else None
     payload = {"message": commit_message, "content": base64_content, "branch": "main"}
-    if sha:
-        payload["sha"] = sha
+    if sha: payload["sha"] = sha
     return requests.put(url, headers=headers, json=payload).status_code in [200, 201]
 
 def load_df_from_github(filename_on_github, fallback_df):
     token, repo = get_github_credentials()
-    if not token or not repo:
-        return fallback_df
+    if not token or not repo: return fallback_df
     url = f"https://api.github.com/repos/{repo}/contents/{filename_on_github}"
     res = requests.get(url, headers={"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"})
     if res.status_code == 200:
-        try:
-            return pd.read_csv(BytesIO(base64.b64decode(res.json().get("content"))), encoding='utf-8-sig')
-        except Exception:
-            return fallback_df
+        try: return pd.read_csv(BytesIO(base64.b64decode(res.json().get("content"))), encoding='utf-8-sig')
+        except Exception: return fallback_df
     return fallback_df
 
 def safe_parse_year_series(series, default_val):
     def _parse(val):
-        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']:
-            return str(default_val)
+        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']: return str(default_val)
         val_str = str(val).strip()
-        if "년" in val_str:
-            return val_str
-        if val_str.replace('.', '', 1).isdigit():
-            return f"{int(float(val_str))}년"
+        if "년" in val_str: return val_str
+        if val_str.replace('.', '', 1).isdigit(): return f"{int(float(val_str))}년"
         return f"{val_str}년"
     return series.apply(_parse)
 
 def safe_parse_month_series(series, default_val):
     def _parse(val):
-        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']:
-            return str(default_val)
-        try:
-            return f"{int(float(str(val).strip().replace('월', ''))):02d}월"
-        except Exception:
-            return str(default_val)
+        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']: return str(default_val)
+        try: return f"{int(float(str(val).strip().replace('월', ''))):02d}월"
+        except Exception: return str(default_val)
     return series.apply(_parse)
 
+# 💡 [핵심 방어] 파일 업로드 시 모기종, 채집수 등의 열 이름을 무조건 표준으로 통일시킵니다.
 def parse_vectornet_dataframe(df, default_year, default_month):
     df.columns = [str(c).strip() for c in df.columns]
+    
+    # 열 이름 강제 통일
+    sp_cands = ["학명", "모기종", "종류", "종명", "매개체명"]
+    for c in sp_cands:
+        if c in df.columns and "종" not in df.columns:
+            df.rename(columns={c: "종"}, inplace=True)
+            break
+            
+    loc_cands = ["지역", "지점", "지점명", "채집장소", "시군구", "채집지역", "채집지", "채집지역2"]
+    for c in loc_cands:
+        if c in df.columns and "지역2" not in df.columns:
+            df.rename(columns={c: "지역2"}, inplace=True)
+            break
+            
+    val_cands = ["채집수", "총개체수", "합계", "마리수", "수량", "Count", "총합"]
+    for c in val_cands:
+        if c in df.columns and "개체수" not in df.columns:
+            df.rename(columns={c: "개체수"}, inplace=True)
+            break
+
     date_cols = ['수거일', '채집일', '조사일', '조사일자', '채집일자', '채집일시']
     found_col = next((c for c in date_cols if c in df.columns), None)
     
@@ -290,31 +293,25 @@ def parse_vectornet_dataframe(df, default_year, default_month):
     return df
 
 def rename_duplicate_columns(df):
-    if df is None or df.empty:
-        return df
+    if df is None or df.empty: return df
     cols = pd.Series(df.columns)
-    for dup in cols[cols.duplicated()].unique():
-        cols[cols == dup] = [f"{dup}.{i}" if i != 0 else dup for i in range(cols[cols == dup].shape[0])]
+    for dup in cols[cols.duplicated()].unique(): cols[cols == dup] = [f"{dup}.{i}" if i != 0 else dup for i in range(cols[cols == dup].shape[0])]
     df.columns = cols
     return df
 
-def convert_df_to_csv(df):
-    return df.to_csv(index=False).encode('utf-8-sig')
+def convert_df_to_csv(df): return df.to_csv(index=False).encode('utf-8-sig')
 
 def merge_and_overwrite(old_df, new_df, keys):
-    if new_df.empty:
-        return old_df
+    if new_df.empty: return old_df
     val_col = "개체수" if "개체수" in new_df.columns else ("채집수" if "채집수" in new_df.columns else "개체수")
     groupby_keys = [k for k in keys if k in new_df.columns]
     agg_dict = {col: ('sum' if col == val_col else 'first') for col in new_df.columns if col not in groupby_keys and col not in ['번호', '연번']}
     new_df_aggregated = new_df.groupby(groupby_keys, as_index=False).agg(agg_dict)
-    if old_df.empty:
-        return new_df_aggregated
+    if old_df.empty: return new_df_aggregated
     return pd.concat([old_df, new_df_aggregated], ignore_index=True).drop_duplicates(subset=groupby_keys, keep='last')
 
 def smart_load_uploaded_file(uploaded_file):
-    if uploaded_file is None:
-        return pd.DataFrame()
+    if uploaded_file is None: return pd.DataFrame()
     file_name = uploaded_file.name.lower()
     df_res = pd.DataFrame()
     if file_name.endswith(('.xlsx', '.xls')):
@@ -336,10 +333,8 @@ def smart_load_uploaded_file(uploaded_file):
                 uploaded_file.seek(0)
                 df_res = pd.read_csv(uploaded_file, encoding=enc, skiprows=skip_rows_idx)
                 break
-            except Exception:
-                continue
-    if not df_res.empty:
-        df_res.columns = [str(c).strip() for c in df_res.columns]
+            except Exception: continue
+    if not df_res.empty: df_res.columns = [str(c).strip() for c in df_res.columns]
     return df_res
 
 # -----------------------------------------------------------------
@@ -596,10 +591,9 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                    if "종" in f_je.columns:
-                        f_je_filtered = f_je[f_je["종"].astype(str).str.contains("tritaeniorhynchus|작은빨간집", na=False, case=False)].copy()
-                    else:
-                        f_je_filtered = pd.DataFrame()
+                    # 💡 [필터링 방어] 행 단위 검사로 완벽히 분리
+                    mask = f_je.astype(str).apply(lambda x: x.str.contains("tritaeniorhynchus|작은빨간집", case=False, regex=True)).any(axis=1)
+                    f_je_filtered = f_je[mask].copy()
                         
                     if not f_je_filtered.empty and f_je_filtered[val_col_je].sum() > 0:
                         df_plot = f_je_filtered.copy()
@@ -682,10 +676,8 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
         
-        if "주차" in df_mal.columns:
-            df_mal["조사주"] = df_mal.apply(convert_absolute_to_monthly_week, axis=1)
-        else: 
-            df_mal["조사주"] = "1주"
+        if "주차" in df_mal.columns: df_mal["조사주"] = df_mal.apply(convert_absolute_to_monthly_week, axis=1)
+        else: df_mal["조사주"] = "1주"
 
         if "지역2" in df_mal.columns:
             def find_mal_coords(loc_str):
@@ -1184,7 +1176,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         start_month = 8 if is_mite_gen_mode else 3  
         end_month = 12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10) 
         
-        # 💡 [핵심 수정] 진행 중인 연도(2026년 등)일 경우 무조건 현재 달/주차까지 그래프 X축을 연장
         now_date = datetime.datetime.now()
         now_year = str(now_date.year)
         
@@ -1197,27 +1188,21 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             if is_weekly_mode:
                 max_w_in_data = 4
                 if now_date.month == end_month:
-                    # 현실의 현재 날짜를 기반으로 주차 계산
                     current_week = (now_date.day - 1) // 7 + 1
                     max_w_in_data = min(current_week, 4)
         else:
             max_w_in_data = 4
 
-        # 💡 [핵심 수정] 타 지역 데이터 병합 방지 초강력 필터링
+        # 💡 [초강력 지점 필터링] 춘천 데이터 블랙홀 현상 방어
         loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
         found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
         
         if found_loc_col:
             if "일본뇌염" in target_disease:
-                # 선택한 지점명에서 고유 키워드만 뽑아 필터링
-                if "산천" in selected_spot:
-                    kw = "산천"
-                elif "산대" in selected_spot:
-                    kw = "산대"
-                elif "하대" in selected_spot:
-                    kw = "하대"
-                else:
-                    kw = selected_spot
+                if "산천" in selected_spot: kw = "산천"
+                elif "산대" in selected_spot: kw = "산대"
+                elif "하대" in selected_spot: kw = "하대"
+                else: kw = selected_spot
                 spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
                 
             elif "말라리아" in target_disease:
@@ -1238,24 +1223,14 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
-        # 💡 [핵심 수정] 매개모기 종명 완벽 필터링 (컬럼 이름 방어)
-        sp_cols_cands = ["종", "학명", "모기종", "종류", "종명"]
-        found_sp_col = next((c for c in f_target.columns if c in sp_cols_cands), None)
-        
+        # 💡 [초강력 종명 필터링] 모든 열을 스캔하여 일치하는 종명만 추출
         if species_keyword:
-            if found_sp_col:
-                species_mask = f_target[found_sp_col].astype(str).str.contains(species_keyword, na=False, case=False)
-            else:
-                species_mask = pd.Series([False]*len(f_target)) 
+            species_mask = f_target.astype(str).apply(lambda x: x.str.contains(species_keyword, case=False, regex=True)).any(axis=1)
         else:
             species_mask = pd.Series([True]*len(f_target))
             
-        if found_sp_col:
-            no_empty_mask = (f_target[found_sp_col] != "미채집") & (~f_target[found_sp_col].astype(str).str.contains("미채집", na=False))
-        else:
-            no_empty_mask = pd.Series([True]*len(f_target))
+        no_empty_mask = ~f_target.astype(str).apply(lambda x: x.str.contains("미채집", na=False, regex=False)).any(axis=1)
             
-        # 철통 필터링 적용
         f_target = f_target[spot_mask & species_mask & no_empty_mask]
         
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
@@ -1277,7 +1252,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         elif is_weekly_mode:
             for m in valid_months:
                 for w in range(1, 5):
-                    # 현재 연도이고 마지막 달이라면 현재 주차까지만 그리기
                     if now_year in analysis_year and m == end_month and w > max_w_in_data:
                         continue
                     periods_list.append(f"{m:02d}월\n{w}주")
