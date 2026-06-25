@@ -551,7 +551,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                    # 💡 영문 학명과 한글 명칭 모두 완벽하게 필터링
                     if "종" in f_je.columns:
                         f_je_filtered = f_je[f_je["종"].astype(str).str.contains("tritaeniorhynchus|작은빨간집", na=False, case=False)].copy()
                     else:
@@ -610,7 +609,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다. 상단에서 파일을 업로드해 주세요.")
 
 # =================================================================================
-# 2. 말라리아 레이어 (수정본)
+# 2. 말라리아 레이어
 # =================================================================================
 elif selected_tab == "🔵 말라리아 매개모기 감시":
     st.header(f"🪖 접경지역 말라리아 매개모기 주별 감시 현황 [{selected_year} {selected_month} {selected_week}]")
@@ -637,7 +636,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             "인제군": [38.0645, 128.1611], "고성군": [38.3795, 128.4680]
         }
         
-        # 주차 정규화 및 지역 정규화
         if "주차" in df_mal.columns: df_mal["조사주"] = df_mal.apply(convert_absolute_to_monthly_week, axis=1)
         else: df_mal["조사주"] = "1주"
 
@@ -672,40 +670,59 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
             
             # [전체 지점 탭]
             with mal_sub_tabs[0]:
-                st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                pivot_df = f_mal.pivot_table(index='지역2_정규화', columns='종', values=val_col_mal, aggfunc='sum').fillna(0)
-                fig, ax1 = plt.subplots(figsize=(10, 5))
-                pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42')
-                plt.xticks(rotation=45, ha='right')
-                st.pyplot(fig)
-                plt.close()
+                c1, c2 = st.columns([5, 5])
+                with c1:
+                    st.markdown("##### 🗺️ GIS 말라리아 거점 지도")
+                    m_mal_all = folium.Map(location=[38.15, 127.8], zoom_start=9)
+                    for target_mal_name, coords in mal_coords_map.items():
+                        folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name}", icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal_all)
+                    st_folium(m_mal_all, key="map_mal_all", width="100%", height=380)
+                with c2:
+                    st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
+                    pivot_df = f_mal.pivot_table(index='지역2_정규화', columns='종', values=val_col_mal, aggfunc='sum').fillna(0)
+                    fig, ax1 = plt.subplots(figsize=(6, 5.2))
+                    pivot_df.plot(kind='bar', stacked=True, ax=ax1, edgecolor='#2b2d42')
+                    plt.xticks(rotation=45, ha='right')
+                    st.pyplot(fig)
+                    plt.close()
 
-            # [개별 세부 지점 탭]
+            # [💡 수정/복구 완료] 개별 세부 지점 탭 (지도 레이어와 전체 모기 그래프 좌우 배치)
             for idx, spot_name in enumerate(mal_spots_list):
                 with mal_sub_tabs[idx + 1]:
                     spot_data = f_mal[f_mal["지역2_정규화"] == spot_name].copy()
                     
-                    st.markdown(f"##### 📊 {spot_name} 모기 종별 채집량")
+                    c1, c2 = st.columns([5, 5])
+                    with c1:
+                        st.markdown(f"##### 🗺️ {spot_name} 거점 지도")
+                        m_spot = folium.Map(location=mal_coords_map[spot_name], zoom_start=11)
+                        folium.Marker(mal_coords_map[spot_name], tooltip=spot_name, icon=folium.Icon(color='purple', icon='star')).add_to(m_spot)
+                        st_folium(m_spot, key=f"map_mal_spot_{idx}", width="100%", height=380)
+                    with c2:
+                        st.markdown(f"##### 📊 {spot_name} 모기 종별 전체 채집량")
+                        if not spot_data.empty:
+                            sum_df = spot_data.groupby("종")[val_col_mal].sum().reset_index()
+                            fig, plt_ax = plt.subplots(figsize=(6, 5.2))
+                            
+                            # 말라리아 매개모기(Anopheles/얼룩날개)만 강조 색상 설정
+                            colors = ['#ef233c' if 'anopheles' in str(s).lower() or '얼룩날개' in str(s) else '#c4cbde' for s in sum_df["종"]]
+                            bars = plt_ax.bar(sum_df["종"], sum_df[val_col_mal], color=colors, edgecolor='#2b2d42')
+                            
+                            # 매개모기 개체수 숫자 강조 표시
+                            for bar in bars:
+                                h = bar.get_height()
+                                plt_ax.text(bar.get_x() + bar.get_width()/2., h + 0.1, f'{int(h)}', ha='center', va='bottom', 
+                                            fontsize=9, fontweight='bold')
+                            
+                            plt.xticks(rotation=45, ha='right')
+                            st.pyplot(fig)
+                            plt.close()
+                        else:
+                            st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리</div>", unsafe_allow_html=True)
+                            
                     if not spot_data.empty:
-                        sum_df = spot_data.groupby("종")[val_col_mal].sum().reset_index()
-                        fig, plt_ax = plt.subplots(figsize=(8, 4))
-                        
-                        # 말라리아 매개모기 강조 색상 설정
-                        colors = ['#ef233c' if 'anopheles' in str(s).lower() or '얼룩날개' in str(s) else '#c4cbde' for s in sum_df["종"]]
-                        bars = plt_ax.bar(sum_df["종"], sum_df[val_col_mal], color=colors, edgecolor='#2b2d42')
-                        
-                        # 매개모기 개체수 숫자 강조 표시
-                        for bar in bars:
-                            h = bar.get_height()
-                            plt_ax.text(bar.get_x() + bar.get_width()/2., h, f'{int(h)}', ha='center', va='bottom', 
-                                        fontsize=10, fontweight='bold', color='red' if h > 0 and 'anopheles' in str(bar.get_label()).lower() else 'black')
-                        
-                        plt.xticks(rotation=45, ha='right')
-                        st.pyplot(fig)
-                        plt.close()
                         st.dataframe(spot_data, hide_index=True, use_container_width=True)
-                    else:
-                        st.info("데이터가 없습니다.")
+        else:
+            st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다.")
 
 # =================================================================================
 # 3. 기후변화 대응 매개체 감시 레이어
@@ -794,7 +811,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
             "일일감시(보건소)": [37.8813, 127.7298], "논": [37.8920, 127.7400], "밭": [37.8540, 127.7600], "저수지": [37.8300, 127.6800],
             "수로": [37.9100, 127.7100], "야산": [37.8200, 127.7800], "초지": [37.8600, 127.7900],
             "화천 초지": [38.1060, 127.7035], "화천 잡목림": [38.1150, 127.7200], "화천 산길": [38.1250, 127.6900], "화천 무덤": [38.0950, 127.7100],
-            "인제 초지": [38.0694, 128.1701], "인제 잡목림": [38.0800, 128.1900], "인제 산길": [38.0550, 128.1500], "인제 무덤": [38.0750, 128.1400]
+            "인제 초지": [38.0694, 128.1701], "인제 잡목림": [38.0800, 128.1900], "인제 ASOS": [38.0645, 128.1611], "인제 무덤": [38.0750, 128.1400]
         }
         
         with cli_sub_tabs[0]:
@@ -1033,7 +1050,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     is_mite_gen_mode = ("털진드기 발생" in target_disease)
     is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or is_mite_gen_mode
 
-    # 💡 [핵심 수정] 영문, 한글 명칭 어떤 것으로 적혀 있어도 확실하게 잡아내도록 정규식 필터 강화
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
         species_keyword = "tritaeniorhynchus|작은빨간집"
@@ -1145,7 +1161,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else: 
             spot_mask = pd.Series([True]*len(f_target))
 
-        # 💡 [핵심 수정] 종 필터링 적용 (데이터에 '종' 컬럼이 있으면 정규식에 걸리는 것만 추출)
         if species_keyword and "종" in f_target.columns: 
             species_mask = f_target["종"].astype(str).str.contains(species_keyword, na=False, case=False)
         else: 
@@ -1153,7 +1168,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         no_empty_mask = (f_target["종"] != "미채집") & (~f_target["종"].str.contains("미채집", na=False))
         
-        # 필터링 확정: 선택한 지점 + 특정 매개모기종 + 미채집 아님
         f_target = f_target[spot_mask & species_mask & no_empty_mask]
         
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
@@ -1256,7 +1270,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         fig, ax1 = plt.subplots(figsize=(14 if is_weekly_mode else 12, 5.5))
         
-        # 💡 [핵심 수정] 범례에 명확한 대상 모기 이름이 뜨도록 적용
         bars = ax1.bar(plot_df["기간"], plot_df["채집량(마리)"], color='#2b2d42', label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
         ax1.set_ylabel('총 채집량 합산 (마리)', color='#2b2d42', fontweight='bold')
         ax1.tick_params(axis='y', labelcolor='#2b2d42')
