@@ -232,6 +232,7 @@ def safe_parse_month_series(series, default_val):
         except Exception: return str(default_val)
     return series.apply(_parse)
 
+# 💡 [핵심 방어] 파일 업로드 시 모기종, 채집수 등의 열 이름을 무조건 표준으로 통일시킵니다.
 def parse_vectornet_dataframe(df, default_year, default_month):
     df.columns = [str(c).strip() for c in df.columns]
     
@@ -1124,11 +1125,11 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
 
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
-        species_keyword = "tritaeniorhynchus|작은빨간집"
+        species_keyword = "tritaeniorhynchus"  # 💡 한국어 제거, 학명으로만 핀셋 필터링
         target_name_kr = "일본뇌염 매개모기(작은빨간집모기)"
     elif "말라리아" in target_disease:
         df_target = base_mal_df.copy()
-        species_keyword = "anopheles|얼룩날개"
+        species_keyword = "anopheles|sinensis"
         target_name_kr = "말라리아 매개모기(얼룩날개모기류)"
     elif "기후변화 모기" in target_disease:
         df_target = base_cli_moq_df.copy()
@@ -1191,7 +1192,11 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             max_w_in_data = 4
 
-        # 💡 [초강력 지점 필터링] 춘천 데이터 블랙홀 현상 방어
+        # 💡 [초강력 합계 행 원천 차단] 전체 집계 시 합계 데이터가 합산되어 뻥튀기 되는 것 방지
+        exclude_mask = f_target.astype(str).apply(lambda x: x.str.contains('합계|총계|누계', na=False, regex=True)).any(axis=1)
+        f_target = f_target[~exclude_mask]
+
+        # 💡 [초강력 지점 필터링] (사용자 요구사항 I열 대응)
         loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
         found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
         
@@ -1222,22 +1227,14 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             spot_mask = pd.Series([True]*len(f_target))
 
         # =================================================================================
-        # 💡 [극강 정밀 종명 필터링] 
-        # 데이터에 '대상종', '사업명' 등 이름이 비슷한 열이 섞여있어 다른 모기가 합산되는 현상을 차단!
-        # 정확히 모기 종류가 적힌 단 하나의 열만 핀셋으로 집어서 검사합니다. (any 검색 원천 차단)
+        # 💡 [초강력 정밀 종명 필터링] (사용자 요구사항 L열 대응)
+        # 다른 열은 일절 무시하고 반드시 '종' 열에서만 핀셋 검색합니다.
         # =================================================================================
         if species_keyword:
             if "종" in f_target.columns:
                 species_mask = f_target["종"].astype(str).str.contains(species_keyword, case=False, regex=True)
             else:
-                # '종'이라는 열 이름이 없을 때만 정확히 일치하는 대체 열명 검색 (부분일치 절대 금지)
-                fallback_cols = ["학명", "모기종", "종명", "매개체명", "종류"]
-                exact_col = next((c for c in f_target.columns if c in fallback_cols), None)
-                if exact_col:
-                    species_mask = f_target[exact_col].astype(str).str.contains(species_keyword, case=False, regex=True)
-                else:
-                    # 완벽히 검증된 종 열이 없으면 아예 0마리로 처리 (다른 모기 합산 원천 차단)
-                    species_mask = pd.Series([False] * len(f_target), index=f_target.index)
+                species_mask = pd.Series([False] * len(f_target), index=f_target.index) # 종 열이 없으면 아예 0마리 표기
         else:
             species_mask = pd.Series([True]*len(f_target))
         # =================================================================================
@@ -1247,7 +1244,9 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         f_target = f_target[spot_mask & species_mask & no_empty_mask]
         
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
-        f_target[val_col_target] = pd.to_numeric(f_target[val_col_target], errors='coerce').fillna(0)
+        
+        # 쉼표 있는 숫자도 완벽하게 카운팅하도록 방어
+        f_target[val_col_target] = pd.to_numeric(f_target[val_col_target].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         
         valid_months = range(start_month, end_month + 1)
         periods_list = []
@@ -1282,6 +1281,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 d_str = row["정규화_일"]
                 p_key = f"{m_str}\n{d_str}"
             elif is_weekly_mode:
+                # F열 대응
                 w_str = row.get("정규화_주차", "1주")
                 p_key = f"{m_str}\n{w_str}"
             else:
