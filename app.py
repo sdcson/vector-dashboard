@@ -589,9 +589,24 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     for target_spot_name, coords in je_coords_map.items():
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_spot_name} (우사 거점)", icon=folium.Icon(color='red', icon='home')).add_to(m_je_all)
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
+                
+                # ==============================================================
+                # 💡 사용자 제안 정밀 필터링 로직 적용 (전체 지점)
+                # ==============================================================
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                    mask = f_je.astype(str).apply(lambda x: x.str.contains("tritaeniorhynchus|작은빨간집", case=False, regex=True)).any(axis=1)
+                    species_col_je = "종" if "종" in f_je.columns else None
+                    if species_col_je:
+                        je_species_series = f_je[species_col_je].astype(str).str.strip()
+                        mask = je_species_series.str.contains(
+                            r"\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집",
+                            case=False,
+                            regex=True,
+                            na=False,
+                        )
+                    else:
+                        mask = pd.Series(False, index=f_je.index)
+                    
                     f_je_filtered = f_je[mask].copy()
                         
                     if not f_je_filtered.empty and f_je_filtered[val_col_je].sum() > 0:
@@ -1123,13 +1138,16 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     is_mite_gen_mode = ("털진드기 발생" in target_disease)
     is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or is_mite_gen_mode
 
+    # =================================================================================
+    # 💡 [정규식 키워드 통일] 기후 탭에서도 사용자 제안 정규식 그대로 활용
+    # =================================================================================
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
-        species_keyword = "tritaeniorhynchus"  # 💡 한국어 제거, 학명으로만 핀셋 필터링
+        species_keyword = r"\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집"
         target_name_kr = "일본뇌염 매개모기(작은빨간집모기)"
     elif "말라리아" in target_disease:
         df_target = base_mal_df.copy()
-        species_keyword = "anopheles|sinensis"
+        species_keyword = r"\bAnopheles\b|얼룩날개"
         target_name_kr = "말라리아 매개모기(얼룩날개모기류)"
     elif "기후변화 모기" in target_disease:
         df_target = base_cli_moq_df.copy()
@@ -1227,14 +1245,25 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             spot_mask = pd.Series([True]*len(f_target))
 
         # =================================================================================
-        # 💡 [초강력 정밀 종명 필터링] (사용자 요구사항 L열 대응)
-        # 다른 열은 일절 무시하고 반드시 '종' 열에서만 핀셋 검색합니다.
+        # 💡 [초강력 정밀 종명 필터링] (사용자 요구사항 대응)
+        # 다른 열은 일절 무시하고 반드시 '종' 관련 단일 열에서만 핀셋 검색합니다.
         # =================================================================================
         if species_keyword:
-            if "종" in f_target.columns:
-                species_mask = f_target["종"].astype(str).str.contains(species_keyword, case=False, regex=True)
+            # "종" 열이 없을 경우 대체할 수 있는 열을 먼저 찾습니다.
+            species_col = "종" if "종" in f_target.columns else None
+            if not species_col:
+                fallback_cols = ["학명", "모기종", "종명", "매개체명", "종류"]
+                species_col = next((c for c in f_target.columns if c in fallback_cols), None)
+
+            if species_col:
+                species_mask = f_target[species_col].astype(str).str.strip().str.contains(
+                    species_keyword, 
+                    case=False, 
+                    regex=True, 
+                    na=False
+                )
             else:
-                species_mask = pd.Series([False] * len(f_target), index=f_target.index) # 종 열이 없으면 아예 0마리 표기
+                species_mask = pd.Series(False, index=f_target.index) # 열이 없으면 아예 0마리로 차단
         else:
             species_mask = pd.Series([True]*len(f_target))
         # =================================================================================
@@ -1281,7 +1310,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 d_str = row["정규화_일"]
                 p_key = f"{m_str}\n{d_str}"
             elif is_weekly_mode:
-                # F열 대응
                 w_str = row.get("정규화_주차", "1주")
                 p_key = f"{m_str}\n{w_str}"
             else:
