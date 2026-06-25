@@ -1223,14 +1223,26 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
-        # 💡 [정밀 종명 필터링] 정확히 '종' 열에서만 매개모기 필터링 (일본뇌염/말라리아 개체수 오류 수정 적용)
+        # =================================================================================
+        # 💡 [초강력 정밀 종명 필터링 교체 구간] 무조건 '종' 관련 열에서만 찾아내도록 강제!
+        # =================================================================================
         if species_keyword:
-            if "종" in f_target.columns:
-                species_mask = f_target["종"].astype(str).str.contains(species_keyword, case=False, regex=True)
+            target_col = None
+            # 우선순위로 데이터프레임 내에서 '종'을 의미하는 열을 확정합니다.
+            for col in ["종", "학명", "모기종", "매개체명", "종류", "종명"]:
+                if col in f_target.columns:
+                    target_col = col
+                    break
+            
+            if target_col:
+                # 찾은 '종' 열에서만! 작은빨간집모기(tritaeniorhynchus)를 필터링합니다.
+                species_mask = f_target[target_col].astype(str).str.contains(species_keyword, case=False, regex=True)
             else:
+                # 정규화된 종 열이 아예 없는 최악의 경우에만 전체 열 스캔을 허용합니다.
                 species_mask = f_target.astype(str).apply(lambda x: x.str.contains(species_keyword, case=False, regex=True)).any(axis=1)
         else:
             species_mask = pd.Series([True]*len(f_target))
+        # =================================================================================
             
         no_empty_mask = ~f_target.astype(str).apply(lambda x: x.str.contains("미채집", na=False, regex=False)).any(axis=1)
             
