@@ -591,6 +591,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
+                    # 💡 [필터링 방어] 행 단위 검사로 완벽히 분리
                     mask = f_je.astype(str).apply(lambda x: x.str.contains("tritaeniorhynchus|작은빨간집", case=False, regex=True)).any(axis=1)
                     f_je_filtered = f_je[mask].copy()
                         
@@ -1223,26 +1224,14 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             spot_mask = pd.Series([True]*len(f_target))
 
         # =================================================================================
-        # 💡 [초강력 정밀 종명 필터링 교체 구간] 
-        # 일본뇌염/말라리아 매개모기만 "정확하게" 솎아내기 위해,
-        # 사업명이나 비고란 때문에 다른 모기가 섞여들어오는 현상을 원천 차단합니다.
+        # 💡 [초강력 정밀 종명 필터링] 예외처리 완전 삭제! 오직 '종' 열만 바라봅니다.
         # =================================================================================
         if species_keyword:
-            # 1. 먼저 '종', '학명', '모기종', '매개체명' 같은 종 관련 열이 있는지 확인
-            sp_cols = [c for c in f_target.columns if any(k in str(c) for k in ['종', '학명', '매개체명'])]
-            
-            if sp_cols:
-                # 종 관련 열이 있다면, 무조건 해당 열에서만 키워드를 검사 (가장 안전)
-                species_mask = pd.Series([False] * len(f_target), index=f_target.index)
-                for c in sp_cols:
-                    species_mask = species_mask | f_target[c].astype(str).str.contains(species_keyword, case=False, regex=True)
+            if "종" in f_target.columns:
+                species_mask = f_target["종"].astype(str).str.contains(species_keyword, case=False, regex=True)
             else:
-                # 최악의 경우 (종 열을 찾지 못했을 때), 
-                # '사업명', '비고', '조사명' 등 오작동을 유발하는 열을 완전히 배제하고 검사
-                safe_cols = [c for c in f_target.columns if not any(k in str(c) for k in ['사업', '비고', '조사', '제목'])]
+                # 종 열이 없으면 아예 아무것도 합산하지 않도록 강제 차단 (다른 모기가 섞이는 것 방지)
                 species_mask = pd.Series([False] * len(f_target), index=f_target.index)
-                for c in safe_cols:
-                    species_mask = species_mask | f_target[c].astype(str).str.contains(species_keyword, case=False, regex=True)
         else:
             species_mask = pd.Series([True]*len(f_target))
         # =================================================================================
