@@ -140,7 +140,6 @@ def get_kma_weather_daily(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
     
-    # 💡 [핵심 수정 1] 기상청 일별 자료는 당일 조회가 불안정하므로 안전하게 D-2일로 강제 설정하여 API 에러 방지
     now = datetime.datetime.now() - datetime.timedelta(days=2)
     if y == str(datetime.datetime.now().year):
         tm2 = now.strftime("%Y%m%d")
@@ -552,7 +551,12 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                    f_je_filtered = f_je[f_je["종"].str.contains("tritaeniorhynchus", na=False, case=False)].copy()
+                    # 💡 영문 학명과 한글 명칭 모두 완벽하게 필터링
+                    if "종" in f_je.columns:
+                        f_je_filtered = f_je[f_je["종"].astype(str).str.contains("tritaeniorhynchus|작은빨간집", na=False, case=False)].copy()
+                    else:
+                        f_je_filtered = pd.DataFrame()
+                        
                     if not f_je_filtered.empty and f_je_filtered[val_col_je].sum() > 0:
                         df_plot = f_je_filtered.copy()
                         df_plot["지점_클린"] = df_plot["지점명"].apply(lambda x: str(x).split(' (')[0])
@@ -562,7 +566,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         
                         fig, ax1 = plt.subplots(figsize=(6, 5.2))
                         cmap = plt.get_cmap('Pastel2')
-                        bar_colors = ['#ef233c' if 'tritaeniorhynchus' in str(c).lower() else cmap(i%8) for i, c in enumerate(pivot_df.columns)]
+                        bar_colors = ['#ef233c' if 'tritaeniorhynchus' in str(c).lower() or '작은빨간집' in str(c) else cmap(i%8) for i, c in enumerate(pivot_df.columns)]
                         pivot_df.plot(kind='bar', stacked=True, ax=ax1, color=bar_colors, edgecolor='#2b2d42')
                         ax1.set_ylabel('총 개체수')
                         
@@ -571,11 +575,11 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                             ax1.bar_label(container, labels=labels, label_type='center', fontsize=8, fontweight='bold', color='white')
                             
                         plt.xticks(rotation=45, ha='right')
-                        plt.legend(title="모기 종(Culex tritaeniorhynchus)", bbox_to_anchor=(1.05, 1), loc='upper left')
+                        plt.legend(title="일본뇌염 매개모기(작은빨간집모기)", bbox_to_anchor=(1.05, 1), loc='upper left')
                         st.pyplot(fig)
                         plt.close()
                     else:
-                        st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 전체 지점 채집량 0마리<br>🚫 Culex tritaeniorhynchus 미검출</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 전체 지점 채집량 0마리<br>🚫 작은빨간집모기 미검출</div>", unsafe_allow_html=True)
 
             for idx, spot_name in enumerate(je_spots):
                 with je_sub_tabs[idx + 1]:
@@ -591,7 +595,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         if not spot_data.empty and spot_data[val_col_je].sum() > 0:
                             sum_df = spot_data.groupby("종")[val_col_je].sum().reset_index().sort_values(by=val_col_je)
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                            bar_colors = ['#ef233c' if 'tritaeniorhynchus' in str(s).lower() else '#c4cbde' for s in sum_df["종"]]
+                            bar_colors = ['#ef233c' if 'tritaeniorhynchus' in str(s).lower() or '작은빨간집' in str(s) else '#c4cbde' for s in sum_df["종"]]
                             bars = plt_ax.barh(sum_df["종"], sum_df[val_col_je], color=bar_colors, edgecolor='#2b2d42')
                             for bar in bars: plt_ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', fontsize=8)
                             plt_ax.set_xlabel('개체수 (마리)')
@@ -682,7 +686,12 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                     st_folium(m_mal_all, key="map_mal_all", width="100%", height=380)
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
-                    f_mal_filtered = f_mal[f_mal["종"].str.contains("Anopheles", na=False, case=False)].copy()
+                    # 💡 영문 학명과 한글 명칭 모두 완벽하게 필터링
+                    if "종" in f_mal.columns:
+                        f_mal_filtered = f_mal[f_mal["종"].astype(str).str.contains("anopheles|얼룩날개", na=False, case=False)].copy()
+                    else:
+                        f_mal_filtered = pd.DataFrame()
+                        
                     if not f_mal_filtered.empty and f_mal_filtered[val_col_mal].sum() > 0:
                         df_plot = f_mal_filtered.copy()
                         df_plot["지점_클린"] = df_plot["지점명"].apply(lambda x: str(x).split(' (')[0])
@@ -691,7 +700,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         
                         fig, ax1 = plt.subplots(figsize=(6, 5.2))
                         cmap = plt.get_cmap('Pastel2')
-                        bar_colors = ['#1d3557' if 'anopheles' in str(c).lower() else cmap(i%8) for i, c in enumerate(pivot_df.columns)]
+                        bar_colors = ['#1d3557' if 'anopheles' in str(c).lower() or '얼룩날개' in str(c) else cmap(i%8) for i, c in enumerate(pivot_df.columns)]
                         pivot_df.plot(kind='bar', stacked=True, ax=ax1, color=bar_colors, edgecolor='#2b2d42')
                         ax1.set_ylabel('총 개체수')
                         
@@ -700,16 +709,17 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             ax1.bar_label(container, labels=labels, label_type='center', fontsize=8, fontweight='bold', color='white')
                             
                         plt.xticks(rotation=45, ha='right')
-                        plt.legend(title="모기 종(Anopheles spp.)", bbox_to_anchor=(1.05, 1), loc='upper left')
+                        plt.legend(title="말라리아 매개모기(얼룩날개모기류)", bbox_to_anchor=(1.05, 1), loc='upper left')
                         st.pyplot(fig)
                         plt.close()
                     else:
-                        st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 전체 지점 채집량 0마리<br>🚫 Anopheles spp. 미검출</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 전체 지점 채집량 0마리<br>🚫 얼룩날개모기류 미검출</div>", unsafe_allow_html=True)
 
             for idx, spot_name in enumerate(mal_spots_list):
                 with mal_sub_tabs[idx + 1]:
                     spot_data = f_mal[f_mal["지점명"].str.contains(spot_name, na=False)].copy()
-                    spot_data = spot_data[spot_data["종"].str.contains("Anopheles", na=False, case=False)]
+                    if "종" in spot_data.columns:
+                        spot_data = spot_data[spot_data["종"].astype(str).str.contains("anopheles|얼룩날개", na=False, case=False)]
                     
                     c1, c2 = st.columns([5, 5])
                     with c1:
@@ -722,14 +732,14 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
                             sum_df = spot_data.groupby("종")[val_col_mal].sum().reset_index().sort_values(by=val_col_mal)
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                            bar_colors = ['#1d3557' if 'anopheles' in str(s).lower() else '#c4cbde' for s in sum_df["종"]]
+                            bar_colors = ['#1d3557' if 'anopheles' in str(s).lower() or '얼룩날개' in str(s) else '#c4cbde' for s in sum_df["종"]]
                             bars = plt_ax.barh(sum_df["종"], sum_df[val_col_mal], color=bar_colors, edgecolor='#2b2d42')
                             for bar in bars: plt_ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', fontsize=8)
                             plt_ax.set_xlabel('개체수 (마리)')
                             st.pyplot(fig)
                             plt.close()
                         else:
-                            st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리<br>🚫 Anopheles spp. 미검출</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리<br>🚫 얼룩날개모기류 미검출</div>", unsafe_allow_html=True)
                             
                     if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
                         st.dataframe(spot_data.drop(columns=["위도", "경도"], errors='ignore'), hide_index=True, use_container_width=True)
@@ -1021,7 +1031,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         years_list = ["2026년", "2025년", "2024년", "2023년", "2022년", "2021년", "2020년"]
         analysis_year = st.selectbox("분석 연도", years_list, index=years_list.index(selected_year))
     with col_c2:
-        # 💡 [수정됨] 드롭다운 메뉴 순서를 요청하신 대로 재배치했습니다.
         target_disease = st.selectbox("분석 대상 감시망", [
             "일본뇌염 매개모기 (Culex tritaeniorhynchus)", 
             "말라리아 매개모기 (Anopheles spp.)",
@@ -1063,10 +1072,15 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     is_mite_gen_mode = ("털진드기 발생" in target_disease)
     is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or is_mite_gen_mode
 
+    # 💡 [핵심 수정] 영문, 한글 명칭 어떤 것으로 적혀 있어도 확실하게 잡아내도록 정규식 필터 강화
     if "일본뇌염" in target_disease:
-        df_target = base_je_df.copy(); species_keyword, target_name_kr = "tritaeniorhynchus", "작은빨간집모기"
+        df_target = base_je_df.copy()
+        species_keyword = "tritaeniorhynchus|작은빨간집"
+        target_name_kr = "일본뇌염 매개모기(작은빨간집모기)"
     elif "말라리아" in target_disease:
-        df_target = base_mal_df.copy(); species_keyword, target_name_kr = "Anopheles", "얼룩날개모기류"
+        df_target = base_mal_df.copy()
+        species_keyword = "anopheles|얼룩날개"
+        target_name_kr = "말라리아 매개모기(얼룩날개모기류)"
     elif "기후변화 모기" in target_disease:
         df_target = base_cli_moq_df.copy(); target_name_kr = "기후변화 모기 통합"
     elif "기후변화 참진드기" in target_disease:
@@ -1106,7 +1120,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         if is_weekly_mode:
             f_target["정규화_주차"] = f_target.apply(convert_absolute_to_monthly_week, axis=1)
 
-        # 💡 [핵심 수정 2] 데이터 유무(0마리 필터링)를 거치기 "전"에, 원본 데이터베이스에서 가장 최근 달/주차 스캔
         start_month = 8 if is_mite_gen_mode else 3  
         end_month = 12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10) 
         max_w_in_data = 4 
@@ -1131,7 +1144,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                     except:
                         max_w_in_data = 4
 
-        # 💡 [정상 필터링 시작] 이제 스캔을 마쳤으므로 지점, 종, 미채집 여부로 마스킹 적용
         if "기후변화 참진드기" in target_disease:
             def normalize_county(val):
                 s = str(val)
@@ -1172,16 +1184,20 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else: 
             spot_mask = pd.Series([True]*len(f_target))
 
-        if species_keyword: species_mask = f_target["종"].str.contains(species_keyword, na=False, case=False)
-        else: species_mask = pd.Series([True]*len(f_target))
+        # 💡 [핵심 수정] 종 필터링 적용 (데이터에 '종' 컬럼이 있으면 정규식에 걸리는 것만 추출)
+        if species_keyword and "종" in f_target.columns: 
+            species_mask = f_target["종"].astype(str).str.contains(species_keyword, na=False, case=False)
+        else: 
+            species_mask = pd.Series([True]*len(f_target))
             
         no_empty_mask = (f_target["종"] != "미채집") & (~f_target["종"].str.contains("미채집", na=False))
+        
+        # 필터링 확정: 선택한 지점 + 특정 매개모기종 + 미채집 아님
         f_target = f_target[spot_mask & species_mask & no_empty_mask]
         
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target], errors='coerce').fillna(0)
         
-        # x축 배열 생성
         valid_months = range(start_month, end_month + 1)
         periods_list = []
         if is_tick_mode:
@@ -1279,6 +1295,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         fig, ax1 = plt.subplots(figsize=(14 if is_weekly_mode else 12, 5.5))
         
+        # 💡 [핵심 수정] 범례에 명확한 대상 모기 이름이 뜨도록 적용
         bars = ax1.bar(plot_df["기간"], plot_df["채집량(마리)"], color='#2b2d42', label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
         ax1.set_ylabel('총 채집량 합산 (마리)', color='#2b2d42', fontweight='bold')
         ax1.tick_params(axis='y', labelcolor='#2b2d42')
