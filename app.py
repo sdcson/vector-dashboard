@@ -509,7 +509,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
         
         if "지역2" in df_je.columns:
-            # 💡 [엄격한 맵핑 방어] 타 지역 데이터가 산천리로 병합되는 것을 방지합니다.
             def normalize_je_spot(x):
                 s = str(x)
                 if "산대" in s or "강릉" in s: return "강릉시 산대월리"
@@ -642,7 +641,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
         if "주차" in df_mal.columns: df_mal["조사주"] = df_mal.apply(convert_absolute_to_monthly_week, axis=1)
         else: df_mal["조사주"] = "1주"
 
-        # 💡 [엄격한 맵핑 방어] 타 지역 데이터가 병합되는 것을 방지합니다.
         if "지역2" in df_mal.columns:
             def find_mal_coords(loc_str):
                 l = str(loc_str).replace(" ", "")
@@ -1116,62 +1114,56 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         end_month = 12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10) 
         max_w_in_data = 4 
 
-        if not f_target.empty:
-            valid_months_in_data = f_target["정규화_월"].str.replace("월", "").dropna()
-            valid_months_in_data = pd.to_numeric(valid_months_in_data, errors='coerce').dropna()
+        # 💡 [핵심 방어 코드 1] 데이터 유무에 상관없이 2026년이라면 무조건 X축 동기화 (오늘 날짜 기준)
+        now_date = datetime.datetime.now()
+        now_year = str(now_date.year)
+        
+        if now_year in analysis_year:
+            target_end_month = now_date.month
+            if target_end_month > (12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10)):
+                target_end_month = (12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10))
+                
+            end_month = max(start_month, target_end_month)
             
-            if not valid_months_in_data.empty:
-                max_month_in_data = int(valid_months_in_data.max())
-                now_year = str(datetime.datetime.now().year)
-                if now_year in analysis_year:
-                    end_month = max(start_month, max_month_in_data)
-                elif max_month_in_data > end_month:
-                    end_month = min(max_month_in_data, 12)
-                    
-                last_m_df = f_target[f_target["정규화_월"] == f"{max_month_in_data:02d}월"]
-                if is_weekly_mode and not last_m_df.empty:
-                    try:
-                        max_w_in_data = last_m_df["정규화_주차"].str.replace("주", "").astype(int).max()
-                    except:
-                        max_w_in_data = 4
+            if is_weekly_mode:
+                if now_date.month == end_month:
+                    max_w_in_data = min((now_date.day - 1) // 7 + 1, 4)
+                else:
+                    max_w_in_data = 4
+        else:
+            max_w_in_data = 4
 
-        # 💡 [핵심 방어 코드 1] 지점명 Catch-All 오류 원천 차단
+        # 💡 [핵심 방어 코드 2] "춘천" 단어로 인한 지점 블랙홀 현상 원천 차단
         loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
         found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
         
         if found_loc_col:
             if "일본뇌염" in target_disease:
-                def norm_je_tab5(x):
-                    s = str(x)
-                    if "산대" in s or "강릉" in s: return "강릉시 산대월리"
-                    if "하대" in s or "횡성" in s: return "횡성군 하대리"
-                    if "산천" in s or "춘천" in s: return "춘천시 산천리"
-                    return s # 매칭 안 되면 원본 이름 그대로 뱉어 병합 방지!
-                f_target["정규화_지점"] = f_target[found_loc_col].apply(norm_je_tab5)
-                spot_mask = f_target["정규화_지점"].astype(str).str.contains(selected_spot, na=False)
+                if "산천" in selected_spot: kw = "산천"
+                elif "산대" in selected_spot: kw = "산대"
+                elif "하대" in selected_spot: kw = "하대"
+                else: kw = selected_spot
+                spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
                 
             elif "말라리아" in target_disease:
-                def norm_mal_tab5(x):
-                    l = str(x).replace(" ", "")
-                    if "중앙" in l: return "춘천시 중앙동"
-                    if "지내" in l: return "춘천시 지내리"
-                    if "학사" in l: return "철원군 학사리"
-                    if "대마" in l: return "철원군 대마리"
-                    if "화천" in l: return "화천군"
-                    if "양구" in l: return "양구군"
-                    if "인제" in l: return "인제군"
-                    if "고성" in l: return "고성군"
-                    return x 
-                f_target["정규화_지점"] = f_target[found_loc_col].apply(norm_mal_tab5)
-                spot_mask = f_target["정규화_지점"].astype(str).str.contains(selected_spot, na=False)
+                if "중앙" in selected_spot: kw = "중앙"
+                elif "지내" in selected_spot: kw = "지내"
+                elif "학사" in selected_spot: kw = "학사"
+                elif "대마" in selected_spot: kw = "대마"
+                elif "화천" in selected_spot: kw = "화천"
+                elif "양구" in selected_spot: kw = "양구"
+                elif "인제" in selected_spot: kw = "인제"
+                elif "고성" in selected_spot: kw = "고성"
+                else: kw = selected_spot
+                spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
                 
             else:
-                clean_spot = selected_spot.replace("군","").replace("시","") if ("참진드기" in target_disease or "털진드기" in target_disease) else selected_spot
-                spot_mask = f_target[found_loc_col].astype(str).str.contains(clean_spot, na=False)
+                kw = selected_spot.replace("군","").replace("시","") if ("참진드기" in target_disease or "털진드기" in target_disease) else selected_spot
+                spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
-        # 💡 [핵심 방어 코드 2] 종명 핀셋 필터링 강화
+        # 💡 [핵심 방어 코드 3] 매개모기 종명 핀셋 필터링 (컬럼명이 달라도 완벽 차단)
         sp_cols_cands = ["종", "학명", "모기종", "종류", "종명"]
         found_sp_col = next((c for c in f_target.columns if c in sp_cols_cands), None)
         
@@ -1179,7 +1171,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             if found_sp_col:
                 species_mask = f_target[found_sp_col].astype(str).str.contains(species_keyword, na=False, case=False)
             else:
-                species_mask = pd.Series([False]*len(f_target)) # 종 컬럼 못 찾으면 아예 0으로 표출하여 무분별한 합산 차단
+                species_mask = pd.Series([False]*len(f_target)) 
         else:
             species_mask = pd.Series([True]*len(f_target))
             
@@ -1188,7 +1180,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             no_empty_mask = pd.Series([True]*len(f_target))
             
-        # 모든 조건이 완벽히 맞아떨어진 데이터만 통과
         f_target = f_target[spot_mask & species_mask & no_empty_mask]
         
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
@@ -1209,7 +1200,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         elif is_weekly_mode:
             for m in valid_months:
                 for w in range(1, 5):
-                    if m == end_month and w > max_w_in_data:
+                    if now_year in analysis_year and m == end_month and w > max_w_in_data:
                         continue
                     periods_list.append(f"{m:02d}월\n{w}주")
         else:
