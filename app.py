@@ -140,9 +140,9 @@ def get_kma_weather_daily(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
     
-    # 5월 31일 하드코딩 제거 및 현재 날짜 동적 반영
-    now = datetime.datetime.now()
-    if y == str(now.year):
+    # 💡 [핵심 수정 1] 기상청 일별 자료는 당일 조회가 불안정하므로 안전하게 D-2일로 강제 설정하여 API 에러 방지
+    now = datetime.datetime.now() - datetime.timedelta(days=2)
+    if y == str(datetime.datetime.now().year):
         tm2 = now.strftime("%Y%m%d")
     else:
         tm2 = f"{y}1231"
@@ -1104,7 +1104,33 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
 
         if is_weekly_mode:
             f_target["정규화_주차"] = f_target.apply(convert_absolute_to_monthly_week, axis=1)
-        
+
+        # 💡 [핵심 수정 2] 데이터 유무(0마리 필터링)를 거치기 "전"에, 원본 데이터베이스에서 가장 최근 달/주차 스캔
+        start_month = 8 if is_mite_gen_mode else 3  
+        end_month = 12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10) 
+        max_w_in_data = 4 
+
+        if not f_target.empty:
+            valid_months_in_data = f_target["정규화_월"].str.replace("월", "").dropna()
+            valid_months_in_data = pd.to_numeric(valid_months_in_data, errors='coerce').dropna()
+            
+            if not valid_months_in_data.empty:
+                max_month_in_data = int(valid_months_in_data.max())
+                
+                now_year = str(datetime.datetime.now().year)
+                if now_year in analysis_year:
+                    end_month = max(start_month, max_month_in_data)
+                elif max_month_in_data > end_month:
+                    end_month = min(max_month_in_data, 12)
+                    
+                last_m_df = f_target[f_target["정규화_월"] == f"{max_month_in_data:02d}월"]
+                if is_weekly_mode and not last_m_df.empty:
+                    try:
+                        max_w_in_data = last_m_df["정규화_주차"].str.replace("주", "").astype(int).max()
+                    except:
+                        max_w_in_data = 4
+
+        # 💡 [정상 필터링 시작] 이제 스캔을 마쳤으므로 지점, 종, 미채집 여부로 마스킹 적용
         if "기후변화 참진드기" in target_disease:
             def normalize_county(val):
                 s = str(val)
@@ -1154,33 +1180,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target], errors='coerce').fillna(0)
         
-        start_month = 8 if is_mite_gen_mode else 3  
-        end_month = 12 if is_mite_gen_mode else (11 if "어린이숲" in target_disease else 10) 
-        
-        max_w_in_data = 4 
-
-        if not f_target.empty:
-            valid_months_in_data = f_target["정규화_월"].str.replace("월", "").dropna()
-            valid_months_in_data = pd.to_numeric(valid_months_in_data, errors='coerce').dropna()
-            
-            if not valid_months_in_data.empty:
-                max_month_in_data = int(valid_months_in_data.max())
-                
-                now_year = str(datetime.datetime.now().year)
-                if now_year in analysis_year:
-                    end_month = max(start_month, max_month_in_data)
-                elif max_month_in_data > end_month:
-                    end_month = min(max_month_in_data, 12)
-                    
-                last_m_df = f_target[f_target["정규화_월"] == f"{max_month_in_data:02d}월"]
-                if is_weekly_mode and not last_m_df.empty:
-                    try:
-                        max_w_in_data = last_m_df["정규화_주차"].str.replace("주", "").astype(int).max()
-                    except:
-                        max_w_in_data = 4
-
+        # x축 배열 생성
         valid_months = range(start_month, end_month + 1)
-        
         periods_list = []
         if is_tick_mode:
             month_to_day = {}
