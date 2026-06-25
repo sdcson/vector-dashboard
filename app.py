@@ -67,6 +67,75 @@ def get_kma_stn(loc_name):
     return "101" 
 
 @st.cache_data(ttl=3600)
+def get_kma_weather(year_str, month_str, week_str, loc_name):
+    y = str(year_str).replace("년", "").strip()
+    m = str(month_str).replace("월", "").strip().zfill(2)
+    w_map = {"1주":("01","07"), "2주":("08","14"), "3주":("15","21"), "4주":("22","28"), "전체":("01","28")}
+    d1, d2 = w_map.get(str(week_str).strip(), ("01","28"))
+    tm1, tm2 = f"{y}{m}{d1}", f"{y}{m}{d2}"
+    stn = get_kma_stn(loc_name)
+            
+    url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=50&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
+    try:
+        res = requests.get(url, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            items = data.get('response', {}).get('body', {}).get('items', {}).get('item', [])
+            if items:
+                df_w = pd.DataFrame(items)
+                t_avg = pd.to_numeric(df_w.get('avgTa', 0), errors='coerce').mean()
+                p_sum = pd.to_numeric(df_w.get('sumRn', 0), errors='coerce').fillna(0.0).sum()
+                h_avg = pd.to_numeric(df_w.get('avgRhm', 0), errors='coerce').mean()
+                w_avg = pd.to_numeric(df_w.get('avgWs', 0), errors='coerce').mean()
+                return {
+                    "temp": round(t_avg, 1) if not pd.isna(t_avg) else 0.0, 
+                    "precip": round(p_sum, 1) if not pd.isna(p_sum) else 0.0, 
+                    "humid": round(h_avg, 1) if not pd.isna(h_avg) else 0.0,
+                    "wind": round(w_avg, 1) if not pd.isna(w_avg) else 0.0
+                }
+    except Exception: pass
+    return {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0}
+
+@st.cache_data(ttl=3600)
+def get_kma_weather_bulk(year_str, loc_name):
+    y = str(year_str).replace("년", "").strip()
+    stn = get_kma_stn(loc_name)
+    if "2026" in year_str:
+        tm1, tm2 = f"{y}0301", f"{y}0531"
+        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 6)}
+    else:
+        tm1, tm2 = f"{y}0301", f"{y}1231"
+        weather_dict = {f"{m:02d}월": {"temp": 0.0, "precip": 0.0, "humid": 0.0, "wind": 0.0} for m in range(3, 13)}
+    
+    url = f"http://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList?serviceKey={KMA_API_KEY}&pageNo=1&numOfRows=400&dataType=JSON&dataCd=ASOS&dateCd=DAY&startDt={tm1}&endDt={tm2}&stnIds={stn}"
+    try:
+        res = requests.get(url, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            items = data.get('response', {}).get('body', {}).get('items', {}).get('item', [])
+            if items:
+                df_w = pd.DataFrame(items)
+                df_w["month_str"] = df_w['tm'].str[5:7] + "월"
+                df_w = df_w[df_w["month_str"].isin(weather_dict.keys())]
+                
+                df_w['avgTa'] = pd.to_numeric(df_w.get('avgTa', 0), errors='coerce')
+                df_w['sumRn'] = pd.to_numeric(df_w.get('sumRn', 0), errors='coerce').fillna(0.0)
+                df_w['avgRhm'] = pd.to_numeric(df_w.get('avgRhm', 0), errors='coerce')
+                df_w['avgWs'] = pd.to_numeric(df_w.get('avgWs', 0), errors='coerce')
+                
+                grouped = df_w.groupby("month_str").agg({'avgTa': 'mean', 'sumRn': 'sum', 'avgRhm': 'mean', 'avgWs': 'mean'})
+                
+                for m_idx, row in grouped.iterrows():
+                    weather_dict[m_idx] = {
+                        "temp": round(row['avgTa'], 1) if not pd.isna(row['avgTa']) else 0.0, 
+                        "precip": round(row['sumRn'], 1) if not pd.isna(row['sumRn']) else 0.0, 
+                        "humid": round(row['avgRhm'], 1) if not pd.isna(row['avgRhm']) else 0.0,
+                        "wind": round(row['avgWs'], 1) if not pd.isna(row['avgWs']) else 0.0
+                    }
+    except Exception: pass
+    return weather_dict
+
+@st.cache_data(ttl=3600)
 def get_kma_weather_daily(year_str, loc_name):
     y = str(year_str).replace("년", "").strip()
     stn = get_kma_stn(loc_name)
@@ -96,6 +165,9 @@ def get_kma_weather_daily(year_str, loc_name):
     except Exception: pass
     return pd.DataFrame(columns=['tm', 'avgTa', 'sumRn', 'avgRhm', 'avgWs'])
 
+# -----------------------------------------------------------------
+# [💡 VectorNet 전용: 절대 주차(1~52주) -> 월별 주차(1~4주) 매핑 엔진]
+# -----------------------------------------------------------------
 def convert_absolute_to_monthly_week(row):
     y_str = row.get("조사년도", "2025")
     w_str = row.get("주차", row.get("조사주", "1"))
@@ -103,82 +175,3 @@ def convert_absolute_to_monthly_week(row):
         y = int(str(y_str).replace("년", "").strip())
         w_digits = ''.join(filter(str.isdigit, str(w_str)))
         if not w_digits: return "1주"
-        
-        w = int(w_digits)
-        if w <= 5: 
-            return f"{min(w, 4)}주"
-        
-        date_obj = pd.to_datetime(f'{y}-{w:02d}-1', format='%G-%V-%u')
-        month_week = (date_obj.day - 1) // 7 + 1
-        return f"{min(month_week, 4)}주"
-    except Exception:
-        return "1주"
-
-def get_github_credentials():
-    try: return st.secrets["GITHUB_TOKEN"], st.secrets["GITHUB_REPO"]
-    except: return None, None
-
-def save_df_to_github(df, filename_on_github, commit_message="Update"):
-    token, repo = get_github_credentials()
-    if not token or not repo: return False
-    csv_bytes = df.to_csv(index=False).encode('utf-8-sig')
-    base64_content = base64.b64encode(csv_bytes).decode('utf-8')
-    url = f"https://api.github.com/repos/{repo}/contents/{filename_on_github}"
-    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-    res = requests.get(url, headers=headers)
-    sha = res.json().get("sha") if res.status_code == 200 else None
-    payload = {"message": commit_message, "content": base64_content, "branch": "main"}
-    if sha: payload["sha"] = sha
-    return requests.put(url, headers=headers, json=payload).status_code in [200, 201]
-
-def load_df_from_github(filename_on_github, fallback_df):
-    token, repo = get_github_credentials()
-    if not token or not repo: return fallback_df
-    url = f"https://api.github.com/repos/{repo}/contents/{filename_on_github}"
-    res = requests.get(url, headers={"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"})
-    if res.status_code == 200:
-        try: return pd.read_csv(BytesIO(base64.b64decode(res.json().get("content"))), encoding='utf-8-sig')
-        except: return fallback_df
-    return fallback_df
-
-def safe_parse_year_series(series, default_val):
-    def _parse(val):
-        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']: return str(default_val)
-        val_str = str(val).strip()
-        if "년" in val_str: return val_str
-        return f"{int(float(val_str))}년" if val_str.replace('.', '', 1).isdigit() else f"{val_str}년"
-    return series.apply(_parse)
-
-def safe_parse_month_series(series, default_val):
-    def _parse(val):
-        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']: return str(default_val)
-        try: return f"{int(float(str(val).strip().replace('월', ''))):02d}월"
-        except: return str(default_val)
-    return series.apply(_parse)
-
-def parse_vectornet_dataframe(df, default_year, default_month):
-    df.columns = [str(c).strip() for c in df.columns]
-    
-    # 💡 [치명적 버그 해결] 엑셀 열 이름이 달라도 무조건 '종', '지역2', '개체수'로 통일하여 합산 버그 원천 차단
-    for sp_cand in ["학명", "모기종", "종류", "종명"]:
-        if sp_cand in df.columns and "종" not in df.columns:
-            df.rename(columns={sp_cand: "종"}, inplace=True)
-            break
-            
-    for loc_cand in ["지점", "지역", "채집장소", "시군구", "지점명", "채집지역2"]:
-        if loc_cand in df.columns and "지역2" not in df.columns:
-            df.rename(columns={loc_cand: "지역2"}, inplace=True)
-            break
-            
-    for cnt_cand in ["채집수", "수량", "합계", "총계"]:
-        if cnt_cand in df.columns and "개체수" not in df.columns:
-            df.rename(columns={cnt_cand: "개체수"}, inplace=True)
-            break
-
-    date_cols = ['수거일', '채집일', '조사일', '조사일자', '채집일자', '채집일시']
-    found_col = next((c for c in date_cols if c in df.columns), None)
-    
-    if found_col:
-        dt_series = pd.to_datetime(df[found_col], errors='coerce')
-        valid_mask = dt_series.notna()
-        df
