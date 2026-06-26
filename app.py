@@ -1148,25 +1148,18 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     st.markdown("---")
 
     df_target = pd.DataFrame()
-    species_keyword = ""
     target_name_kr = ""
     
     is_tick_mode = ("참진드기" in target_disease)
     is_mite_gen_mode = ("털진드기 발생" in target_disease)
     is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or is_mite_gen_mode
 
-    # -------------------------------------------------------------------------
-    # 1. 분석 대상 및 타겟 키워드 설정 (말라리아, 일본뇌염 정밀 필터링 키워드)
-    # -------------------------------------------------------------------------
+    # 1. 대상 선택 및 데이터 할당
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
-        # 💡 오직 작은빨간집모기(Culex tritaeniorhynchus)만 잡는 정규식
-        species_keyword = r"\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집"
         target_name_kr = "일본뇌염 매개모기(작은빨간집모기)"
     elif "말라리아" in target_disease:
         df_target = base_mal_df.copy()
-        # 💡 오직 얼룩날개모기류(Anopheles)만 잡는 정규식
-        species_keyword = r"\bAnopheles\b|anopheles|얼룩날개"
         target_name_kr = "말라리아 매개모기(얼룩날개모기류)"
     elif "기후변화 모기" in target_disease:
         df_target = base_cli_moq_df.copy()
@@ -1182,6 +1175,11 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         target_name_kr = "어린이숲 참진드기 통합"
 
     if not df_target.empty:
+        # [방어 1] 데이터 뻥튀기를 유발하는 엑셀 내 '합계' 행 원천 차단
+        exclude_mask = df_target.astype(str).apply(lambda x: x.str.contains('합계|총계|누계', na=False, regex=True)).any(axis=1)
+        df_target = df_target[~exclude_mask]
+
+        # 연도 필터링
         year_str_val = str(analysis_year).replace("년", "").strip()
         year_col = "조사년도" if "조사년도" in df_target.columns else ("연도" if "연도" in df_target.columns else "년도")
         if year_col in df_target.columns:
@@ -1189,6 +1187,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             f_target = df_target.copy()
         
+        # 월/일/주차 정규화
         def extract_month_safe(row):
             for col in ["조사월", "월", "채집월", "월별"]:
                 if col in row.index and pd.notna(row[col]):
@@ -1229,12 +1228,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             max_w_in_data = 4
 
-       # -------------------------------------------------------------------------
-        # 2. 초강력 정밀 필터링 (합계 행 제거 & 특정 '종' 열에서만 핀셋 추출)
-        # -------------------------------------------------------------------------
-        exclude_mask = f_target.astype(str).apply(lambda x: x.str.contains('합계|총계|누계', na=False, regex=True)).any(axis=1)
-        f_target = f_target[~exclude_mask]
-
+        # 2. 지점 선택 필터링
         loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
         found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
         
@@ -1245,7 +1239,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 elif "하대" in selected_spot: kw = "하대"
                 else: kw = selected_spot
                 spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
-                
             elif "말라리아" in target_disease:
                 if "중앙" in selected_spot: kw = "중앙"
                 elif "지내" in selected_spot: kw = "지내"
@@ -1257,31 +1250,28 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 elif "고성" in selected_spot: kw = "고성"
                 else: kw = selected_spot
                 spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
-                
             else:
                 kw = selected_spot.replace("군","").replace("시","") if ("참진드기" in target_disease or "털진드기" in target_disease) else selected_spot
                 spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
-      # 1차 적용: 선택된 지점만 남기기
         f_target = f_target[spot_mask]
 
-        # 🚨 2차 적용 (핵심 해결 부분): Tab 1에서 성공했던 방식을 강제로 때려 넣습니다.
-        if "종" in f_target.columns:
+        # 🚨 [방어 2: 가장 중요한 모기종 핀셋 필터링] 🚨
+        # 일본뇌염과 말라리아의 서로 다른 모기만 완벽하게 걸러내어, 다른 탭(진드기 등)에는 영향을 주지 않습니다.
+        species_col = next((c for c in f_target.columns if c in ["종", "학명", "모기종", "종명", "매개체명", "종류"]), None)
+        if species_col and not f_target.empty:
             if "일본뇌염" in target_disease:
-                f_target = f_target[f_target["종"].astype(str).str.contains(r'\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False)]
+                f_target = f_target[f_target[species_col].astype(str).str.contains(r'tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False)]
             elif "말라리아" in target_disease:
-                f_target = f_target[f_target["종"].astype(str).str.contains(r'\bAnopheles\b|anopheles|얼룩날개', case=False, regex=True, na=False)]
+                f_target = f_target[f_target[species_col].astype(str).str.contains(r'Anopheles|얼룩날개', case=False, regex=True, na=False)]
             
-            f_target = f_target[~f_target["종"].astype(str).str.contains("미채집", case=False, na=False)]
-        
-        # -------------------------------------------------------------------------
-        # 3. 개체수 쉼표 제거 및 주차별 합산 (Grouping)
-        # -------------------------------------------------------------------------
+            # 미채집 제외 (모든 감시망 공통)
+            f_target = f_target[~f_target[species_col].astype(str).str.contains("미채집", case=False, na=False)]
+
+        # 개체수 변환 및 합산 준비
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
-        
-        # 쉼표 있는 숫자도 완벽하게 카운팅하도록 방어
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         
         valid_months = range(start_month, end_month + 1)
@@ -1296,7 +1286,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 m_str = f"{m:02d}월"
                 d_str = month_to_day.get(m_str, "15일")
                 periods_list.append(f"{m_str}\n{d_str}")
-                
         elif is_weekly_mode:
             for m in valid_months:
                 for w in range(1, 5):
@@ -1322,14 +1311,14 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             else:
                 p_key = m_str
                 
-            # 타겟 모기 마리수 합산
             if p_key in period_counts: 
                 period_counts[p_key] += row.get(val_col_target, 0)
                 
         plot_df = pd.DataFrame(list(period_counts.items()), columns=["기간", "채집량(마리)"])
         
-        window_days = 7 if is_tick_mode else (14 if is_weekly_mode else 14)
+        window_days = 7 if is_tick_mode else 14
         
+        # 3. 기상청 API 연동 데이터 합산
         with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 {window_days}일 역산 누적 중입니다..."):
             kma_spot = selected_spot.replace("군","").replace("시","").split()[0]
             df_w_daily = get_kma_weather_daily(analysis_year, kma_spot)
@@ -1376,16 +1365,20 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         sum_text = " (세부 환경 전체 합산)" if is_tick_mode or is_mite_gen_mode else ""
         
+        # UI 가독성을 위한 그래프 컬러 분리
+        bar_color = '#ef233c' if "일본뇌염" in target_disease else ('#1d3557' if "말라리아" in target_disease else '#2b2d42')
+
         if is_mite_gen_mode:
             st.markdown(f"##### 📊 {selected_spot} {target_name_kr}{sum_text} 계절적 변화 ({analysis_year} 8~12월)")
         else:
             st.markdown(f"##### 📊 {selected_spot} {target_name_kr}{sum_text} 계절적 변화 및 {window_days}일전 기상 영향 ({analysis_year})")
         
+        # 4. 차트 통합 렌더링
         fig, ax1 = plt.subplots(figsize=(14 if is_weekly_mode else 12, 5.5))
         
-        bars = ax1.bar(plot_df["기간"], plot_df["채집량(마리)"], color='#2b2d42', label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
-        ax1.set_ylabel('총 채집량 합산 (마리)', color='#2b2d42', fontweight='bold')
-        ax1.tick_params(axis='y', labelcolor='#2b2d42')
+        bars = ax1.bar(plot_df["기간"], plot_df["채집량(마리)"], color=bar_color, label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
+        ax1.set_ylabel('총 채집량 합산 (마리)', color=bar_color, fontweight='bold')
+        ax1.tick_params(axis='y', labelcolor=bar_color)
         max_count = plot_df["채집량(마리)"].max()
         ax1.set_ylim(0, max_count * 1.2 if max_count > 0 else 10)
         
