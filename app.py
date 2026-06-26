@@ -679,16 +679,26 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
     
     c_up2, c_dl2 = st.columns([8, 4])
     with c_up2:
+        # 👇 덮어쓰기 체크박스 추가
+        overwrite_mal = st.checkbox("⚠️ 기존 말라리아 데이터 전체 초기화 후 현재 파일로 덮어쓰기", key="ow_mal")
         mal_file = st.file_uploader("질병청 VectorNet 말라리아 결과 파일 업로드", type=["csv", "xlsx", "xls"], key="mal_up")
+        
         if mal_file is not None:
             uploaded_df_mal = smart_load_uploaded_file(mal_file)
             uploaded_df_mal = parse_vectornet_dataframe(uploaded_df_mal, selected_year, selected_month)
-            base_mal_df = merge_and_overwrite(base_mal_df, rename_duplicate_columns(uploaded_df_mal), keys=['조사년도', '조사월', '주차', '지역2', '종'])
-            save_df_to_github(base_mal_df, "database_mal.csv", "Update Malaria data")
-            st.success("✅ 말라리아 새 데이터 반영 완료")
+            
+            if overwrite_mal:
+                base_mal_df = rename_duplicate_columns(uploaded_df_mal)
+                save_df_to_github(base_mal_df, "database_mal.csv", "Overwrite Malaria data")
+                st.success("✅ 기존 말라리아 찌꺼기 데이터가 완벽히 삭제되고 새 파일로 덮어쓰기 되었습니다.")
+            else:
+                base_mal_df = merge_and_overwrite(base_mal_df, rename_duplicate_columns(uploaded_df_mal), keys=['조사년도', '조사월', '주차', '지역2', '종'])
+                save_df_to_github(base_mal_df, "database_mal.csv", "Update Malaria data")
+                st.success("✅ 말라리아 새 데이터 반영 완료")
+                
             st.cache_data.clear()
             
-    df_mal = base_mal_df.copy()
+    df_mal = base_mal_df.copy())
 
     if not df_mal.empty:
         df_mal = parse_vectornet_dataframe(df_mal, selected_year, selected_month)
@@ -830,25 +840,44 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     
     c_up3, c_dl3 = st.columns([8, 4])
     with c_up3:
+        # 👇 덮어쓰기 체크박스 추가 (선택된 권역별로 동작)
+        overwrite_cli = st.checkbox(f"⚠️ 기존 [{selected_zone}] 데이터 전체 초기화 후 덮어쓰기", key=f"ow_cli_{selected_zone}")
         cli_file = st.file_uploader(f"질병청 VectorNet [{selected_zone}] 결과 파일 업로드", type=["csv", "xlsx", "xls"], key=f"cli_up_{selected_zone}")
+        
         if cli_file is not None:
             uploaded_df_cli = smart_load_uploaded_file(cli_file)
             uploaded_df_cli = parse_vectornet_dataframe(uploaded_df_cli, selected_year, selected_month)
             
-            if selected_zone == "모기 권역":
-                base_cli_moq_df = merge_and_overwrite(base_cli_moq_df, rename_duplicate_columns(uploaded_df_cli), keys=['조사년도', '조사월', '주차', '지역2', '종'])
-                save_df_to_github(base_cli_moq_df, "database_cli_moq.csv", "Update Climate Mosquito")
-            elif selected_zone == "참진드기 권역":
-                base_cli_tick_df = merge_and_overwrite(base_cli_tick_df, rename_duplicate_columns(uploaded_df_cli), keys=['조사년도', '조사월', '주차', '지역2', '환경', '종'])
-                save_df_to_github(base_cli_tick_df, "database_cli_tick.csv", "Update Climate Tick")
-            elif selected_zone == "털진드기 분포감시":
-                base_cli_mite_dist_df = merge_and_overwrite(base_cli_mite_dist_df, rename_duplicate_columns(uploaded_df_cli), keys=['조사년도', '조사월', '주차', '지역2', '환경', '종'])
-                save_df_to_github(base_cli_mite_dist_df, "database_cli_mite_dist.csv", "Update Mite Dist")
+            if overwrite_cli:
+                new_df = rename_duplicate_columns(uploaded_df_cli)
+                if selected_zone == "모기 권역":
+                    base_cli_moq_df = new_df
+                    save_df_to_github(base_cli_moq_df, "database_cli_moq.csv", "Overwrite Climate Mosquito")
+                elif selected_zone == "참진드기 권역":
+                    base_cli_tick_df = new_df
+                    save_df_to_github(base_cli_tick_df, "database_cli_tick.csv", "Overwrite Climate Tick")
+                elif selected_zone == "털진드기 분포감시":
+                    base_cli_mite_dist_df = new_df
+                    save_df_to_github(base_cli_mite_dist_df, "database_cli_mite_dist.csv", "Overwrite Mite Dist")
+                else:
+                    base_cli_mite_gen_df = new_df
+                    save_df_to_github(base_cli_mite_gen_df, "database_cli_mite_gen.csv", "Overwrite Mite Gen")
+                st.success(f"✅ 기존 [{selected_zone}] 찌꺼기 데이터가 완벽히 삭제되고 덮어쓰기 되었습니다.")
             else:
-                base_cli_mite_gen_df = merge_and_overwrite(base_cli_mite_gen_df, rename_duplicate_columns(uploaded_df_cli), keys=['조사년도', '조사월', '주차', '지역2', '환경', '종'])
-                save_df_to_github(base_cli_mite_gen_df, "database_cli_mite_gen.csv", "Update Mite Gen")
+                if selected_zone == "모기 권역":
+                    base_cli_moq_df = merge_and_overwrite(base_cli_moq_df, rename_duplicate_columns(uploaded_df_cli), keys=['조사년도', '조사월', '주차', '지역2', '종'])
+                    save_df_to_github(base_cli_moq_df, "database_cli_moq.csv", "Update Climate Mosquito")
+                elif selected_zone == "참진드기 권역":
+                    base_cli_tick_df = merge_and_overwrite(base_cli_tick_df, rename_duplicate_columns(uploaded_df_cli), keys=['조사년도', '조사월', '주차', '지역2', '환경', '종'])
+                    save_df_to_github(base_cli_tick_df, "database_cli_tick.csv", "Update Climate Tick")
+                elif selected_zone == "털진드기 분포감시":
+                    base_cli_mite_dist_df = merge_and_overwrite(base_cli_mite_dist_df, rename_duplicate_columns(uploaded_df_cli), keys=['조사년도', '조사월', '주차', '지역2', '환경', '종'])
+                    save_df_to_github(base_cli_mite_dist_df, "database_cli_mite_dist.csv", "Update Mite Dist")
+                else:
+                    base_cli_mite_gen_df = merge_and_overwrite(base_cli_mite_gen_df, rename_duplicate_columns(uploaded_df_cli), keys=['조사년도', '조사월', '주차', '지역2', '환경', '종'])
+                    save_df_to_github(base_cli_mite_gen_df, "database_cli_mite_gen.csv", "Update Mite Gen")
+                st.success(f"✅ {selected_zone} 새 데이터 반영 완료")
                 
-            st.success(f"✅ {selected_zone} 새 데이터 반영 완료")
             st.cache_data.clear()
 
     if selected_zone == "모기 권역":
@@ -993,12 +1022,22 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     
     c_up4, c_dl4 = st.columns([8, 4])
     with c_up4:
+        # 👇 덮어쓰기 체크박스 추가
+        overwrite_forest = st.checkbox("⚠️ 기존 숲체험장 참진드기 데이터 전체 초기화 후 덮어쓰기", key="ow_forest")
         forest_file = st.file_uploader("어린이 숲 체험장 참진드기 결과 파일 업로드 (질병조사과 자체서식)", type=["csv", "xlsx", "xls"], key="forest_up")
+        
         if forest_file is not None:
             uploaded_df_forest = smart_load_uploaded_file(forest_file)
-            base_forest_df = merge_and_overwrite(base_forest_df, rename_duplicate_columns(uploaded_df_forest), keys=['조사년도', '월', '조사주', '채집지역2', '지점번호', '종'])
-            save_df_to_github(base_forest_df, "database_forest.csv", "Update Forest Tick")
-            st.success("✅ 어린이숲 참진드기 새 데이터 반영 완료")
+            
+            if overwrite_forest:
+                base_forest_df = rename_duplicate_columns(uploaded_df_forest)
+                save_df_to_github(base_forest_df, "database_forest.csv", "Overwrite Forest Tick")
+                st.success("✅ 기존 숲체험장 찌꺼기 데이터가 완벽히 삭제되고 새 파일로 덮어쓰기 되었습니다.")
+            else:
+                base_forest_df = merge_and_overwrite(base_forest_df, rename_duplicate_columns(uploaded_df_forest), keys=['조사년도', '월', '조사주', '채집지역2', '지점번호', '종'])
+                save_df_to_github(base_forest_df, "database_forest.csv", "Update Forest Tick")
+                st.success("✅ 어린이숲 참진드기 새 데이터 반영 완료")
+                
             st.cache_data.clear()
 
     df_forest = base_forest_df.copy()
