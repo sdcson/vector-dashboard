@@ -1260,15 +1260,18 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
 
         # 🚨 [방어 2: 가장 중요한 모기종 핀셋 필터링] 🚨
         # 일본뇌염과 말라리아의 서로 다른 모기만 완벽하게 걸러내어, 다른 탭(진드기 등)에는 영향을 주지 않습니다.
-        species_col = next((c for c in f_target.columns if c in ["종", "학명", "모기종", "종명", "매개체명", "종류"]), None)
-        if species_col and not f_target.empty:
-            if "일본뇌염" in target_disease:
-                f_target = f_target[f_target[species_col].astype(str).str.contains(r'tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False)]
-            elif "말라리아" in target_disease:
-                f_target = f_target[f_target[species_col].astype(str).str.contains(r'Anopheles|얼룩날개', case=False, regex=True, na=False)]
+  if not f_target.empty:
+            # 💡 [핵심 원인 해결] 원본 엑셀의 컬럼명 띄어쓰기(' 종 ') 때문에 필터가 무시되는 현상 강제 차단
+            f_target.columns = [str(c).strip() for c in f_target.columns]
             
-            # 미채집 제외 (모든 감시망 공통)
-            f_target = f_target[~f_target[species_col].astype(str).str.contains("미채집", case=False, na=False)]
+            if "종" in f_target.columns:
+                if "일본뇌염" in target_disease:
+                    f_target = f_target[f_target["종"].astype(str).str.contains(r'tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False)]
+                elif "말라리아" in target_disease:
+                    f_target = f_target[f_target["종"].astype(str).str.contains(r'Anopheles|얼룩날개', case=False, regex=True, na=False)]
+                
+                # 미채집 제외
+                f_target = f_target[~f_target["종"].astype(str).str.contains("미채집", case=False, na=False)]
 
         # 개체수 변환 및 합산 준비
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
