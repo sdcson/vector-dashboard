@@ -1269,10 +1269,13 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
 
         # 🚨 2차 적용 (핵심 해결 부분): Tab 1에서 성공했던 방식을 강제로 때려 넣습니다.
         if "종" in f_target.columns:
-           if "일본뇌염" in target_disease and not f_target.empty:
-            f_target = f_target[f_target.apply(lambda row: 'tritaeniorhynchus' in str(row.values).lower() or '작은빨간집' in str(row.values).replace(" ", ""), axis=1)]
-            elif "말라리아" in target_disease:
-                f_target = f_target[f_target["종"].astype(str).str.contains(r'\bAnopheles\b|anopheles|얼룩날개', case=False, regex=True, na=False)]
+          if "일본뇌염" in target_disease and not f_target.empty:
+            je_mask = f_target.astype(str).apply(lambda x: x.str.contains('tritaeniorhynchus|작은빨간집', case=False, na=False)).any(axis=1)
+            f_target = f_target[je_mask]
+            
+        elif "말라리아" in target_disease and not f_target.empty:
+            mal_mask = f_target.astype(str).apply(lambda x: x.str.contains('Anopheles|얼룩날개', case=False, na=False)).any(axis=1)
+            f_target = f_target[mal_mask]
             
             f_target = f_target[~f_target["종"].astype(str).str.contains("미채집", case=False, na=False)]
         
@@ -1326,7 +1329,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 period_counts[p_key] += row.get(val_col_target, 0)
                 
         plot_df = pd.DataFrame(list(period_counts.items()), columns=["기간", "채집량(마리)"])
-        
+
         window_days = 7 if is_tick_mode else (14 if is_weekly_mode else 14)
         
         with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 {window_days}일 역산 누적 중입니다..."):
