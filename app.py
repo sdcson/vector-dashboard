@@ -528,7 +528,7 @@ st.markdown("---")
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     
-   c_up1, c_dl1 = st.columns([8, 4])
+    c_up1, c_dl1 = st.columns([8, 4])
     with c_up1:
         # 👇 덮어쓰기 체크박스 기능 추가
         overwrite_je = st.checkbox("⚠️ 기존 일본뇌염 데이터 전체 초기화 후 현재 파일로 덮어쓰기", key="ow_je")
@@ -549,9 +549,9 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                 save_df_to_github(base_je_df, "database_je.csv", "Append JE data")
                 st.success("✅ 실시간 원장 데이터베이스 누적 완료")
                 
-            st.cache_data.clear()            
+            st.cache_data.clear()
+            
     df_je = base_je_df.copy()
-
     if not df_je.empty:
         df_je = parse_vectornet_dataframe(df_je, selected_year, selected_month)
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
