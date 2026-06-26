@@ -1286,6 +1286,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             
         # 모든 마스크 적용하여 최종 타겟 데이터 확정
         f_target = f_target[spot_mask & species_mask & no_empty_mask]
+        if "일본뇌염" in target_disease and not f_target.empty:
+            f_target = f_target[f_target.astype(str).apply(lambda x: x.str.contains('tritaeniorhynchus|작은빨간집', case=False, na=False)).any(axis=1)]
+        elif "말라리아" in target_disease and not f_target.empty:
+            f_target = f_target[f_target.astype(str).apply(lambda x: x.str.contains('Anopheles|얼룩날개', case=False, na=False)).any(axis=1)]
         
         # -------------------------------------------------------------------------
         # 3. 개체수 쉼표 제거 및 주차별 합산 (Grouping)
