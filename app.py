@@ -1175,19 +1175,62 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         target_name_kr = "어린이숲 참진드기 통합"
 
     if not df_target.empty:
-        # [방어 1] 데이터 뻥튀기를 유발하는 엑셀 내 '합계' 행 원천 차단
+        # 🚨 [방어 1] 데이터 뻥튀기를 유발하는 엑셀 내 '합계' 행 원천 차단
         exclude_mask = df_target.astype(str).apply(lambda x: x.str.contains('합계|총계|누계', na=False, regex=True)).any(axis=1)
-        df_target = df_target[~exclude_mask]
+        f_target = df_target[~exclude_mask].copy()
+
+        # 🚨 [방어 2] 컬럼명 공백 완벽 제거 (가장 중요한 부분)
+        f_target.columns = [str(c).strip() for c in f_target.columns]
+
+        # 🚨 [방어 3] 모기 종 완벽 필터링 (말라리아, 일본뇌염 분리)
+        if "종" in f_target.columns:
+            if "일본뇌염" in target_disease:
+                f_target = f_target[f_target["종"].astype(str).str.contains(r'tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False)]
+            elif "말라리아" in target_disease:
+                f_target = f_target[f_target["종"].astype(str).str.contains(r'Anopheles|얼룩날개', case=False, regex=True, na=False)]
+            
+            # 미채집 제외
+            f_target = f_target[~f_target["종"].astype(str).str.contains("미채집", case=False, na=False)]
+        else:
+            # 혹시라도 '종' 컬럼이 없으면 전체 행을 텍스트로 묶어서 필터링 (최후의 보루)
+            if "일본뇌염" in target_disease:
+                f_target = f_target[f_target.astype(str).apply(lambda x: x.str.contains(r'tritaeniorhynchus|작은빨간집', case=False, regex=True)).any(axis=1)]
+            elif "말라리아" in target_disease:
+                f_target = f_target[f_target.astype(str).apply(lambda x: x.str.contains(r'Anopheles|얼룩날개', case=False, regex=True)).any(axis=1)]
 
         # 연도 필터링
         year_str_val = str(analysis_year).replace("년", "").strip()
-        year_col = "조사년도" if "조사년도" in df_target.columns else ("연도" if "연도" in df_target.columns else "년도")
-        if year_col in df_target.columns:
-            f_target = df_target[df_target[year_col].astype(str).str.contains(year_str_val, na=False)].copy()
-        else:
-            f_target = df_target.copy()
+        year_col = "조사년도" if "조사년도" in f_target.columns else ("연도" if "연도" in f_target.columns else "년도")
+        if year_col in f_target.columns:
+            f_target = f_target[f_target[year_col].astype(str).str.contains(year_str_val, na=False)]
         
-        # 월/일/주차 정규화
+        # 지점 필터링
+        loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
+        found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
+        
+        if found_loc_col:
+            if "일본뇌염" in target_disease:
+                if "산천" in selected_spot: kw = "산천"
+                elif "산대" in selected_spot: kw = "산대"
+                elif "하대" in selected_spot: kw = "하대"
+                else: kw = selected_spot
+                f_target = f_target[f_target[found_loc_col].astype(str).str.contains(kw, na=False)]
+            elif "말라리아" in target_disease:
+                if "중앙" in selected_spot: kw = "중앙"
+                elif "지내" in selected_spot: kw = "지내"
+                elif "학사" in selected_spot: kw = "학사"
+                elif "대마" in selected_spot: kw = "대마"
+                elif "화천" in selected_spot: kw = "화천"
+                elif "양구" in selected_spot: kw = "양구"
+                elif "인제" in selected_spot: kw = "인제"
+                elif "고성" in selected_spot: kw = "고성"
+                else: kw = selected_spot
+                f_target = f_target[f_target[found_loc_col].astype(str).str.contains(kw, na=False)]
+            else:
+                kw = selected_spot.replace("군","").replace("시","") if ("참진드기" in target_disease or "털진드기" in target_disease) else selected_spot
+                f_target = f_target[f_target[found_loc_col].astype(str).str.contains(kw, na=False)]
+
+        # 날짜 정규화 함수
         def extract_month_safe(row):
             for col in ["조사월", "월", "채집월", "월별"]:
                 if col in row.index and pd.notna(row[col]):
@@ -1227,51 +1270,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                     max_w_in_data = min(current_week, 4)
         else:
             max_w_in_data = 4
-
-        # 2. 지점 선택 필터링
-        loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
-        found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
-        
-        if found_loc_col:
-            if "일본뇌염" in target_disease:
-                if "산천" in selected_spot: kw = "산천"
-                elif "산대" in selected_spot: kw = "산대"
-                elif "하대" in selected_spot: kw = "하대"
-                else: kw = selected_spot
-                spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
-            elif "말라리아" in target_disease:
-                if "중앙" in selected_spot: kw = "중앙"
-                elif "지내" in selected_spot: kw = "지내"
-                elif "학사" in selected_spot: kw = "학사"
-                elif "대마" in selected_spot: kw = "대마"
-                elif "화천" in selected_spot: kw = "화천"
-                elif "양구" in selected_spot: kw = "양구"
-                elif "인제" in selected_spot: kw = "인제"
-                elif "고성" in selected_spot: kw = "고성"
-                else: kw = selected_spot
-                spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
-            else:
-                kw = selected_spot.replace("군","").replace("시","") if ("참진드기" in target_disease or "털진드기" in target_disease) else selected_spot
-                spot_mask = f_target[found_loc_col].astype(str).str.contains(kw, na=False)
-        else:
-            spot_mask = pd.Series([True]*len(f_target))
-
-        f_target = f_target[spot_mask]
-
-        # 🚨 [방어 2: 가장 중요한 모기종 핀셋 필터링] 🚨
-        # 일본뇌염과 말라리아의 서로 다른 모기만 완벽하게 걸러내어, 다른 탭(진드기 등)에는 영향을 주지 않습니다.
-  if not f_target.empty:
-            # 💡 [핵심 원인 해결] 원본 엑셀의 컬럼명 띄어쓰기(' 종 ') 때문에 필터가 무시되는 현상 강제 차단
-            f_target.columns = [str(c).strip() for c in f_target.columns]
-            
-            if "종" in f_target.columns:
-                if "일본뇌염" in target_disease:
-                    f_target = f_target[f_target["종"].astype(str).str.contains(r'tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False)]
-                elif "말라리아" in target_disease:
-                    f_target = f_target[f_target["종"].astype(str).str.contains(r'Anopheles|얼룩날개', case=False, regex=True, na=False)]
-                
-                # 미채집 제외
-                f_target = f_target[~f_target["종"].astype(str).str.contains("미채집", case=False, na=False)]
 
         # 개체수 변환 및 합산 준비
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
