@@ -528,17 +528,28 @@ st.markdown("---")
 if selected_tab == "🔴 일본뇌염 매개모기 감시":
     st.header(f"🏠 우사 거점 일본뇌염 매개모기 감시 현황 [{selected_year} {selected_month} {selected_week}]")
     
-    c_up1, c_dl1 = st.columns([8, 4])
+   c_up1, c_dl1 = st.columns([8, 4])
     with c_up1:
+        # 👇 덮어쓰기 체크박스 기능 추가
+        overwrite_je = st.checkbox("⚠️ 기존 일본뇌염 데이터 전체 초기화 후 현재 파일로 덮어쓰기", key="ow_je")
         je_file = st.file_uploader("질병청 VectorNet 일본뇌염 결과 파일 업로드", type=["csv", "xlsx", "xls"], key="je_up")
+        
         if je_file is not None:
             uploaded_df = smart_load_uploaded_file(je_file)
             uploaded_df = parse_vectornet_dataframe(uploaded_df, selected_year, selected_month)
-            base_je_df = merge_and_overwrite(base_je_df, rename_duplicate_columns(uploaded_df), keys=['조사년도', '조사월', '주차', '지역2', '종'])
-            save_df_to_github(base_je_df, "database_je.csv", "Append JE data")
-            st.success("✅ 실시간 원장 데이터베이스 누적 완료")
-            st.cache_data.clear()
             
+            if overwrite_je:
+                # 체크 시: 병합하지 않고 아예 새 데이터로 갈아 끼움
+                base_je_df = rename_duplicate_columns(uploaded_df)
+                save_df_to_github(base_je_df, "database_je.csv", "Overwrite JE data")
+                st.success("✅ 기존 찌꺼기 데이터가 완벽히 삭제되고 새 파일로 덮어쓰기 완료되었습니다.")
+            else:
+                # 체크 해제 시: 기존처럼 누적(병합)
+                base_je_df = merge_and_overwrite(base_je_df, rename_duplicate_columns(uploaded_df), keys=['조사년도', '조사월', '주차', '지역2', '종'])
+                save_df_to_github(base_je_df, "database_je.csv", "Append JE data")
+                st.success("✅ 실시간 원장 데이터베이스 누적 완료")
+                
+            st.cache_data.clear()            
     df_je = base_je_df.copy()
 
     if not df_je.empty:
