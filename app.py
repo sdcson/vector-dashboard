@@ -1229,14 +1229,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             max_w_in_data = 4
 
-        # -------------------------------------------------------------------------
+       # -------------------------------------------------------------------------
         # 2. 초강력 정밀 필터링 (합계 행 제거 & 특정 '종' 열에서만 핀셋 추출)
         # -------------------------------------------------------------------------
-        # 1) 전체 데이터 중 '합계', '총계' 등의 글자가 들어간 뻥튀기 방지 행 삭제
         exclude_mask = f_target.astype(str).apply(lambda x: x.str.contains('합계|총계|누계', na=False, regex=True)).any(axis=1)
         f_target = f_target[~exclude_mask]
 
-        # 2) 지점 마스킹
         loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
         found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
         
@@ -1266,30 +1264,17 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
-        # 3) 💡 [핵심] 오직 '종' 관련 열에서만 핀셋 필터링 검사 수행
-        if species_keyword:
-            species_col = "종" if "종" in f_target.columns else None
-            if not species_col:
-                fallback_cols = ["학명", "모기종", "종명", "매개체명", "종류"]
-                species_col = next((c for c in f_target.columns if c in fallback_cols), None)
+      # 1차 적용: 선택된 지점만 남기기
+        f_target = f_target[spot_mask]
 
-            if species_col:
-                species_mask = f_target[species_col].astype(str).str.strip().str.contains(
-                    species_keyword, case=False, regex=True, na=False
-                )
-            else:
-                species_mask = pd.Series(False, index=f_target.index)
-        else:
-            species_mask = pd.Series([True]*len(f_target))
+        # 🚨 2차 적용 (핵심 해결 부분): Tab 1에서 성공했던 방식을 강제로 때려 넣습니다.
+        if "종" in f_target.columns:
+            if "일본뇌염" in target_disease:
+                f_target = f_target[f_target["종"].astype(str).str.contains(r'\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False)]
+            elif "말라리아" in target_disease:
+                f_target = f_target[f_target["종"].astype(str).str.contains(r'\bAnopheles\b|anopheles|얼룩날개', case=False, regex=True, na=False)]
             
-        no_empty_mask = ~f_target.astype(str).apply(lambda x: x.str.contains("미채집", na=False, regex=False)).any(axis=1)
-            
-        # 모든 마스크 적용하여 최종 타겟 데이터 확정
-        f_target = f_target[spot_mask & species_mask & no_empty_mask]
-        if "일본뇌염" in target_disease and not f_target.empty:
-            f_target = f_target[f_target.astype(str).apply(lambda x: x.str.contains('tritaeniorhynchus|작은빨간집', case=False, na=False)).any(axis=1)]
-        elif "말라리아" in target_disease and not f_target.empty:
-            f_target = f_target[f_target.astype(str).apply(lambda x: x.str.contains('Anopheles|얼룩날개', case=False, na=False)).any(axis=1)]
+            f_target = f_target[~f_target["종"].astype(str).str.contains("미채집", case=False, na=False)]
         
         # -------------------------------------------------------------------------
         # 3. 개체수 쉼표 제거 및 주차별 합산 (Grouping)
