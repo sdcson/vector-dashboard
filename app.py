@@ -1269,8 +1269,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
 
         # 🚨 2차 적용 (핵심 해결 부분): Tab 1에서 성공했던 방식을 강제로 때려 넣습니다.
         if "종" in f_target.columns:
-            if "일본뇌염" in target_disease:
-                f_target = f_target[f_target["종"].astype(str).str.contains(r'\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False)]
+           if "일본뇌염" in target_disease and not f_target.empty:
+            f_target = f_target[f_target.apply(lambda row: 'tritaeniorhynchus' in str(row.values).lower() or '작은빨간집' in str(row.values).replace(" ", ""), axis=1)]
             elif "말라리아" in target_disease:
                 f_target = f_target[f_target["종"].astype(str).str.contains(r'\bAnopheles\b|anopheles|얼룩날개', case=False, regex=True, na=False)]
             
@@ -1322,7 +1322,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             else:
                 p_key = m_str
                 
-            # 타겟 모기 마리수 합산
             if p_key in period_counts: 
                 period_counts[p_key] += row.get(val_col_target, 0)
                 
