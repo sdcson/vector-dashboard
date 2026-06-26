@@ -698,7 +698,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                 
             st.cache_data.clear()
             
-    df_mal = base_mal_df.copy())
+    df_mal = base_mal_df.copy()
 
     if not df_mal.empty:
         df_mal = parse_vectornet_dataframe(df_mal, selected_year, selected_month)
