@@ -564,10 +564,13 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             df_je["조사주"] = "1주"
 
+        # 💡 [버그 수정 적용 완료] '종' 컬럼에서 작은빨간집모기만 필터링하는 마스크 추가
+        species_mask_je = df_je["종"].astype(str).str.contains(r'\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False) if "종" in df_je.columns else True
+
         if selected_week != "전체":
-            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)].copy()
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week) & species_mask_je].copy()
         else:
-            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)].copy()
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & species_mask_je].copy()
         
         with c_dl1:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -1158,13 +1161,12 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     # -------------------------------------------------------------------------
     # 1. 분석 대상 및 타겟 키워드 설정 (말라리아, 일본뇌염 정밀 필터링 키워드)
     # -------------------------------------------------------------------------
-   if "일본뇌염" in target_disease and not f_target.empty:
-            # 종 이름에서 공백을 전부 없애고 '작은빨간집모기' 또는 'tritaeniorhynchus'가 포함된 행만 강제 지정
-            f_target = f_target[
-                f_target[species_col].astype(str).str.replace(" ", "").str.contains('작은빨간집모기|tritaeniorhynchus', case=False, na=False)]
+    if "일본뇌염" in target_disease:
+        df_target = base_je_df.copy()
+        species_keyword = r"\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집"
+        target_name_kr = "일본뇌염 매개모기(작은빨간집모기)"
     elif "말라리아" in target_disease:
         df_target = base_mal_df.copy()
-        # 💡 오직 얼룩날개모기류(Anopheles)만 잡는 정규식
         species_keyword = r"\bAnopheles\b|anopheles|얼룩날개"
         target_name_kr = "말라리아 매개모기(얼룩날개모기류)"
     elif "기후변화 모기" in target_disease:
@@ -1231,11 +1233,9 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         # -------------------------------------------------------------------------
         # 2. 초강력 정밀 필터링 (합계 행 제거 & 특정 '종' 열에서만 핀셋 추출)
         # -------------------------------------------------------------------------
-        # 1) 전체 데이터 중 '합계', '총계' 등의 글자가 들어간 뻥튀기 방지 행 삭제
         exclude_mask = f_target.astype(str).apply(lambda x: x.str.contains('합계|총계|누계', na=False, regex=True)).any(axis=1)
         f_target = f_target[~exclude_mask]
 
-        # 2) 지점 마스킹
         loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
         found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
         
@@ -1265,7 +1265,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             spot_mask = pd.Series([True]*len(f_target))
 
-        # 3) 💡 [핵심] 오직 '종' 관련 열에서만 핀셋 필터링 검사 수행
         if species_keyword:
             species_col = "종" if "종" in f_target.columns else None
             if not species_col:
@@ -1286,12 +1285,17 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         # 모든 마스크 적용하여 최종 타겟 데이터 확정
         f_target = f_target[spot_mask & species_mask & no_empty_mask]
         
+        # 💡 [버그 수정 적용 완료] 강력 방어 코드: 들여쓰기(Indentation) 오류 원천 차단
+        if "일본뇌염" in target_disease and not f_target.empty and species_col:
+            f_target = f_target[f_target[species_col].astype(str).str.replace(" ", "").str.contains('작은빨간집모기|tritaeniorhynchus', case=False, na=False)]
+        elif "말라리아" in target_disease and not f_target.empty and species_col:
+            f_target = f_target[f_target[species_col].astype(str).str.replace(" ", "").str.contains('얼룩날개|Anopheles', case=False, na=False)]
+        
         # -------------------------------------------------------------------------
         # 3. 개체수 쉼표 제거 및 주차별 합산 (Grouping)
         # -------------------------------------------------------------------------
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         
-        # 쉼표 있는 숫자도 완벽하게 카운팅하도록 방어
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         
         valid_months = range(start_month, end_month + 1)
@@ -1332,7 +1336,6 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             else:
                 p_key = m_str
                 
-            # 타겟 모기 마리수 합산
             if p_key in period_counts: 
                 period_counts[p_key] += row.get(val_col_target, 0)
                 
