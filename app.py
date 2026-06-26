@@ -1158,11 +1158,10 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     # -------------------------------------------------------------------------
     # 1. 분석 대상 및 타겟 키워드 설정 (말라리아, 일본뇌염 정밀 필터링 키워드)
     # -------------------------------------------------------------------------
-    if "일본뇌염" in target_disease:
-        df_target = base_je_df.copy()
-        # 💡 오직 작은빨간집모기(Culex tritaeniorhynchus)만 잡는 정규식
-        species_keyword = r"\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집"
-        target_name_kr = "일본뇌염 매개모기(작은빨간집모기)"
+   if "일본뇌염" in target_disease and not f_target.empty:
+            # 종 이름에서 공백을 전부 없애고 '작은빨간집모기' 또는 'tritaeniorhynchus'가 포함된 행만 강제 지정
+            f_target = f_target[
+                f_target[species_col].astype(str).str.replace(" ", "").str.contains('작은빨간집모기|tritaeniorhynchus', case=False, na=False)]
     elif "말라리아" in target_disease:
         df_target = base_mal_df.copy()
         # 💡 오직 얼룩날개모기류(Anopheles)만 잡는 정규식
