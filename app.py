@@ -642,35 +642,40 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                     else:
                         st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 전체 지점 채집량 0마리<br>🚫 작은빨간집모기 미검출</div>", unsafe_allow_html=True)
 
-            for idx, spot_name in enumerate(je_spots):
-                with je_sub_tabs[idx + 1]:
-                    spot_data = f_je[f_je["지점명"].str.contains(spot_name.split(' (')[0], na=False)]
+          for idx, spot_name in enumerate(mal_spots_list):
+                with mal_sub_tabs[idx + 1]:
+                    spot_data = f_mal[f_mal["지역2_정규화"] == spot_name].copy()
+                    
                     c1, c2 = st.columns([5, 5])
                     with c1:
-                        st.markdown(f"##### 🗺️ {spot_name.split(' (')[0]} 거점 지도")
-                        m_spot = folium.Map(location=je_coords_map.get(spot_name.split(' (')[0], [37.9, 127.7]), zoom_start=11)
-                        folium.Marker(je_coords_map.get(spot_name.split(' (')[0], [37.9, 127.7]), tooltip=spot_name, icon=folium.Icon(color='red', icon='star')).add_to(m_spot)
-                        st_folium(m_spot, key=f"map_je_spot_{idx}", width="100%", height=380)
+                        st.markdown(f"##### 🗺️ {spot_name} 거점 지도")
+                        m_spot = folium.Map(location=mal_coords_map.get(spot_name, [38.2, 127.5]), zoom_start=11)
+                        folium.Marker(mal_coords_map.get(spot_name, [38.2, 127.5]), tooltip=spot_name, icon=folium.Icon(color='purple', icon='star')).add_to(m_spot)
+                        st_folium(m_spot, key=f"map_mal_spot_{idx}", width="100%", height=380)
                     with c2:
-                        st.markdown(f"##### 📊 {spot_name.split(' (')[0]} 모기 종별 채집량")
-                        if not spot_data.empty and spot_data[val_col_je].sum() > 0:
-                            sum_df = spot_data.groupby("종")[val_col_je].sum().reset_index().sort_values(by=val_col_je)
+                        st.markdown(f"##### 📊 {spot_name} 모기 종별 전체 채집량")
+                        if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
+                            sum_df = spot_data.groupby("종")[val_col_mal].sum().reset_index().sort_values(by=val_col_mal)
                             fig, plt_ax = plt.subplots(figsize=(6, 5.2))
-                            bar_colors = ['#ef233c' if 'tritaeniorhynchus' in str(s).lower() or '작은빨간집' in str(s) else '#c4cbde' for s in sum_df["종"]]
-                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col_je], color=bar_colors, edgecolor='#2b2d42')
+                            
+                            colors = ['#ef233c' if 'anopheles' in str(s).lower() or '얼룩날개' in str(s) else '#c4cbde' for s in sum_df["종"]]
+                            bars = plt_ax.barh(sum_df["종"], sum_df[val_col_mal], color=colors, edgecolor='#2b2d42')
+                            
                             for bar in bars:
-                                plt_ax.text(bar.get_width()+0.5, bar.get_y()+bar.get_height()/2, f"{int(bar.get_width())}마리", va='center', fontsize=8)
+                                h = bar.get_width()
+                                plt_ax.text(h + 0.5, bar.get_y() + bar.get_height()/2, f'{int(h)}', ha='left', va='center', 
+                                            fontsize=9, fontweight='bold', color='red' if h > 0 and 'anopheles' in str(bar.get_label()).lower() else 'black')
+                            
                             plt_ax.set_xlabel('개체수 (마리)')
                             st.pyplot(fig)
                             plt.close()
                         else:
-                            st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리<br>🚫 모기 미검출</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리</div>", unsafe_allow_html=True)
                             
-                   if not spot_data.empty and spot_data[val_col_je].sum() > 0:
-                        # ✂️ '비고' 컬럼까지만 자르고 그 이후 컬럼(확정, 확정일자 등)은 숨김
+                    if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
                         display_cols = []
                         for col in spot_data.columns:
-                            if col in ["위도", "경도", "지역2_정규화"]:
+                            if col in ["위도", "경도"]:
                                 continue
                             display_cols.append(col)
                             if str(col).strip() == "비고":
@@ -835,7 +840,6 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리</div>", unsafe_allow_html=True)
                             
                     if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
-                        # ✂️ '비고' 컬럼까지만 자르고 그 이후 컬럼 숨김
                         display_cols = []
                         for col in spot_data.columns:
                             if col in ["위도", "경도"]:
@@ -1021,7 +1025,6 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                     if not spot_data.empty and spot_data[val_col].sum() > 0:
                         spot_data["종"] = spot_data["종"].astype(str).apply(lambda x: "Larva" if "기타" in x else x.strip())
                         
-                        # ✂️ '비고' 컬럼까지만 자르고 그 이후 컬럼 숨김
                         drop_cols = ["위도", "경도", "정규화_지점", "정규화_지역", "정규화_환경", "복합_지점"]
                         display_cols = []
                         for col in spot_data.columns:
