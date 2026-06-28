@@ -666,8 +666,16 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         else:
                             st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리<br>🚫 모기 미검출</div>", unsafe_allow_html=True)
                             
-                    if not spot_data.empty and spot_data[val_col_je].sum() > 0:
-                        st.dataframe(spot_data.drop(columns=["위도", "경도", "지역2_정규화"], errors='ignore'), hide_index=True, use_container_width=True)
+                   if not spot_data.empty and spot_data[val_col_je].sum() > 0:
+                        # ✂️ '비고' 컬럼까지만 자르고 그 이후 컬럼(확정, 확정일자 등)은 숨김
+                        display_cols = []
+                        for col in spot_data.columns:
+                            if col in ["위도", "경도", "지역2_정규화"]:
+                                continue
+                            display_cols.append(col)
+                            if str(col).strip() == "비고":
+                                break
+                        st.dataframe(spot_data[display_cols], hide_index=True, use_container_width=True)
         else:
             st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다. 상단에서 파일을 업로드해 주세요.")
 
@@ -827,7 +835,15 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리</div>", unsafe_allow_html=True)
                             
                     if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
-                        st.dataframe(spot_data.drop(columns=["위도", "경도"], errors='ignore'), hide_index=True, use_container_width=True)
+                        # ✂️ '비고' 컬럼까지만 자르고 그 이후 컬럼 숨김
+                        display_cols = []
+                        for col in spot_data.columns:
+                            if col in ["위도", "경도"]:
+                                continue
+                            display_cols.append(col)
+                            if str(col).strip() == "비고":
+                                break
+                        st.dataframe(spot_data[display_cols], hide_index=True, use_container_width=True)
         else:
             st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다.")
 
@@ -1003,10 +1019,18 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 if not m_data.empty and loc_col in m_data.columns:
                     spot_data = m_data[m_data[loc_col].astype(str).str.contains(spot_name, na=False)].copy()
                     if not spot_data.empty and spot_data[val_col].sum() > 0:
-                        drop_cols = ["위도", "경도", "정규화_지점", "정규화_지역", "정규화_환경", "복합_지점"]
-                        available_drop_cols = [c for c in drop_cols if c in spot_data.columns]
                         spot_data["종"] = spot_data["종"].astype(str).apply(lambda x: "Larva" if "기타" in x else x.strip())
-                        st.dataframe(spot_data.drop(columns=available_drop_cols), hide_index=True, use_container_width=True)
+                        
+                        # ✂️ '비고' 컬럼까지만 자르고 그 이후 컬럼 숨김
+                        drop_cols = ["위도", "경도", "정규화_지점", "정규화_지역", "정규화_환경", "복합_지점"]
+                        display_cols = []
+                        for col in spot_data.columns:
+                            if col in drop_cols:
+                                continue
+                            display_cols.append(col)
+                            if str(col).strip() == "비고":
+                                break
+                        st.dataframe(spot_data[display_cols], hide_index=True, use_container_width=True)
                     else:
                         st.info(f"💡 {selected_year} {selected_month}에 {spot_name} 구역에서 채집된 데이터가 0마리입니다.")
                 else:
