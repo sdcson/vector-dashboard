@@ -232,9 +232,11 @@ def safe_parse_month_series(series, default_val):
         except Exception: return str(default_val)
     return series.apply(_parse)
 
+# 💡 [핵심 방어] 파일 업로드 시 모기종, 채집수 등의 열 이름을 무조건 표준으로 통일시킵니다.
 def parse_vectornet_dataframe(df, default_year, default_month):
     df.columns = [str(c).strip() for c in df.columns]
     
+    # 열 이름 강제 통일
     sp_cands = ["학명", "모기종", "종류", "종명", "매개체명"]
     for c in sp_cands:
         if c in df.columns and "종" not in df.columns:
@@ -528,6 +530,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
     
     c_up1, c_dl1 = st.columns([8, 4])
     with c_up1:
+        # 👇 덮어쓰기 체크박스 기능 추가
         overwrite_je = st.checkbox("⚠️ 기존 일본뇌염 데이터 전체 초기화 후 현재 파일로 덮어쓰기", key="ow_je")
         je_file = st.file_uploader("질병청 VectorNet 일본뇌염 결과 파일 업로드", type=["csv", "xlsx", "xls"], key="je_up")
         
@@ -536,10 +539,12 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             uploaded_df = parse_vectornet_dataframe(uploaded_df, selected_year, selected_month)
             
             if overwrite_je:
+                # 체크 시: 병합하지 않고 아예 새 데이터로 갈아 끼움
                 base_je_df = rename_duplicate_columns(uploaded_df)
                 save_df_to_github(base_je_df, "database_je.csv", "Overwrite JE data")
                 st.success("✅ 기존 찌꺼기 데이터가 완벽히 삭제되고 새 파일로 덮어쓰기 완료되었습니다.")
             else:
+                # 체크 해제 시: 기존처럼 누적(병합)
                 base_je_df = merge_and_overwrite(base_je_df, rename_duplicate_columns(uploaded_df), keys=['조사년도', '조사월', '주차', '지역2', '종'])
                 save_df_to_github(base_je_df, "database_je.csv", "Append JE data")
                 st.success("✅ 실시간 원장 데이터베이스 누적 완료")
@@ -547,7 +552,6 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
             st.cache_data.clear()
             
     df_je = base_je_df.copy()
-
     if not df_je.empty:
         df_je = parse_vectornet_dataframe(df_je, selected_year, selected_month)
         je_coords_map = {"횡성군 하대리": [37.4912, 127.9845], "강릉시 산대월리": [37.7518, 128.8762], "춘천시 산천리": [37.9250, 127.7410]}
@@ -571,12 +575,10 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
         else:
             df_je["조사주"] = "1주"
 
-        species_mask_je = df_je["종"].astype(str).str.contains(r'\bCulex\s+tritaeniorhynchus\b|tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False) if "종" in df_je.columns else True
-
         if selected_week != "전체":
-            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week) & species_mask_je].copy()
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & (df_je["조사주"] == selected_week)].copy()
         else:
-            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month) & species_mask_je].copy()
+            f_je = df_je[(df_je["조사년도"] == selected_year) & (df_je["조사월"] == selected_month)].copy()
         
         with c_dl1:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -599,6 +601,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_spot_name} (우사 거점)", icon=folium.Icon(color='red', icon='home')).add_to(m_je_all)
                     st_folium(m_je_all, key="map_je_all", width="100%", height=380)
                 
+                # 💡 일본뇌염 전체 지점 정밀 핀셋 필터링
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
                     species_col_je = "종" if "종" in f_je.columns else None
@@ -664,14 +667,7 @@ if selected_tab == "🔴 일본뇌염 매개모기 감시":
                             st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리<br>🚫 모기 미검출</div>", unsafe_allow_html=True)
                             
                     if not spot_data.empty and spot_data[val_col_je].sum() > 0:
-                        display_cols = []
-                        for col in spot_data.columns:
-                            if col in ["위도", "경도", "지역2_정규화"]:
-                                continue
-                            display_cols.append(col)
-                            if str(col).strip() == "비고":
-                                break
-                        st.dataframe(spot_data[display_cols], hide_index=True, use_container_width=True)
+                        st.dataframe(spot_data.drop(columns=["위도", "경도", "지역2_정규화"], errors='ignore'), hide_index=True, use_container_width=True)
         else:
             st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다. 상단에서 파일을 업로드해 주세요.")
 
@@ -683,6 +679,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
     
     c_up2, c_dl2 = st.columns([8, 4])
     with c_up2:
+        # 👇 덮어쓰기 체크박스 추가
         overwrite_mal = st.checkbox("⚠️ 기존 말라리아 데이터 전체 초기화 후 현재 파일로 덮어쓰기", key="ow_mal")
         mal_file = st.file_uploader("질병청 VectorNet 말라리아 결과 파일 업로드", type=["csv", "xlsx", "xls"], key="mal_up")
         
@@ -761,6 +758,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                         folium.Marker([coords[0], coords[1]], tooltip=f"{target_mal_name}", icon=folium.Icon(color='blue', icon='flag')).add_to(m_mal_all)
                     st_folium(m_mal_all, key="map_mal_all", width="100%", height=380)
                 
+                # 💡 말라리아 매개모기(Anopheles/얼룩날개) 핀셋 필터링 적용 (복구 완료)
                 with c2:
                     st.markdown("##### 📊 지점별 모기 종별 채집량 (전체)")
                     species_col_mal = "종" if "종" in f_mal.columns else None
@@ -829,14 +827,7 @@ elif selected_tab == "🔵 말라리아 매개모기 감시":
                             st.markdown(f"<div style='text-align: center; padding: 120px 0; color: #888; font-size: 1.1em; font-weight: bold;'>해당 주차({selected_week}) 채집량 0마리</div>", unsafe_allow_html=True)
                             
                     if not spot_data.empty and spot_data[val_col_mal].sum() > 0:
-                        display_cols = []
-                        for col in spot_data.columns:
-                            if col in ["위도", "경도"]:
-                                continue
-                            display_cols.append(col)
-                            if str(col).strip() == "비고":
-                                break
-                        st.dataframe(spot_data[display_cols], hide_index=True, use_container_width=True)
+                        st.dataframe(spot_data.drop(columns=["위도", "경도"], errors='ignore'), hide_index=True, use_container_width=True)
         else:
             st.warning(f"⚠️ 선택하신 [{selected_year} {selected_month} {selected_week}] 조건에 해당하는 채집 데이터가 없습니다.")
 
@@ -849,6 +840,7 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
     
     c_up3, c_dl3 = st.columns([8, 4])
     with c_up3:
+        # 👇 덮어쓰기 체크박스 추가 (선택된 권역별로 동작)
         overwrite_cli = st.checkbox(f"⚠️ 기존 [{selected_zone}] 데이터 전체 초기화 후 덮어쓰기", key=f"ow_cli_{selected_zone}")
         cli_file = st.file_uploader(f"질병청 VectorNet [{selected_zone}] 결과 파일 업로드", type=["csv", "xlsx", "xls"], key=f"cli_up_{selected_zone}")
         
@@ -1011,17 +1003,10 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 if not m_data.empty and loc_col in m_data.columns:
                     spot_data = m_data[m_data[loc_col].astype(str).str.contains(spot_name, na=False)].copy()
                     if not spot_data.empty and spot_data[val_col].sum() > 0:
-                        spot_data["종"] = spot_data["종"].astype(str).apply(lambda x: "Larva" if "기타" in x else x.strip())
-                        
                         drop_cols = ["위도", "경도", "정규화_지점", "정규화_지역", "정규화_환경", "복합_지점"]
-                        display_cols = []
-                        for col in spot_data.columns:
-                            if col in drop_cols:
-                                continue
-                            display_cols.append(col)
-                            if str(col).strip() == "비고":
-                                break
-                        st.dataframe(spot_data[display_cols], hide_index=True, use_container_width=True)
+                        available_drop_cols = [c for c in drop_cols if c in spot_data.columns]
+                        spot_data["종"] = spot_data["종"].astype(str).apply(lambda x: "Larva" if "기타" in x else x.strip())
+                        st.dataframe(spot_data.drop(columns=available_drop_cols), hide_index=True, use_container_width=True)
                     else:
                         st.info(f"💡 {selected_year} {selected_month}에 {spot_name} 구역에서 채집된 데이터가 0마리입니다.")
                 else:
@@ -1037,6 +1022,7 @@ elif selected_tab == "🟡 참진드기조사(어린이숲체험장)":
     
     c_up4, c_dl4 = st.columns([8, 4])
     with c_up4:
+        # 👇 덮어쓰기 체크박스 추가
         overwrite_forest = st.checkbox("⚠️ 기존 숲체험장 참진드기 데이터 전체 초기화 후 덮어쓰기", key="ow_forest")
         forest_file = st.file_uploader("어린이 숲 체험장 참진드기 결과 파일 업로드 (질병조사과 자체서식)", type=["csv", "xlsx", "xls"], key="forest_up")
         
@@ -1218,6 +1204,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
     is_mite_gen_mode = ("털진드기 발생" in target_disease)
     is_weekly_mode = ("일본뇌염" in target_disease) or ("말라리아" in target_disease) or ("기후변화 모기" in target_disease) or is_mite_gen_mode
 
+    # 1. 대상 선택 및 데이터 할당
     if "일본뇌염" in target_disease:
         df_target = base_je_df.copy()
         target_name_kr = "일본뇌염 매개모기(작은빨간집모기)"
@@ -1238,29 +1225,36 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         target_name_kr = "어린이숲 참진드기 통합"
 
     if not df_target.empty:
+        # 🚨 [방어 1] 데이터 뻥튀기를 유발하는 엑셀 내 '합계' 행 원천 차단
         exclude_mask = df_target.astype(str).apply(lambda x: x.str.contains('합계|총계|누계', na=False, regex=True)).any(axis=1)
         f_target = df_target[~exclude_mask].copy()
 
+        # 🚨 [방어 2] 컬럼명 공백 완벽 제거 (가장 중요한 부분)
         f_target.columns = [str(c).strip() for c in f_target.columns]
 
+        # 🚨 [방어 3] 모기 종 완벽 필터링 (말라리아, 일본뇌염 분리)
         if "종" in f_target.columns:
             if "일본뇌염" in target_disease:
                 f_target = f_target[f_target["종"].astype(str).str.contains(r'tritaeniorhynchus|작은빨간집', case=False, regex=True, na=False)]
             elif "말라리아" in target_disease:
                 f_target = f_target[f_target["종"].astype(str).str.contains(r'Anopheles|얼룩날개', case=False, regex=True, na=False)]
             
+            # 미채집 제외
             f_target = f_target[~f_target["종"].astype(str).str.contains("미채집", case=False, na=False)]
         else:
+            # 혹시라도 '종' 컬럼이 없으면 전체 행을 텍스트로 묶어서 필터링 (최후의 보루)
             if "일본뇌염" in target_disease:
                 f_target = f_target[f_target.astype(str).apply(lambda x: x.str.contains(r'tritaeniorhynchus|작은빨간집', case=False, regex=True)).any(axis=1)]
             elif "말라리아" in target_disease:
                 f_target = f_target[f_target.astype(str).apply(lambda x: x.str.contains(r'Anopheles|얼룩날개', case=False, regex=True)).any(axis=1)]
 
+        # 연도 필터링
         year_str_val = str(analysis_year).replace("년", "").strip()
         year_col = "조사년도" if "조사년도" in f_target.columns else ("연도" if "연도" in f_target.columns else "년도")
         if year_col in f_target.columns:
             f_target = f_target[f_target[year_col].astype(str).str.contains(year_str_val, na=False)]
         
+        # 지점 필터링
         loc_cols_cands = ["지역2", "지역", "지점", "지점명", "채집장소", "시군구", "채집지역2"]
         found_loc_col = next((c for c in f_target.columns if c in loc_cols_cands), None)
         
@@ -1286,6 +1280,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
                 kw = selected_spot.replace("군","").replace("시","") if ("참진드기" in target_disease or "털진드기" in target_disease) else selected_spot
                 f_target = f_target[f_target[found_loc_col].astype(str).str.contains(kw, na=False)]
 
+        # 날짜 정규화 함수
         def extract_month_safe(row):
             for col in ["조사월", "월", "채집월", "월별"]:
                 if col in row.index and pd.notna(row[col]):
@@ -1326,6 +1321,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             max_w_in_data = 4
 
+        # 개체수 변환 및 합산 준비
         val_col_target = "개체수" if "개체수" in f_target.columns else ("채집수" if "채집수" in f_target.columns else "개체수")
         f_target[val_col_target] = pd.to_numeric(f_target[val_col_target].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
         
@@ -1373,6 +1369,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         
         window_days = 7 if is_tick_mode else 14
         
+        # 3. 기상청 API 연동 데이터 합산
         with st.spinner(f"📡 {analysis_year} {selected_spot} 일별 기상 데이터를 불러와 {window_days}일 역산 누적 중입니다..."):
             kma_spot = selected_spot.replace("군","").replace("시","").split()[0]
             df_w_daily = get_kma_weather_daily(analysis_year, kma_spot)
@@ -1418,6 +1415,8 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
             plot_df["평균풍속(m/s)"] = [round(x, 1) for x in winds]
         
         sum_text = " (세부 환경 전체 합산)" if is_tick_mode or is_mite_gen_mode else ""
+        
+        # UI 가독성을 위한 그래프 컬러 분리
         bar_color = '#ef233c' if "일본뇌염" in target_disease else ('#1d3557' if "말라리아" in target_disease else '#2b2d42')
 
         if is_mite_gen_mode:
@@ -1425,6 +1424,7 @@ elif selected_tab == "☁️ 기상 요인 상관분석":
         else:
             st.markdown(f"##### 📊 {selected_spot} {target_name_kr}{sum_text} 계절적 변화 및 {window_days}일전 기상 영향 ({analysis_year})")
         
+        # 4. 차트 통합 렌더링
         fig, ax1 = plt.subplots(figsize=(14 if is_weekly_mode else 12, 5.5))
         
         bars = ax1.bar(plot_df["기간"], plot_df["채집량(마리)"], color=bar_color, label=f'{target_name_kr} 채집량', alpha=0.85, width=0.5)
