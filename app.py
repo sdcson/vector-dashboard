@@ -258,16 +258,36 @@ def parse_vectornet_dataframe(df, default_year, default_month):
     date_cols = ['수거일', '채집일', '조사일', '조사일자', '채집일자', '채집일시']
     found_col = next((c for c in date_cols if c in df.columns), None)
     
-    if found_col:
+      if found_col:
         dt_series = pd.to_datetime(df[found_col], errors='coerce')
         valid_mask = dt_series.notna()
         df["조사년도"] = safe_parse_year_series(df["연도"] if "연도" in df.columns else df.get("년도", default_year), default_year)
         df["조사월"] = safe_parse_month_series(df.get("월", default_month), default_month)
         df["조사주"] = "1주"
         
-        df.loc[valid_mask, "조사년도"] = dt_series[valid_mask].dt.year.apply(lambda x: f"{int(x)}년")
-        df.loc[valid_mask, "조사월"] = dt_series[valid_mask].dt.month.apply(lambda x: f"{int(x):02d}월")
-        df.loc[valid_mask, "조사주"] = dt_series[valid_mask].dt.day.apply(lambda x: f"{min((int(x) - 1) // 7 + 1, 4)}주")
+        # 💡 [수정됨] 단순 일자 나누기가 아닌, 질병청 역학주차(수요일 과반수 기준) 적용
+        def _get_kdca_week(d):
+            idx = d.isoweekday() % 7  # 일요일=0, 월요일=1 ... 토요일=6
+            wed = d - pd.Timedelta(days=idx) + pd.Timedelta(days=3)  # 해당 주차의 중심인 '수요일' 찾기
+            
+            # 수요일이 속한 달의 1일과 첫 번째 수요일 찾기
+            first_day = pd.to_datetime(f"{wed.year}-{wed.month:02d}-01")
+            first_idx = first_day.isoweekday() % 7
+            first_wed = first_day - pd.Timedelta(days=first_idx) + pd.Timedelta(days=3)
+            
+            # 첫 번째 수요일이 지난 달로 넘어갔다면, 그 다음 주가 1주차
+            if first_wed.month != wed.month:
+                first_wed += pd.Timedelta(days=7)
+                
+            w_no = (wed - first_wed).days // 7 + 1
+            return f"{wed.year}년", f"{wed.month:02d}월", f"{min(w_no, 4)}주"
+            
+        if valid_mask.any():
+            mapped = dt_series[valid_mask].apply(_get_kdca_week)
+            df.loc[valid_mask, "조사년도"] = mapped.apply(lambda x: x[0])
+            df.loc[valid_mask, "조사월"] = mapped.apply(lambda x: x[1])
+            df.loc[valid_mask, "조사주"] = mapped.apply(lambda x: x[2])
+            
         df["주차"] = df["조사주"]
     else:
         if "월.1" in df.columns and "월" in df.columns:
