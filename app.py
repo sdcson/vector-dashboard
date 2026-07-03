@@ -236,7 +236,6 @@ def safe_parse_month_series(series, default_val):
 def parse_vectornet_dataframe(df, default_year, default_month):
     df.columns = [str(c).strip() for c in df.columns]
     
-    # 열 이름 강제 통일
     sp_cands = ["학명", "모기종", "종류", "종명", "매개체명"]
     for c in sp_cands:
         if c in df.columns and "종" not in df.columns:
@@ -258,7 +257,7 @@ def parse_vectornet_dataframe(df, default_year, default_month):
     date_cols = ['수거일', '채집일', '조사일', '조사일자', '채집일자', '채집일시']
     found_col = next((c for c in date_cols if c in df.columns), None)
     
-      if found_col:
+    if found_col:
         dt_series = pd.to_datetime(df[found_col], errors='coerce')
         valid_mask = dt_series.notna()
         df["조사년도"] = safe_parse_year_series(df["연도"] if "연도" in df.columns else df.get("년도", default_year), default_year)
