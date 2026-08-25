@@ -216,25 +216,42 @@ def load_df_from_github(filename_on_github, fallback_df):
         except Exception: return fallback_df
     return fallback_df
 
-def safe_parse_year_series(series, default_val):
+def safe_parse_year_series(data, default_val, length=1):
     def _parse(val):
-        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']: return str(default_val)
+        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']: 
+            return str(default_val)
         val_str = str(val).strip()
-        if "년" in val_str: return val_str
-        if val_str.replace('.', '', 1).isdigit(): return f"{int(float(val_str))}년"
+        if "년" in val_str: 
+            return val_str
+        if val_str.replace('.', '', 1).isdigit(): 
+            return f"{int(float(val_str))}년"
         return f"{val_str}년"
-    return series.apply(_parse)
+    
+    # Series가 아닌 단일 값이 넘어왔을 경우 Series로 변환
+    if not isinstance(data, pd.Series):
+        data = pd.Series([data] * length)
+    return data.apply(_parse)
 
-def safe_parse_month_series(series, default_val):
+def safe_parse_month_series(data, default_val, length=1):
     def _parse(val):
-        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']: return str(default_val)
-        try: return f"{int(float(str(val).strip().replace('월', ''))):02d}월"
-        except Exception: return str(default_val)
-    return series.apply(_parse)
+        if pd.isna(val) or val == "" or str(val).lower() in ['nan', '<na>']: 
+            return str(default_val)
+        try: 
+            return f"{int(float(str(val).strip().replace('월', ''))):02d}월"
+        except Exception: 
+            return str(default_val)
+            
+    # Series가 아닌 단일 값이 넘어왔을 경우 Series로 변환
+    if not isinstance(data, pd.Series):
+        data = pd.Series([data] * length)
+    return data.apply(_parse)
 
-# 💡 [핵심 방어] 파일 업로드 시 모기종, 채집수 등의 열 이름을 무조건 표준으로 통일시킵니다.
 def parse_vectornet_dataframe(df, default_year, default_month):
+    if df is None or df.empty:
+        return df
+
     df.columns = [str(c).strip() for c in df.columns]
+    n_rows = len(df)
     
     sp_cands = ["학명", "모기종", "종류", "종명", "매개체명"]
     for c in sp_cands:
@@ -254,27 +271,28 @@ def parse_vectornet_dataframe(df, default_year, default_month):
             df.rename(columns={c: "개체수"}, inplace=True)
             break
 
+    # 연도/월 시리즈 추출 헬퍼
+    year_data = df["연도"] if "연도" in df.columns else (df["년도"] if "년도" in df.columns else default_year)
+    month_data = df["월"] if "월" in df.columns else default_month
+
     date_cols = ['수거일', '채집일', '조사일', '조사일자', '채집일자', '채집일시']
     found_col = next((c for c in date_cols if c in df.columns), None)
     
     if found_col:
         dt_series = pd.to_datetime(df[found_col], errors='coerce')
         valid_mask = dt_series.notna()
-        df["조사년도"] = safe_parse_year_series(df["연도"] if "연도" in df.columns else df.get("년도", default_year), default_year)
-        df["조사월"] = safe_parse_month_series(df.get("월", default_month), default_month)
+        df["조사년도"] = safe_parse_year_series(year_data, default_year, n_rows)
+        df["조사월"] = safe_parse_month_series(month_data, default_month, n_rows)
         df["조사주"] = "1주"
         
-        # 💡 [수정됨] 단순 일자 나누기가 아닌, 질병청 역학주차(수요일 과반수 기준) 적용
         def _get_kdca_week(d):
-            idx = d.isoweekday() % 7  # 일요일=0, 월요일=1 ... 토요일=6
-            wed = d - pd.Timedelta(days=idx) + pd.Timedelta(days=3)  # 해당 주차의 중심인 '수요일' 찾기
+            idx = d.isoweekday() % 7
+            wed = d - pd.Timedelta(days=idx) + pd.Timedelta(days=3)
             
-            # 수요일이 속한 달의 1일과 첫 번째 수요일 찾기
             first_day = pd.to_datetime(f"{wed.year}-{wed.month:02d}-01")
             first_idx = first_day.isoweekday() % 7
             first_wed = first_day - pd.Timedelta(days=first_idx) + pd.Timedelta(days=3)
             
-            # 첫 번째 수요일이 지난 달로 넘어갔다면, 그 다음 주가 1주차
             if first_wed.month != wed.month:
                 first_wed += pd.Timedelta(days=7)
                 
@@ -290,11 +308,11 @@ def parse_vectornet_dataframe(df, default_year, default_month):
         df["주차"] = df["조사주"]
     else:
         if "월.1" in df.columns and "월" in df.columns:
-            df["조사년도"] = safe_parse_year_series(df["월"], default_year)
-            df["조사월"] = safe_parse_month_series(df["월.1"], default_month)
+            df["조사년도"] = safe_parse_year_series(df["월"], default_year, n_rows)
+            df["조사월"] = safe_parse_month_series(df["월.1"], default_month, n_rows)
         else:
-            df["조사년도"] = safe_parse_year_series(df["연도"] if "연도" in df.columns else df.get("년도", default_year), default_year)
-            df["조사월"] = safe_parse_month_series(df.get("월", default_month), default_month)
+            df["조사년도"] = safe_parse_year_series(year_data, default_year, n_rows)
+            df["조사월"] = safe_parse_month_series(month_data, default_month, n_rows)
             
         if "주차" in df.columns:
             def _clean_w(w):
@@ -309,6 +327,7 @@ def parse_vectornet_dataframe(df, default_year, default_month):
         else:
             df["조사주"] = "1주"
             df["주차"] = "1주"
+            
     return df
 
 def rename_duplicate_columns(df):
