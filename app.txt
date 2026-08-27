@@ -945,11 +945,9 @@ elif selected_tab == "🟢 기후변화 대응 매개체 감시":
                 if col_name in m_data.columns:
                     loc_col = col_name
                     break
-            
-            # [수정됨] 들여쓰기 라인을 for문과 정확히 맞췄고, "DMS1"을 "DMS"로 수정했습니다.
             if loc_col in m_data.columns:
                 m_data[loc_col] = m_data[loc_col].astype(str).apply(
-                    lambda x: "일일감시" if "DMS" in str(x).upper() or "일일감시" in str(x) else x
+                    lambda x: "일일감시" if "도심" in str(x).upper() or "일일감시" in str(x) else x
                 )
         elif selected_zone == "참진드기 권역":
             master_spots_list = ["화천 초지", "화천 잡목림", "화천 산길", "화천 무덤", "인제 초지", "인제 잡목림", "인제 산길", "인제 무덤"]
